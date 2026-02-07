@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:enableMajor",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeDigest",
+    ":automergeBranch"
+  ],
+  // Load modular configurations
+  "packageRules": [
+    // Include rules from modular configs
+    { "extends": ["local>.github/renovate/autoMerge.json5"] },
+    { "extends": ["local>.github/renovate/semanticCommits.json5"] },
+    { "extends": ["local>.github/renovate/packageGroups.json5"] }
+  ],
+  // Branch naming
+  "branchPrefix": "renovate/",
+  // Commit message format
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{newVersion}}",
+  // PR settings
+  "prHourlyLimit": 5,
+  "prConcurrentLimit": 10,
+  // Stability settings
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  // Labels for PRs
+  "labels": ["dependencies"],
+  // Ignore paths
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/__pycache__/**",
+    "**/venv/**",
+    "**/.venv/**"
+  ],
+  // Timezone for scheduling
+  "timezone": "America/Chicago",
+  // Schedule for updates (weekdays during work hours)
+  "schedule": ["after 9am and before 5pm every weekday"],
+  // Vulnerability alerts get priority
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "dependencies"],
+    "minimumReleaseAge": "0 days"
+  }
+}
