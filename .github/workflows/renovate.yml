@@ -14,11 +14,19 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
+      - name: Generate token for homebot.0
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -26,7 +34,7 @@ jobs:
         uses: renovatebot/github-action@v44.0.2
         with:
           configurationFile: .github/renovate.json5
-          token: ${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate-token.outputs.token }}
         env:
           LOG_LEVEL: info
           RENOVATE_REPOSITORIES: ${{ github.repository }}
