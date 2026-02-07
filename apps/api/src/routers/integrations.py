@@ -3,7 +3,7 @@
 API endpoints for managing third-party integrations (Dexcom, Tandem) and data sync.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydexcom import Dexcom
@@ -14,7 +14,7 @@ from tconnectsync.api.common import ApiException
 from tconnectsync.api.tandemsource import TandemSourceApi
 
 from src.core.auth import DiabeticOrAdminUser
-from src.core.encryption import decrypt_credential, encrypt_credential
+from src.core.encryption import encrypt_credential
 from src.database import get_db
 from src.logging_config import get_logger
 from src.models.glucose import GlucoseReading
@@ -71,7 +71,9 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 
-def validate_dexcom_credentials(username: str, password: str) -> tuple[bool, str | None]:
+def validate_dexcom_credentials(
+    username: str, password: str
+) -> tuple[bool, str | None]:
     """Validate Dexcom Share credentials by attempting to connect.
 
     Args:
@@ -92,7 +94,10 @@ def validate_dexcom_credentials(username: str, password: str) -> tuple[bool, str
             "Dexcom credential validation failed - account error",
             error=str(e),
         )
-        return False, "Invalid Dexcom credentials. Please check your email and password."
+        return (
+            False,
+            "Invalid Dexcom credentials. Please check your email and password.",
+        )
     except dexcom_errors.SessionError as e:
         logger.warning(
             "Dexcom credential validation failed - session error",
@@ -104,7 +109,10 @@ def validate_dexcom_credentials(username: str, password: str) -> tuple[bool, str
             "Dexcom credential validation failed - unexpected error",
             error=str(e),
         )
-        return False, "An error occurred while validating credentials. Please try again."
+        return (
+            False,
+            "An error occurred while validating credentials. Please try again.",
+        )
 
 
 def validate_tandem_credentials(
@@ -181,9 +189,7 @@ async def list_integrations(
     credentials = result.scalars().all()
 
     return IntegrationListResponse(
-        integrations=[
-            IntegrationResponse.model_validate(cred) for cred in credentials
-        ]
+        integrations=[IntegrationResponse.model_validate(cred) for cred in credentials]
     )
 
 
@@ -240,7 +246,7 @@ async def connect_dexcom(
         existing.encrypted_password = encrypt_credential(request.password)
         existing.status = IntegrationStatus.CONNECTED
         existing.last_error = None
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         credential = existing
     else:
         # Create new credential
@@ -404,7 +410,7 @@ async def connect_tandem(
         existing.region = request.region
         existing.status = IntegrationStatus.CONNECTED
         existing.last_error = None
-        existing.updated_at = datetime.now(timezone.utc)
+        existing.updated_at = datetime.now(UTC)
         credential = existing
     else:
         # Create new credential
@@ -474,7 +480,9 @@ async def disconnect_tandem(
         integration_type="tandem",
     )
 
-    return IntegrationDisconnectResponse(message="Tandem t:connect disconnected successfully")
+    return IntegrationDisconnectResponse(
+        message="Tandem t:connect disconnected successfully"
+    )
 
 
 @router.get(
@@ -544,7 +552,7 @@ async def sync_dexcom_data(
                 reading_timestamp=result["last_reading"]["timestamp"],
                 trend=result["last_reading"]["trend"],
                 trend_rate=None,
-                received_at=datetime.now(timezone.utc),
+                received_at=datetime.now(UTC),
                 source="dexcom",
             )
 
@@ -669,10 +677,10 @@ async def get_current_glucose(
             detail="No glucose readings available. Please sync with Dexcom first.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     reading_time = latest.reading_timestamp
     if reading_time.tzinfo is None:
-        reading_time = reading_time.replace(tzinfo=timezone.utc)
+        reading_time = reading_time.replace(tzinfo=UTC)
 
     minutes_ago = int((now - reading_time).total_seconds() / 60)
     is_stale = minutes_ago > 10
@@ -753,7 +761,7 @@ async def sync_tandem_data(
                 event_timestamp=result["last_event"]["timestamp"],
                 units=result["last_event"]["units"],
                 is_automated=result["last_event"]["is_automated"],
-                received_at=datetime.now(timezone.utc),
+                received_at=datetime.now(UTC),
                 source="tandem",
             )
 
@@ -837,9 +845,7 @@ async def get_tandem_sync_status(
 
     # Count events
     count_result = await db.execute(
-        select(func.count(PumpEvent.id)).where(
-            PumpEvent.user_id == current_user.id
-        )
+        select(func.count(PumpEvent.id)).where(PumpEvent.user_id == current_user.id)
     )
     events_count = count_result.scalar() or 0
 
@@ -870,7 +876,9 @@ async def get_tandem_sync_status(
 async def get_control_iq_activity_summary(
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    hours: int = Query(default=24, ge=1, le=168, description="Hours of history to analyze"),
+    hours: int = Query(
+        default=24, ge=1, le=168, description="Hours of history to analyze"
+    ),
 ) -> ControlIQActivityResponse:
     """Get a summary of Control-IQ activity (Story 3.5).
 

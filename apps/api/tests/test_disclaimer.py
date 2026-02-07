@@ -10,6 +10,7 @@ Story 1.3: First-Run Safety Disclaimer
 """
 
 import uuid
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -38,7 +39,9 @@ class TestDisclaimerStatus:
         """
         session_id = str(uuid.uuid4())
 
-        with patch("src.routers.disclaimer.get_session_maker") as mock_get_session_maker:
+        with patch(
+            "src.routers.disclaimer.get_session_maker"
+        ) as mock_get_session_maker:
             mock_session = AsyncMock()
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = None
@@ -64,12 +67,14 @@ class TestDisclaimerStatus:
         Status returns acknowledged=True for a session that has
         previously acknowledged the disclaimer.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         session_id = str(uuid.uuid4())
-        acknowledged_at = datetime.now(timezone.utc)
+        acknowledged_at = datetime.now(UTC)
 
-        with patch("src.routers.disclaimer.get_session_maker") as mock_get_session_maker:
+        with patch(
+            "src.routers.disclaimer.get_session_maker"
+        ) as mock_get_session_maker:
             mock_acknowledgment = MagicMock()
             mock_acknowledgment.acknowledged_at = acknowledged_at
             mock_acknowledgment.disclaimer_version = "1.0"
@@ -123,12 +128,14 @@ class TestDisclaimerAcknowledge:
         """
         AC4: Acknowledgment is stored in the database with timestamp.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         session_id = str(uuid.uuid4())
-        acknowledged_at = datetime.now(timezone.utc)
+        acknowledged_at = datetime.now(UTC)
 
-        with patch("src.routers.disclaimer.get_session_maker") as mock_get_session_maker:
+        with patch(
+            "src.routers.disclaimer.get_session_maker"
+        ) as mock_get_session_maker:
             # First check returns None (not acknowledged)
             mock_session = AsyncMock()
             mock_result = MagicMock()

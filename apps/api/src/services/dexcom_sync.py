@@ -4,7 +4,7 @@ Handles fetching glucose readings from Dexcom Share API and storing them.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydexcom import Dexcom
 from pydexcom import errors as dexcom_errors
@@ -169,7 +169,7 @@ async def sync_dexcom_for_user(
     if not readings:
         logger.info("No new readings from Dexcom", user_id=str(user_id))
         credential.status = IntegrationStatus.CONNECTED
-        credential.last_sync_at = datetime.now(timezone.utc)
+        credential.last_sync_at = datetime.now(UTC)
         credential.last_error = None
         await db.commit()
         return {
@@ -179,16 +179,20 @@ async def sync_dexcom_for_user(
         }
 
     # Store readings (using upsert to handle duplicates)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stored_count = 0
     last_reading = None
 
     for reading in readings:
         # Get reading timestamp - pydexcom returns datetime
-        reading_time = reading.datetime if hasattr(reading, "datetime") else reading.time
+        reading_time = (
+            reading.datetime if hasattr(reading, "datetime") else reading.time
+        )
 
         # Map trend
-        trend = map_trend(reading.trend if hasattr(reading, "trend") else reading.trend_direction)
+        trend = map_trend(
+            reading.trend if hasattr(reading, "trend") else reading.trend_direction
+        )
 
         # Get trend rate if available
         trend_rate = None
@@ -196,17 +200,19 @@ async def sync_dexcom_for_user(
             trend_rate = reading.trend_rate
 
         # Use PostgreSQL upsert (INSERT ON CONFLICT DO NOTHING)
-        stmt = insert(GlucoseReading).values(
-            id=uuid.uuid4(),
-            user_id=user_id,
-            value=reading.value,
-            reading_timestamp=reading_time,
-            trend=trend,
-            trend_rate=trend_rate,
-            received_at=now,
-            source="dexcom",
-        ).on_conflict_do_nothing(
-            index_elements=["user_id", "reading_timestamp"]
+        stmt = (
+            insert(GlucoseReading)
+            .values(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                value=reading.value,
+                reading_timestamp=reading_time,
+                trend=trend,
+                trend_rate=trend_rate,
+                received_at=now,
+                source="dexcom",
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "reading_timestamp"])
         )
 
         result = await db.execute(stmt)
@@ -283,7 +289,7 @@ async def get_glucose_readings(
     """
     from datetime import timedelta
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
 
     result = await db.execute(
         select(GlucoseReading)

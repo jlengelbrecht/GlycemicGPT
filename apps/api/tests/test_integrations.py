@@ -1,9 +1,8 @@
 """Story 3.1 & 3.3: Tests for integration credentials."""
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings

@@ -6,7 +6,7 @@ insulin decay curves for rapid-acting insulins (Novolog/Humalog).
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +42,9 @@ INSULIN_DIA_HOURS = 4.0  # Duration of Insulin Action
 INSULIN_PEAK_HOURS = 1.0  # Time to peak activity
 
 
-def calculate_insulin_remaining(elapsed_hours: float, dia_hours: float = INSULIN_DIA_HOURS) -> float:
+def calculate_insulin_remaining(
+    elapsed_hours: float, dia_hours: float = INSULIN_DIA_HOURS
+) -> float:
     """Calculate fraction of insulin remaining after elapsed time.
 
     Uses a simplified exponential decay model. For rapid-acting insulin:
@@ -73,7 +75,9 @@ def calculate_insulin_remaining(elapsed_hours: float, dia_hours: float = INSULIN
     return max(0.0, min(1.0, remaining))
 
 
-def calculate_iob_activity_curve(elapsed_hours: float, dia_hours: float = INSULIN_DIA_HOURS) -> float:
+def calculate_iob_activity_curve(
+    elapsed_hours: float, dia_hours: float = INSULIN_DIA_HOURS
+) -> float:
     """Calculate the Walsh-curve inspired insulin activity at a given time.
 
     This uses a more accurate bilinear decay model that accounts for:
@@ -157,7 +161,7 @@ async def get_last_iob(
     Returns:
         Tuple of (iob_value, timestamp) or (None, None) if no data
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=max_hours)
 
     result = await db.execute(
         select(PumpEvent.iob_at_event, PumpEvent.event_timestamp)
@@ -200,7 +204,7 @@ async def get_iob_projection(
     if confirmed_iob is None or confirmed_at is None:
         return None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Calculate time since confirmation
     elapsed = now - confirmed_at
@@ -214,8 +218,12 @@ async def get_iob_projection(
 
     # Calculate projections
     projected_current = project_iob(confirmed_iob, confirmed_at, now, dia_hours)
-    projected_30 = project_iob(confirmed_iob, confirmed_at, now + timedelta(minutes=30), dia_hours)
-    projected_60 = project_iob(confirmed_iob, confirmed_at, now + timedelta(minutes=60), dia_hours)
+    projected_30 = project_iob(
+        confirmed_iob, confirmed_at, now + timedelta(minutes=30), dia_hours
+    )
+    projected_60 = project_iob(
+        confirmed_iob, confirmed_at, now + timedelta(minutes=60), dia_hours
+    )
 
     return IoBProjection(
         confirmed_iob=confirmed_iob,

@@ -8,11 +8,7 @@ that occur with Starlette's BaseHTTPMiddleware and asyncpg connections.
 
 import time
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any
 
-from starlette.requests import Request
-from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.logging_config import correlation_id_ctx, get_logger
