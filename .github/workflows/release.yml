@@ -17,12 +17,50 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
       version: ${{ steps.release.outputs.version }}
+      pr: ${{ steps.release.outputs.pr }}
 
     steps:
+      - name: Generate token for homebot.0
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
       - name: Release Please
         id: release
         uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  auto-merge-release:
+    name: Auto-merge Release PR
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: needs.release-please.outputs.pr != ''
+
+    steps:
+      - name: Generate token for homebot.0
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Approve and merge release PR
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ needs.release-please.outputs.pr }}
+        run: |
+          # Extract just the PR number if it's a full URL or JSON
+          PR_NUM=$(echo "$PR_NUMBER" | grep -oE '[0-9]+' | head -1)
+
+          if [ -n "$PR_NUM" ]; then
+            echo "Approving and merging PR #$PR_NUM"
+            gh pr review "$PR_NUM" --approve --repo ${{ github.repository }}
+            gh pr merge "$PR_NUM" --squash --admin --repo ${{ github.repository }}
+          else
+            echo "No PR number found"
+          fi
