@@ -8,19 +8,12 @@
     ":automergeDigest",
     ":automergeBranch"
   ],
-  // Load modular configurations
-  "packageRules": [
-    // Include rules from modular configs
-    { "extends": ["local>.github/renovate/autoMerge.json5"] },
-    { "extends": ["local>.github/renovate/semanticCommits.json5"] },
-    { "extends": ["local>.github/renovate/packageGroups.json5"] }
-  ],
   // Branch naming
   "branchPrefix": "renovate/",
-  // Commit message format
-  "commitMessagePrefix": "chore(deps):",
-  "commitMessageTopic": "{{depName}}",
-  "commitMessageExtra": "to {{newVersion}}",
+  // Commit message format (semantic commits)
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
   // PR settings
   "prHourlyLimit": 5,
   "prConcurrentLimit": 10,
@@ -45,5 +38,91 @@
     "enabled": true,
     "labels": ["security", "dependencies"],
     "minimumReleaseAge": "0 days"
-  }
+  },
+  // Package rules
+  "packageRules": [
+    // Auto-merge patch updates for production dependencies
+    {
+      "description": "Auto-merge patch updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "branch",
+      "matchPackagePatterns": ["*"]
+    },
+    // Auto-merge minor updates for dev dependencies
+    {
+      "description": "Auto-merge minor dev dependency updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Auto-merge digest updates (container images)
+    {
+      "description": "Auto-merge digest updates",
+      "matchUpdateTypes": ["digest"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Auto-merge lockfile maintenance
+    {
+      "description": "Auto-merge lockfile maintenance",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Require PR approval for major updates
+    {
+      "description": "Require PR for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major"]
+    },
+    // Trusted packages can auto-merge minors
+    {
+      "description": "Auto-merge trusted packages (minor)",
+      "matchPackageNames": [
+        "fastapi",
+        "pydantic",
+        "httpx",
+        "pytest",
+        "ruff",
+        "mypy",
+        "react",
+        "next",
+        "typescript",
+        "eslint",
+        "prettier",
+        "tailwindcss"
+      ],
+      "matchPackagePatterns": ["@types/*"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Group Python dependencies
+    {
+      "description": "Group Python dependencies",
+      "matchManagers": ["pip_requirements", "pip-compile", "poetry", "pep621"],
+      "groupName": "Python dependencies"
+    },
+    // Group Node.js dependencies
+    {
+      "description": "Group Node.js type definitions",
+      "matchPackagePatterns": ["@types/*"],
+      "groupName": "TypeScript type definitions"
+    },
+    // Group ESLint
+    {
+      "description": "Group ESLint dependencies",
+      "matchPackagePatterns": ["eslint", "@eslint/*", "eslint-*"],
+      "groupName": "ESLint"
+    },
+    // Group testing libraries
+    {
+      "description": "Group testing libraries",
+      "matchPackagePatterns": ["jest", "@jest/*", "vitest", "@vitest/*", "testing-library", "@testing-library/*"],
+      "groupName": "Testing libraries"
+    }
+  ]
 }
