@@ -1,0 +1,41 @@
+---
+# Story 1.4: Kubernetes Deployment Manifests
+# NodePort services for direct access (alternative to Ingress)
+# Useful for homelabs without ingress controller
+apiVersion: v1
+kind: Service
+metadata:
+  name: glycemicgpt-api-nodeport
+  namespace: glycemicgpt
+  labels:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: api
+spec:
+  type: NodePort
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30800  # Access via http://<node-ip>:30800
+      name: http
+  selector:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: glycemicgpt-web-nodeport
+  namespace: glycemicgpt
+  labels:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: web
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30300  # Access via http://<node-ip>:30300
+      name: http
+  selector:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: web

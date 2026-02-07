@@ -1,0 +1,41 @@
+---
+# Story 1.4: Kubernetes Deployment Manifests
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: glycemicgpt-config
+  namespace: glycemicgpt
+  labels:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: config
+data:
+  # Database connection (without password)
+  DATABASE_HOST: "glycemicgpt-db"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "glycemicgpt"
+  DATABASE_USER: "glycemicgpt"
+
+  # Redis connection
+  REDIS_HOST: "glycemicgpt-redis"
+  REDIS_PORT: "6379"
+
+  # API configuration
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  LOG_FORMAT: "json"
+
+  # CORS configuration
+  CORS_ORIGINS: "http://localhost:3000,https://glycemicgpt.local"
+
+  # Session configuration
+  SESSION_EXPIRE_HOURS: "24"
+
+  # Logging configuration (Story 1.5)
+  LOG_LEVEL: "INFO"
+  SERVICE_NAME: "glycemicgpt-api"
+
+  # Backup configuration (Story 1.5)
+  BACKUP_PATH: "/backups"
+  BACKUP_RETENTION_DAYS: "7"
+  BACKUP_SCHEDULE: "0 2 * * *"

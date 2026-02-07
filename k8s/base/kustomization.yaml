@@ -1,0 +1,26 @@
+# Story 1.4: Kubernetes Deployment Manifests
+# Story 1.5: Added backup CronJob
+# Kustomize base configuration
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: glycemicgpt
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres.yaml
+  - redis.yaml
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+  - backup-cronjob.yaml
+  # Uncomment to use NodePort instead of Ingress
+  # - nodeport-services.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: glycemicgpt
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true

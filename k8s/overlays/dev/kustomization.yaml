@@ -1,0 +1,64 @@
+# Story 1.4: Kubernetes Deployment Manifests
+# Development overlay - lower resource limits, local images
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: glycemicgpt-dev
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      environment: development
+    includeSelectors: false
+
+patches:
+  # Reduce resource limits for development
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+    target:
+      kind: Deployment
+      name: glycemicgpt-api
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+    target:
+      kind: Deployment
+      name: glycemicgpt-web
+  # Use smaller PVC for development
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "1Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: glycemicgpt-db-pvc
+  # Use smaller backup PVC for development
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "1Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: glycemicgpt-backup-pvc
+  # Override ConfigMap for dev
+  - patch: |-
+      - op: replace
+        path: /data/LOG_FORMAT
+        value: "text"
+      - op: replace
+        path: /data/CORS_ORIGINS
+        value: "http://localhost:3000,http://localhost:8000"
+    target:
+      kind: ConfigMap
+      name: glycemicgpt-config

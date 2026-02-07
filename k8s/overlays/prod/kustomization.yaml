@@ -1,0 +1,82 @@
+# Story 1.4: Kubernetes Deployment Manifests
+# Production overlay - full resources, registry images
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: glycemicgpt
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      environment: production
+    includeSelectors: false
+
+# Production image configuration
+# Update these to your container registry
+images:
+  - name: glycemicgpt-api
+    newName: ghcr.io/yourusername/glycemicgpt-api
+    newTag: latest
+  - name: glycemicgpt-web
+    newName: ghcr.io/yourusername/glycemicgpt-web
+    newTag: latest
+
+patches:
+  # Increase replicas for production
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: glycemicgpt-api
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+    target:
+      kind: Deployment
+      name: glycemicgpt-web
+  # Larger PVC for production
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "50Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: glycemicgpt-db-pvc
+  # Enable TLS on ingress
+  - patch: |-
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - glycemicgpt.yourdomain.com
+            secretName: glycemicgpt-tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: glycemicgpt.yourdomain.com
+    target:
+      kind: Ingress
+      name: glycemicgpt-ingress
+  # Larger backup PVC for production
+  - patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "20Gi"
+    target:
+      kind: PersistentVolumeClaim
+      name: glycemicgpt-backup-pvc
+  # Override ConfigMap for production
+  - patch: |-
+      - op: replace
+        path: /data/LOG_FORMAT
+        value: "json"
+      - op: replace
+        path: /data/CORS_ORIGINS
+        value: "https://glycemicgpt.yourdomain.com"
+    target:
+      kind: ConfigMap
+      name: glycemicgpt-config
