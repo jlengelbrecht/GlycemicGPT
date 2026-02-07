@@ -1,0 +1,10 @@
+---
+# Story 1.4: Kubernetes Deployment Manifests
+# Namespace for GlycemicGPT resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: glycemicgpt
+  labels:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: namespace

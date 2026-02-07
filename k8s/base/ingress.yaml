@@ -1,0 +1,69 @@
+---
+# Story 1.4: Kubernetes Deployment Manifests
+# Ingress for external access
+# Supports both nginx-ingress and traefik
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: glycemicgpt-ingress
+  namespace: glycemicgpt
+  labels:
+    app.kubernetes.io/name: glycemicgpt
+    app.kubernetes.io/component: ingress
+  annotations:
+    # nginx-ingress annotations
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Enable websocket/SSE support
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # traefik annotations (if using traefik)
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: nginx  # Change to "traefik" if using traefik
+  rules:
+    - host: glycemicgpt.local  # Change to your domain
+      http:
+        paths:
+          # API routes
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: glycemicgpt-api
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: glycemicgpt-api
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: glycemicgpt-api
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: glycemicgpt-api
+                port:
+                  number: 8000
+          # Frontend routes (catch-all)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: glycemicgpt-web
+                port:
+                  number: 3000
+  # TLS configuration (uncomment and configure for HTTPS)
+  # tls:
+  #   - hosts:
+  #       - glycemicgpt.local
+  #     secretName: glycemicgpt-tls

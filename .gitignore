@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.nyc_output/
+coverage/
+
+# Build outputs
+.next/
+out/
+.nuxt/
+.output/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Database
+*.sqlite
+*.db
+
+# Secrets (never commit these)
+*.pem
+*.key
+secrets/
+
+# Backup files
+backups/
+*.sql.gz
+
+# BMAD artifacts (planning only, not deployment)
+_bmad-output/
+_bmad/
+
+# Claude Code artifacts
+.claude/
+
+# Stray files from package managers
+=*
