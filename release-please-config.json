@@ -1,5 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "1e37dda56ef6fb03aba1b623b1eaee1f15f89819",
+  "last-release-sha": "1e37dda56ef6fb03aba1b623b1eaee1f15f89819",
   "packages": {
     ".": {
       "release-type": "simple",
@@ -9,16 +11,14 @@
       "draft": false,
       "prerelease": false,
       "changelog-path": "CHANGELOG.md",
-      "changelog-type": "github",
+      "changelog-type": "default",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "pull-request-title-pattern": "chore: release ${version}",
       "pull-request-header": ":robot: I have created a release",
       "extra-files": [
         "apps/api/pyproject.toml",
-        "apps/web/package.json",
-        "k8s/base/api-deployment.yaml",
-        "k8s/base/web-deployment.yaml"
+        "apps/web/package.json"
       ]
     }
   },
