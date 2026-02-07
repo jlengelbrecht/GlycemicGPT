@@ -4,8 +4,8 @@ APScheduler-based background task scheduler for data sync jobs.
 """
 
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -41,10 +41,12 @@ async def sync_all_dexcom_users() -> None:
         result = await db.execute(
             select(IntegrationCredential).where(
                 IntegrationCredential.integration_type == IntegrationType.DEXCOM,
-                IntegrationCredential.status.in_([
-                    IntegrationStatus.CONNECTED,
-                    IntegrationStatus.ERROR,  # Retry errors
-                ]),
+                IntegrationCredential.status.in_(
+                    [
+                        IntegrationStatus.CONNECTED,
+                        IntegrationStatus.ERROR,  # Retry errors
+                    ]
+                ),
             )
         )
         credentials = result.scalars().all()
@@ -114,10 +116,12 @@ async def sync_all_tandem_users() -> None:
         result = await db.execute(
             select(IntegrationCredential).where(
                 IntegrationCredential.integration_type == IntegrationType.TANDEM,
-                IntegrationCredential.status.in_([
-                    IntegrationStatus.CONNECTED,
-                    IntegrationStatus.ERROR,  # Retry errors
-                ]),
+                IntegrationCredential.status.in_(
+                    [
+                        IntegrationStatus.CONNECTED,
+                        IntegrationStatus.ERROR,  # Retry errors
+                    ]
+                ),
             )
         )
         credentials = result.scalars().all()

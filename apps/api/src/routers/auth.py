@@ -3,7 +3,7 @@
 API endpoints for user registration, login, logout, and authentication.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -157,9 +157,7 @@ async def login(
     client_ip = http_request.client.host if http_request.client else "unknown"
 
     # Find user by email (case-insensitive)
-    result = await db.execute(
-        select(User).where(User.email == request.email.lower())
-    )
+    result = await db.execute(select(User).where(User.email == request.email.lower()))
     user = result.scalar_one_or_none()
 
     # Check if user exists and password is correct
@@ -207,7 +205,7 @@ async def login(
     )
 
     # Update last login timestamp
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     await db.commit()
 
     logger.info(

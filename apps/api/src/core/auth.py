@@ -5,7 +5,6 @@ and role-based access control.
 """
 
 from typing import Annotated
-import uuid
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -60,9 +59,7 @@ async def get_current_user(
         raise credentials_exception
 
     # Fetch the user from the database
-    result = await db.execute(
-        select(User).where(User.id == token_data.user_id)
-    )
+    result = await db.execute(select(User).where(User.id == token_data.user_id))
     user = result.scalar_one_or_none()
 
     if user is None:

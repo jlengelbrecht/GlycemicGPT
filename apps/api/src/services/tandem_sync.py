@@ -7,9 +7,9 @@ including Control-IQ activity parsing.
 import asyncio
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tconnectsync.api.common import ApiException
@@ -115,7 +115,12 @@ def calculate_basal_adjustment(event_data: dict) -> float | None:
         Percentage adjustment (positive = increase, negative = decrease) or None
     """
     # Try to get direct adjustment percentage
-    for pct_key in ["adjustmentPercent", "adjustment_percent", "percentChange", "percent_change"]:
+    for pct_key in [
+        "adjustmentPercent",
+        "adjustment_percent",
+        "percentChange",
+        "percent_change",
+    ]:
         if pct_key in event_data:
             try:
                 return float(event_data[pct_key])
@@ -126,7 +131,12 @@ def calculate_basal_adjustment(event_data: dict) -> float | None:
     profile_rate = None
     actual_rate = None
 
-    for profile_key in ["profileRate", "profile_rate", "scheduledRate", "scheduled_rate"]:
+    for profile_key in [
+        "profileRate",
+        "profile_rate",
+        "scheduledRate",
+        "scheduled_rate",
+    ]:
         if profile_key in event_data:
             try:
                 profile_rate = float(event_data[profile_key])
@@ -401,7 +411,7 @@ async def sync_tandem_for_user(
         raise TandemConnectionError(f"Failed to connect: {str(e)}") from e
 
     # Calculate date range
-    end_date = datetime.now(timezone.utc)
+    end_date = datetime.now(UTC)
     start_date = end_date - timedelta(hours=hours_back)
 
     # Fetch events from Tandem with retry logic
@@ -448,7 +458,7 @@ async def sync_tandem_for_user(
     if not events:
         logger.info("No new events from Tandem", user_id=str(user_id))
         credential.status = IntegrationStatus.CONNECTED
-        credential.last_sync_at = datetime.now(timezone.utc)
+        credential.last_sync_at = datetime.now(UTC)
         credential.last_error = None
         await db.commit()
         return {
@@ -458,7 +468,7 @@ async def sync_tandem_for_user(
         }
 
     # Store events (using upsert to handle duplicates)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stored_count = 0
     last_event = None
 
@@ -546,7 +556,9 @@ async def sync_tandem_for_user(
                 duration_minutes=duration_minutes,
                 is_automated=parsed.is_automated,
                 control_iq_reason=parsed.control_iq_reason,
-                control_iq_mode=parsed.control_iq_mode.value if parsed.control_iq_mode else None,
+                control_iq_mode=parsed.control_iq_mode.value
+                if parsed.control_iq_mode
+                else None,
                 basal_adjustment_pct=parsed.basal_adjustment_pct,
                 iob_at_event=iob,
                 cob_at_event=cob,
@@ -570,7 +582,9 @@ async def sync_tandem_for_user(
                 "timestamp": event_time,
                 "units": units,
                 "is_automated": parsed.is_automated,
-                "control_iq_mode": parsed.control_iq_mode.value if parsed.control_iq_mode else None,
+                "control_iq_mode": parsed.control_iq_mode.value
+                if parsed.control_iq_mode
+                else None,
             }
 
     # Update integration status
@@ -635,7 +649,7 @@ async def get_pump_events(
     Returns:
         List of PumpEvent objects, ordered by timestamp descending
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
     query = select(PumpEvent).where(
         PumpEvent.user_id == user_id,
@@ -701,7 +715,7 @@ async def get_control_iq_activity(
     Returns:
         ControlIQActivitySummary with aggregated Control-IQ metrics
     """
-    end_time = datetime.now(timezone.utc)
+    end_time = datetime.now(UTC)
     start_time = end_time - timedelta(hours=hours)
 
     # Get all events in the time range
@@ -801,7 +815,7 @@ async def get_automated_events(
     Returns:
         List of automated PumpEvent objects
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
 
     result = await db.execute(
         select(PumpEvent)

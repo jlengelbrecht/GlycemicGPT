@@ -2,13 +2,9 @@
 
 import json
 import logging
-from io import StringIO
-
-import pytest
 
 from src.logging_config import (
     JsonFormatter,
-    StructuredLogger,
     TextFormatter,
     correlation_id_ctx,
     get_logger,

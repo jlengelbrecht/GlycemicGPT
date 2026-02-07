@@ -58,4 +58,6 @@ def decrypt_credential(encrypted: str) -> str:
         decrypted = fernet.decrypt(encrypted.encode("utf-8"))
         return decrypted.decode("utf-8")
     except InvalidToken as e:
-        raise ValueError("Failed to decrypt credential - invalid key or corrupted data") from e
+        raise ValueError(
+            "Failed to decrypt credential - invalid key or corrupted data"
+        ) from e

@@ -2,7 +2,6 @@
 
 import uuid
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings

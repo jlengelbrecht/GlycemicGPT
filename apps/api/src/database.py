@@ -6,7 +6,6 @@ the correct event loop context, avoiding asyncpg event loop issues.
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -20,8 +19,8 @@ from sqlalchemy.pool import NullPool
 from src.config import settings
 
 # Engine and session maker - lazily initialized
-_engine: Optional[AsyncEngine] = None
-_async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+_engine: AsyncEngine | None = None
+_async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
 def get_engine() -> AsyncEngine:

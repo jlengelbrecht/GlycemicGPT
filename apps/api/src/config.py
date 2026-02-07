@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     )
 
     # Database
-    database_url: str = "postgresql+asyncpg://glycemicgpt:glycemicgpt@localhost:5432/glycemicgpt"
+    database_url: str = (
+        "postgresql+asyncpg://glycemicgpt:glycemicgpt@localhost:5432/glycemicgpt"
+    )
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -39,7 +41,9 @@ class Settings(BaseSettings):
     backup_path: str = "/backups"
     backup_retention_days: int = 7
     # Sync database URL for pg_dump (no asyncpg)
-    database_sync_url: str = "postgresql://glycemicgpt:glycemicgpt@localhost:5432/glycemicgpt"
+    database_sync_url: str = (
+        "postgresql://glycemicgpt:glycemicgpt@localhost:5432/glycemicgpt"
+    )
 
     # Data Sync Configuration (Story 3.2)
     dexcom_sync_interval_minutes: int = 5  # Sync every 5 minutes

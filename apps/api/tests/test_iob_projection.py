@@ -4,7 +4,7 @@ Tests the insulin decay curve calculations and IoB projection endpoint.
 """
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -103,14 +103,14 @@ class TestProjectIoB:
 
     def test_project_iob_no_elapsed_time(self):
         """With no elapsed time, projected IoB equals confirmed."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         projected = project_iob(2.5, now, now)
         assert projected == 2.5
 
     def test_project_iob_one_hour_elapsed(self):
         """After 1 hour, IoB should decay according to curve."""
-        confirmed_at = datetime.now(timezone.utc) - timedelta(hours=1)
-        now = datetime.now(timezone.utc)
+        confirmed_at = datetime.now(UTC) - timedelta(hours=1)
+        now = datetime.now(UTC)
         projected = project_iob(2.5, confirmed_at, now)
         # At 1 hour, ~93.75% should remain
         expected = 2.5 * 0.9375
@@ -118,8 +118,8 @@ class TestProjectIoB:
 
     def test_project_iob_two_hours_elapsed(self):
         """After 2 hours, IoB should be ~75%."""
-        confirmed_at = datetime.now(timezone.utc) - timedelta(hours=2)
-        now = datetime.now(timezone.utc)
+        confirmed_at = datetime.now(UTC) - timedelta(hours=2)
+        now = datetime.now(UTC)
         projected = project_iob(2.5, confirmed_at, now)
         # At 2 hours, ~75% should remain
         expected = 2.5 * 0.75
@@ -127,14 +127,14 @@ class TestProjectIoB:
 
     def test_project_iob_after_dia(self):
         """After DIA, IoB should be 0."""
-        confirmed_at = datetime.now(timezone.utc) - timedelta(hours=5)
-        now = datetime.now(timezone.utc)
+        confirmed_at = datetime.now(UTC) - timedelta(hours=5)
+        now = datetime.now(UTC)
         projected = project_iob(2.5, confirmed_at, now)
         assert projected == 0.0
 
     def test_project_iob_future_time(self):
         """Project IoB to a future time."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         future = now + timedelta(hours=1)
         # Start with 2.5u now, project to 1 hour from now
         projected = project_iob(2.5, now, future)
@@ -143,8 +143,8 @@ class TestProjectIoB:
 
     def test_project_iob_zero_confirmed(self):
         """Zero confirmed IoB should project to zero."""
-        confirmed_at = datetime.now(timezone.utc) - timedelta(hours=1)
-        now = datetime.now(timezone.utc)
+        confirmed_at = datetime.now(UTC) - timedelta(hours=1)
+        now = datetime.now(UTC)
         projected = project_iob(0.0, confirmed_at, now)
         assert projected == 0.0
 
@@ -195,9 +195,9 @@ class TestIoBProjectionEndpoint:
 
     async def test_iob_projection_with_data(self, db_session):
         """IoB projection returns data when pump events exist."""
+        from src.core.security import hash_password
         from src.models.pump_data import PumpEvent, PumpEventType
         from src.models.user import User, UserRole
-        from src.core.security import hash_password
 
         email = unique_email("iob_with_data")
         password = "SecurePass123"
@@ -213,7 +213,7 @@ class TestIoBProjectionEndpoint:
         await db_session.refresh(user)
 
         # Create a pump event with IoB data
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         pump_event = PumpEvent(
             user_id=user.id,
             event_type=PumpEventType.BOLUS,
@@ -253,9 +253,9 @@ class TestIoBProjectionEndpoint:
 
     async def test_iob_projection_stale_data(self, db_session):
         """IoB projection shows stale warning for old data."""
+        from src.core.security import hash_password
         from src.models.pump_data import PumpEvent, PumpEventType
         from src.models.user import User, UserRole
-        from src.core.security import hash_password
 
         email = unique_email("iob_stale")
         password = "SecurePass123"
@@ -271,7 +271,7 @@ class TestIoBProjectionEndpoint:
         await db_session.refresh(user)
 
         # Create a pump event with IoB data from 3 hours ago
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         pump_event = PumpEvent(
             user_id=user.id,
             event_type=PumpEventType.BOLUS,
@@ -308,9 +308,9 @@ class TestIoBProjectionEndpoint:
 
     async def test_iob_projection_decay_over_time(self, db_session):
         """IoB projection correctly applies decay curve."""
+        from src.core.security import hash_password
         from src.models.pump_data import PumpEvent, PumpEventType
         from src.models.user import User, UserRole
-        from src.core.security import hash_password
 
         email = unique_email("iob_decay")
         password = "SecurePass123"
@@ -326,7 +326,7 @@ class TestIoBProjectionEndpoint:
         await db_session.refresh(user)
 
         # Create a pump event with IoB data from 2 hours ago
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         pump_event = PumpEvent(
             user_id=user.id,
             event_type=PumpEventType.BOLUS,

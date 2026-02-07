@@ -51,7 +51,17 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
-ignore = ["E501"]
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Function call in default argument (FastAPI Depends pattern)
+    "B904",   # raise ... from err in exception handling
+    "UP042",  # str, enum.Enum pattern (intentional for JSON serialization)
+    "SIM102", # Nested if statements (sometimes more readable)
+    "SIM105", # contextlib.suppress (try/except/pass is clearer)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["E402"]  # Imports after settings override
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

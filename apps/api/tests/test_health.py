@@ -17,8 +17,7 @@ from src.main import app
 async def client():
     """Create async test client."""
     async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
         yield ac
 
@@ -33,8 +32,7 @@ class TestHealthEndpoint:
         when database is available.
         """
         with patch(
-            "src.routers.health.check_database_connection",
-            new_callable=AsyncMock
+            "src.routers.health.check_database_connection", new_callable=AsyncMock
         ) as mock_db:
             mock_db.return_value = True
 
@@ -52,8 +50,7 @@ class TestHealthEndpoint:
         is unavailable.
         """
         with patch(
-            "src.routers.health.check_database_connection",
-            new_callable=AsyncMock
+            "src.routers.health.check_database_connection", new_callable=AsyncMock
         ) as mock_db:
             mock_db.return_value = False
 
@@ -94,8 +91,7 @@ class TestReadinessProbe:
         If this passes, Kubernetes will route traffic to this pod.
         """
         with patch(
-            "src.routers.health.check_database_connection",
-            new_callable=AsyncMock
+            "src.routers.health.check_database_connection", new_callable=AsyncMock
         ) as mock_db:
             mock_db.return_value = True
 
@@ -114,8 +110,7 @@ class TestReadinessProbe:
         If this fails, Kubernetes will stop routing traffic to this pod.
         """
         with patch(
-            "src.routers.health.check_database_connection",
-            new_callable=AsyncMock
+            "src.routers.health.check_database_connection", new_callable=AsyncMock
         ) as mock_db:
             mock_db.return_value = False
 

@@ -65,7 +65,12 @@ class GlucoseReading(Base):
         # Index for querying recent readings for a user
         Index("ix_glucose_readings_user_timestamp", "user_id", "reading_timestamp"),
         # Index for finding duplicates
-        Index("ix_glucose_readings_user_reading", "user_id", "reading_timestamp", unique=True),
+        Index(
+            "ix_glucose_readings_user_reading",
+            "user_id",
+            "reading_timestamp",
+            unique=True,
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

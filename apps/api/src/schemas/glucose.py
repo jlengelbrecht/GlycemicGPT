@@ -31,7 +31,9 @@ class CurrentGlucoseResponse(BaseModel):
     trend_rate: float | None = Field(None, description="Rate of change in mg/dL/min")
     reading_timestamp: datetime = Field(..., description="When the reading was taken")
     minutes_ago: int = Field(..., description="Minutes since reading")
-    is_stale: bool = Field(..., description="True if reading is more than 10 minutes old")
+    is_stale: bool = Field(
+        ..., description="True if reading is more than 10 minutes old"
+    )
 
 
 class GlucoseHistoryResponse(BaseModel):
@@ -45,7 +47,9 @@ class SyncResponse(BaseModel):
     """Response schema for sync operation."""
 
     message: str = Field(..., description="Status message")
-    readings_fetched: int = Field(..., description="Number of readings fetched from Dexcom")
+    readings_fetched: int = Field(
+        ..., description="Number of readings fetched from Dexcom"
+    )
     readings_stored: int = Field(..., description="Number of new readings stored")
     last_reading: GlucoseReadingResponse | None = Field(
         None, description="Most recent reading"

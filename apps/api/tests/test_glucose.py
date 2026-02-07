@@ -1,15 +1,14 @@
 """Story 3.2: Tests for Dexcom CGM data ingestion."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
 from src.main import app
-from src.models.glucose import PYDEXCOM_TREND_MAP, TrendDirection
+from src.models.glucose import TrendDirection
 from src.services.dexcom_sync import map_trend
 
 
@@ -173,16 +172,14 @@ class TestGlucoseEndpoints:
 
     @patch("src.services.dexcom_sync.Dexcom")
     @patch("src.routers.integrations.validate_dexcom_credentials")
-    async def test_sync_dexcom_with_mocked_data(
-        self, mock_validate, mock_dexcom_class
-    ):
+    async def test_sync_dexcom_with_mocked_data(self, mock_validate, mock_dexcom_class):
         """Test Dexcom sync with mocked Dexcom API."""
         mock_validate.return_value = (True, None)
 
         # Create mock reading
         mock_reading = MagicMock()
         mock_reading.value = 120
-        mock_reading.datetime = datetime.now(timezone.utc)
+        mock_reading.datetime = datetime.now(UTC)
         mock_reading.trend = 4  # Flat
         mock_reading.trend_rate = 0.5
 
