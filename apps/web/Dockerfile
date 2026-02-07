@@ -1,4 +1,17 @@
+# GlycemicGPT Web Dockerfile
+ARG VERSION=0.0.0
+ARG BUILD_DATE=unknown
+ARG GIT_SHA=unknown
+
 FROM node:20-alpine AS base
+
+LABEL org.opencontainers.image.title="GlycemicGPT Web"
+LABEL org.opencontainers.image.description="Next.js frontend for GlycemicGPT diabetes management platform"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+LABEL org.opencontainers.image.source="https://github.com/jlengelbrecht/GlycemicGPT"
+LABEL org.opencontainers.image.licenses="MIT"
 
 # Install dependencies only when needed
 FROM base AS deps

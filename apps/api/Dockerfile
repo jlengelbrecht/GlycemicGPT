@@ -1,4 +1,18 @@
+# GlycemicGPT API Dockerfile
+ARG VERSION=0.0.0
+ARG BUILD_DATE=unknown
+ARG GIT_SHA=unknown
+
 FROM python:3.12-slim
+
+# Labels
+LABEL org.opencontainers.image.title="GlycemicGPT API"
+LABEL org.opencontainers.image.description="FastAPI backend for GlycemicGPT diabetes management platform"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+LABEL org.opencontainers.image.source="https://github.com/jlengelbrecht/GlycemicGPT"
+LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
 
