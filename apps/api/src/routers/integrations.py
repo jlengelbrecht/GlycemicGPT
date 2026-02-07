@@ -41,6 +41,7 @@ from src.schemas.integration import (
     TandemCredentialsRequest,
 )
 from src.schemas.pump import (
+    ControlIQActivityResponse,
     PumpEventResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
@@ -58,6 +59,7 @@ from src.services.tandem_sync import (
     TandemConnectionError,
     TandemNotConfiguredError,
     TandemSyncError,
+    get_control_iq_activity,
     get_latest_pump_event,
     sync_tandem_for_user,
 )
@@ -851,4 +853,58 @@ async def get_tandem_sync_status(
         last_error=credential.last_error if credential else None,
         events_available=events_count,
         latest_event=latest_response,
+    )
+
+
+@router.get(
+    "/tandem/control-iq/activity",
+    response_model=ControlIQActivityResponse,
+    responses={
+        200: {"description": "Control-IQ activity summary"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_control_iq_activity_summary(
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    hours: int = Query(default=24, ge=1, le=168, description="Hours of history to analyze"),
+) -> ControlIQActivityResponse:
+    """Get a summary of Control-IQ activity (Story 3.5).
+
+    This endpoint provides aggregated metrics about Control-IQ automated actions,
+    including:
+    - Automatic correction boluses
+    - Basal rate adjustments (increases and decreases)
+    - Automated insulin suspends
+    - Activity mode usage (Sleep, Exercise, Standard)
+
+    This data helps AI analysis focus on what Control-IQ cannot adjust
+    (carb ratios, correction factors) rather than what it's already handling.
+
+    Args:
+        hours: Number of hours of history to analyze (1-168, default 24)
+
+    Returns:
+        ControlIQActivityResponse with aggregated metrics
+    """
+    activity = await get_control_iq_activity(db, current_user.id, hours=hours)
+
+    return ControlIQActivityResponse(
+        total_events=activity.total_events,
+        automated_events=activity.automated_events,
+        manual_events=activity.manual_events,
+        correction_count=activity.correction_count,
+        total_correction_units=activity.total_correction_units,
+        basal_increase_count=activity.basal_increase_count,
+        basal_decrease_count=activity.basal_decrease_count,
+        avg_basal_adjustment_pct=activity.avg_basal_adjustment_pct,
+        suspend_count=activity.suspend_count,
+        automated_suspend_count=activity.automated_suspend_count,
+        sleep_mode_events=activity.sleep_mode_events,
+        exercise_mode_events=activity.exercise_mode_events,
+        standard_mode_events=activity.standard_mode_events,
+        start_time=activity.start_time,
+        end_time=activity.end_time,
+        hours_analyzed=hours,
     )

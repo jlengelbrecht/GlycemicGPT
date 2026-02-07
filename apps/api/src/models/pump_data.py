@@ -1,6 +1,6 @@
-"""Story 3.4: Pump event model.
+"""Story 3.4 & 3.5: Pump event model.
 
-Models for storing pump data from Tandem t:connect.
+Models for storing pump data from Tandem t:connect with Control-IQ activity tracking.
 """
 
 import enum
@@ -22,6 +22,14 @@ class PumpEventType(str, enum.Enum):
     CORRECTION = "correction"  # Control-IQ automated correction
     SUSPEND = "suspend"  # Insulin delivery suspended
     RESUME = "resume"  # Insulin delivery resumed
+
+
+class ControlIQMode(str, enum.Enum):
+    """Control-IQ operating modes from Tandem pump."""
+
+    STANDARD = "standard"  # Normal Control-IQ operation
+    SLEEP = "sleep"  # Sleep Activity mode (tighter range)
+    EXERCISE = "exercise"  # Exercise Activity mode (higher target)
 
 
 class PumpEvent(Base):
@@ -94,6 +102,19 @@ class PumpEvent(Base):
 
     control_iq_reason: Mapped[str | None] = mapped_column(
         String(100),
+        nullable=True,
+    )
+
+    # Control-IQ mode active during event (Story 3.5)
+    control_iq_mode: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    # For basal adjustments: percentage change from profile rate
+    # Positive = increase, Negative = decrease (Story 3.5)
+    basal_adjustment_pct: Mapped[float | None] = mapped_column(
+        Float,
         nullable=True,
     )
 
