@@ -1,0 +1,50 @@
+name: Cleanup Container Images
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup-api:
+    name: Cleanup API Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old API image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: glycemicgpt-api
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          ignore-versions: '^(latest|\\d+\\.\\d+\\.\\d+|\\d+\\.\\d+)$'
+
+  cleanup-web:
+    name: Cleanup Web Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old Web image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: glycemicgpt-web
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          ignore-versions: '^(latest|\\d+\\.\\d+\\.\\d+|\\d+\\.\\d+)$'
+
+  cleanup-untagged:
+    name: Cleanup Untagged Images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [glycemicgpt-api, glycemicgpt-web]
+    steps:
+      - name: Delete untagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          delete-only-untagged-versions: true
