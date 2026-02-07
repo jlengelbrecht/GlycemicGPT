@@ -1,15 +1,14 @@
 """Story 3.4 & 3.5: Tests for Tandem pump data ingestion and Control-IQ parsing."""
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
 from src.main import app
-from src.models.pump_data import ControlIQMode, PumpEvent, PumpEventType
+from src.models.pump_data import ControlIQMode, PumpEventType
 from src.services.tandem_sync import (
     calculate_basal_adjustment,
     detect_control_iq_mode,
@@ -35,10 +34,12 @@ class TestEventTypeMapping:
 
     def test_map_automated_basal_event(self):
         """Test mapping automated basal event."""
-        event_type, is_automated, reason = map_event_type({
-            "type": "autoBasal",
-            "isAutomated": True,
-        })
+        event_type, is_automated, reason = map_event_type(
+            {
+                "type": "autoBasal",
+                "isAutomated": True,
+            }
+        )
         assert event_type == PumpEventType.BASAL
         assert is_automated is True
         assert reason == "basal_adjustment"
@@ -52,19 +53,23 @@ class TestEventTypeMapping:
 
     def test_map_correction_bolus_event(self):
         """Test mapping correction bolus event (Control-IQ)."""
-        event_type, is_automated, reason = map_event_type({
-            "type": "correctionBolus",
-        })
+        event_type, is_automated, reason = map_event_type(
+            {
+                "type": "correctionBolus",
+            }
+        )
         assert event_type == PumpEventType.CORRECTION
         assert is_automated is True
         assert reason == "correction"
 
     def test_map_automated_correction_event(self):
         """Test mapping automated correction event."""
-        event_type, is_automated, reason = map_event_type({
-            "type": "correction",
-            "isAutomated": True,
-        })
+        event_type, is_automated, reason = map_event_type(
+            {
+                "type": "correction",
+                "isAutomated": True,
+            }
+        )
         assert event_type == PumpEventType.CORRECTION
         assert is_automated is True
         assert reason == "correction"
@@ -77,10 +82,12 @@ class TestEventTypeMapping:
 
     def test_map_automated_suspend_event(self):
         """Test mapping automated suspend event (Control-IQ)."""
-        event_type, is_automated, reason = map_event_type({
-            "type": "autoSuspend",
-            "isAutomated": True,
-        })
+        event_type, is_automated, reason = map_event_type(
+            {
+                "type": "autoSuspend",
+                "isAutomated": True,
+            }
+        )
         assert event_type == PumpEventType.SUSPEND
         assert is_automated is True
         assert reason == "suspend"
@@ -199,9 +206,7 @@ class TestTandemSyncEndpoints:
 
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
-    async def test_sync_tandem_with_mocked_data(
-        self, mock_validate, mock_tandem_class
-    ):
+    async def test_sync_tandem_with_mocked_data(self, mock_validate, mock_tandem_class):
         """Test Tandem sync with mocked Tandem API."""
         mock_validate.return_value = (True, None)
 
@@ -209,13 +214,13 @@ class TestTandemSyncEndpoints:
         mock_events = [
             {
                 "type": "bolus",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "units": 2.5,
                 "iob": 3.2,
             },
             {
                 "type": "autoBasal",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "units": 0.8,
                 "isAutomated": True,
                 "duration": 30,
@@ -280,7 +285,7 @@ class TestTandemSyncEndpoints:
         mock_events = [
             {
                 "type": "correctionBolus",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "units": 0.5,
                 "isAutomated": True,
                 "iob": 2.1,
@@ -337,9 +342,7 @@ class TestTandemSyncEndpoints:
 
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
-    async def test_sync_tandem_empty_response(
-        self, mock_validate, mock_tandem_class
-    ):
+    async def test_sync_tandem_empty_response(self, mock_validate, mock_tandem_class):
         """Test Tandem sync with no events."""
         mock_validate.return_value = (True, None)
 
@@ -400,7 +403,7 @@ class TestTandemSyncEndpoints:
         mock_events = [
             {
                 "type": "bolus",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "units": 3.0,
             },
         ]
@@ -468,8 +471,16 @@ class TestTandemSyncEndpoints:
 
         mock_events = [
             {"type": "bolus", "units": 2.5},  # No timestamp - should skip
-            {"type": "bolus", "timestamp": "invalid-date", "units": 1.0},  # Invalid - skip
-            {"type": "bolus", "timestamp": datetime.now(timezone.utc).isoformat(), "units": 3.0},  # Valid
+            {
+                "type": "bolus",
+                "timestamp": "invalid-date",
+                "units": 1.0,
+            },  # Invalid - skip
+            {
+                "type": "bolus",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "units": 3.0,
+            },  # Valid
         ]
 
         mock_api = MagicMock()
@@ -623,19 +634,23 @@ class TestBasalAdjustmentCalculation:
     def test_calculate_adjustment_from_rates(self):
         """Test calculating adjustment from profile vs actual rates."""
         # Profile rate: 1.0, Actual rate: 1.5 = 50% increase
-        adj = calculate_basal_adjustment({
-            "profileRate": 1.0,
-            "rate": 1.5,
-        })
+        adj = calculate_basal_adjustment(
+            {
+                "profileRate": 1.0,
+                "rate": 1.5,
+            }
+        )
         assert adj == 50.0
 
     def test_calculate_adjustment_decrease(self):
         """Test calculating a decrease in basal rate."""
         # Profile rate: 1.0, Actual rate: 0.5 = 50% decrease
-        adj = calculate_basal_adjustment({
-            "profileRate": 1.0,
-            "rate": 0.5,
-        })
+        adj = calculate_basal_adjustment(
+            {
+                "profileRate": 1.0,
+                "rate": 0.5,
+            }
+        )
         assert adj == -50.0
 
     def test_calculate_adjustment_returns_none_when_missing_data(self):
@@ -645,10 +660,12 @@ class TestBasalAdjustmentCalculation:
 
     def test_calculate_adjustment_with_zero_profile_rate(self):
         """Test handling of zero profile rate (avoid division by zero)."""
-        adj = calculate_basal_adjustment({
-            "profileRate": 0,
-            "rate": 1.0,
-        })
+        adj = calculate_basal_adjustment(
+            {
+                "profileRate": 0,
+                "rate": 1.0,
+            }
+        )
         assert adj is None
 
 
@@ -657,24 +674,28 @@ class TestParseControlIQEvent:
 
     def test_parse_automated_correction(self):
         """Test parsing an automated correction bolus."""
-        parsed = parse_control_iq_event({
-            "type": "correction",
-            "isAutomated": True,
-            "units": 0.5,
-        })
+        parsed = parse_control_iq_event(
+            {
+                "type": "correction",
+                "isAutomated": True,
+                "units": 0.5,
+            }
+        )
         assert parsed.event_type == PumpEventType.CORRECTION
         assert parsed.is_automated is True
         assert parsed.control_iq_reason == "correction"
 
     def test_parse_basal_increase_with_mode(self):
         """Test parsing a basal increase in Sleep mode."""
-        parsed = parse_control_iq_event({
-            "type": "basal",
-            "isAutomated": True,
-            "profileRate": 1.0,
-            "rate": 1.5,
-            "activityType": "Sleep",
-        })
+        parsed = parse_control_iq_event(
+            {
+                "type": "basal",
+                "isAutomated": True,
+                "profileRate": 1.0,
+                "rate": 1.5,
+                "activityType": "Sleep",
+            }
+        )
         assert parsed.event_type == PumpEventType.BASAL
         assert parsed.is_automated is True
         assert parsed.control_iq_reason == "basal_increase"
@@ -683,22 +704,26 @@ class TestParseControlIQEvent:
 
     def test_parse_basal_decrease(self):
         """Test parsing a basal decrease."""
-        parsed = parse_control_iq_event({
-            "type": "basal",
-            "isAutomated": True,
-            "profileRate": 1.0,
-            "rate": 0.3,
-        })
+        parsed = parse_control_iq_event(
+            {
+                "type": "basal",
+                "isAutomated": True,
+                "profileRate": 1.0,
+                "rate": 0.3,
+            }
+        )
         assert parsed.event_type == PumpEventType.BASAL
         assert parsed.control_iq_reason == "basal_decrease"
         assert parsed.basal_adjustment_pct == -70.0
 
     def test_parse_manual_bolus_no_mode(self):
         """Test parsing a manual bolus has no Control-IQ mode."""
-        parsed = parse_control_iq_event({
-            "type": "bolus",
-            "units": 5.0,
-        })
+        parsed = parse_control_iq_event(
+            {
+                "type": "bolus",
+                "units": 5.0,
+            }
+        )
         assert parsed.event_type == PumpEventType.BOLUS
         assert parsed.is_automated is False
         assert parsed.control_iq_mode is None
@@ -706,10 +731,12 @@ class TestParseControlIQEvent:
 
     def test_parse_automated_suspend(self):
         """Test parsing an automated suspend (predicted low)."""
-        parsed = parse_control_iq_event({
-            "type": "autoSuspend",
-            "isAutomated": True,
-        })
+        parsed = parse_control_iq_event(
+            {
+                "type": "autoSuspend",
+                "isAutomated": True,
+            }
+        )
         assert parsed.event_type == PumpEventType.SUSPEND
         assert parsed.is_automated is True
         assert parsed.control_iq_reason == "suspend"

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    // Auto-merge patch updates for production dependencies
+    {
+      "description": "Auto-merge patch updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "branch",
+      "matchPackagePatterns": ["*"],
+      "excludePackagePatterns": []
+    },
+    // Auto-merge minor updates for dev dependencies
+    {
+      "description": "Auto-merge minor dev dependency updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Auto-merge digest updates (container images)
+    {
+      "description": "Auto-merge digest updates",
+      "matchUpdateTypes": ["digest"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Auto-merge lockfile maintenance
+    {
+      "description": "Auto-merge lockfile maintenance",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "automerge": true,
+      "automergeType": "branch"
+    },
+    // Require PR approval for major updates
+    {
+      "description": "Require PR for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major"]
+    },
+    // Trusted packages can auto-merge minors
+    {
+      "description": "Auto-merge trusted packages (minor)",
+      "matchPackageNames": [
+        "fastapi",
+        "pydantic",
+        "httpx",
+        "pytest",
+        "ruff",
+        "mypy",
+        "react",
+        "next",
+        "typescript",
+        "@types/*",
+        "eslint",
+        "prettier",
+        "tailwindcss"
+      ],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "automergeType": "branch"
+    }
+  ]
+}

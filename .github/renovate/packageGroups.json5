@@ -1,0 +1,149 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    // Group FastAPI ecosystem
+    {
+      "description": "FastAPI ecosystem",
+      "groupName": "FastAPI ecosystem",
+      "matchPackagePatterns": [
+        "fastapi",
+        "starlette",
+        "uvicorn",
+        "pydantic",
+        "python-multipart"
+      ]
+    },
+    // Group SQLAlchemy ecosystem
+    {
+      "description": "SQLAlchemy ecosystem",
+      "groupName": "SQLAlchemy ecosystem",
+      "matchPackagePatterns": [
+        "sqlalchemy",
+        "alembic",
+        "asyncpg",
+        "psycopg"
+      ]
+    },
+    // Group testing tools (Python)
+    {
+      "description": "Python testing tools",
+      "groupName": "Python testing",
+      "matchPackagePatterns": [
+        "pytest",
+        "pytest-*",
+        "coverage",
+        "httpx"
+      ],
+      "matchManagers": ["pip_requirements", "pip-compile", "poetry"]
+    },
+    // Group linting/formatting (Python)
+    {
+      "description": "Python linting and formatting",
+      "groupName": "Python linting",
+      "matchPackagePatterns": [
+        "ruff",
+        "mypy",
+        "black",
+        "isort"
+      ]
+    },
+    // Group React ecosystem
+    {
+      "description": "React ecosystem",
+      "groupName": "React ecosystem",
+      "matchPackagePatterns": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ]
+    },
+    // Group Next.js ecosystem
+    {
+      "description": "Next.js ecosystem",
+      "groupName": "Next.js ecosystem",
+      "matchPackagePatterns": [
+        "next",
+        "@next/*",
+        "eslint-config-next"
+      ]
+    },
+    // Group TypeScript and types
+    {
+      "description": "TypeScript and type definitions",
+      "groupName": "TypeScript",
+      "matchPackagePatterns": [
+        "typescript",
+        "@types/*"
+      ],
+      "excludePackagePatterns": [
+        "@types/react",
+        "@types/react-dom",
+        "@types/node"
+      ]
+    },
+    // Group Tailwind CSS
+    {
+      "description": "Tailwind CSS ecosystem",
+      "groupName": "Tailwind CSS",
+      "matchPackagePatterns": [
+        "tailwindcss",
+        "@tailwindcss/*",
+        "postcss",
+        "autoprefixer"
+      ]
+    },
+    // Group testing tools (JavaScript)
+    {
+      "description": "JavaScript testing tools",
+      "groupName": "JavaScript testing",
+      "matchPackagePatterns": [
+        "vitest",
+        "@vitest/*",
+        "jest",
+        "@testing-library/*",
+        "@types/jest"
+      ]
+    },
+    // Group ESLint ecosystem
+    {
+      "description": "ESLint ecosystem",
+      "groupName": "ESLint",
+      "matchPackagePatterns": [
+        "eslint",
+        "eslint-*",
+        "@typescript-eslint/*"
+      ]
+    },
+    // Group shadcn/ui and Radix
+    {
+      "description": "UI component libraries",
+      "groupName": "UI components",
+      "matchPackagePatterns": [
+        "@radix-ui/*",
+        "class-variance-authority",
+        "clsx",
+        "tailwind-merge"
+      ]
+    },
+    // Group GitHub Actions
+    {
+      "description": "GitHub Actions",
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    },
+    // Group Docker base images by runtime
+    {
+      "description": "Python Docker images",
+      "groupName": "Python Docker images",
+      "matchPackagePatterns": ["python"],
+      "matchManagers": ["dockerfile"]
+    },
+    {
+      "description": "Node.js Docker images",
+      "groupName": "Node.js Docker images",
+      "matchPackagePatterns": ["node"],
+      "matchManagers": ["dockerfile"]
+    }
+  ]
+}

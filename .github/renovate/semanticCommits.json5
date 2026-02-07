@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    // Backend (Python) dependencies
+    {
+      "description": "Python backend dependencies",
+      "matchManagers": ["pip_requirements", "pip-compile", "poetry", "pipenv"],
+      "commitMessagePrefix": "chore(api-deps):",
+      "labels": ["dependencies", "api"]
+    },
+    // Frontend (Node.js) dependencies
+    {
+      "description": "Node.js frontend dependencies",
+      "matchManagers": ["npm", "yarn", "pnpm"],
+      "commitMessagePrefix": "chore(web-deps):",
+      "labels": ["dependencies", "web"]
+    },
+    // Docker dependencies
+    {
+      "description": "Docker base image updates",
+      "matchManagers": ["dockerfile"],
+      "commitMessagePrefix": "chore(docker):",
+      "labels": ["dependencies", "docker"]
+    },
+    // GitHub Actions
+    {
+      "description": "GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "commitMessagePrefix": "ci(actions):",
+      "labels": ["dependencies", "ci"]
+    },
+    // Kubernetes manifests (if using kustomize/helm)
+    {
+      "description": "Kubernetes dependencies",
+      "matchManagers": ["kubernetes", "helm-values", "helmfile"],
+      "commitMessagePrefix": "chore(k8s):",
+      "labels": ["dependencies", "k8s"]
+    }
+  ]
+}

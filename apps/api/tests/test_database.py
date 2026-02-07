@@ -4,8 +4,9 @@ Story 1.2: Database Migrations & Health Endpoint
 Tests for database connectivity and session management.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from src.database import check_database_connection
 

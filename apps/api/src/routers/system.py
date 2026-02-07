@@ -3,7 +3,7 @@
 Admin-only endpoints for system health and configuration.
 """
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter
 
 from src.core.auth import AdminUser
 from src.logging_config import get_logger

@@ -5,7 +5,7 @@ Password hashing, verification, and JWT token management.
 
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from jose import JWTError, jwt
@@ -103,14 +103,14 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(hours=settings.session_expire_hours)
 
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now(UTC) + expires_delta
 
     payload = {
         "sub": str(user_id),
         "email": email,
         "role": role,
         "exp": expire,
-        "iat": datetime.now(timezone.utc),
+        "iat": datetime.now(UTC),
         "type": "access",
     }
 
@@ -154,4 +154,4 @@ class TokenData:
         self.user_id: uuid.UUID = uuid.UUID(payload["sub"])
         self.email: str = payload["email"]
         self.role: str = payload["role"]
-        self.exp: datetime = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        self.exp: datetime = datetime.fromtimestamp(payload["exp"], tz=UTC)

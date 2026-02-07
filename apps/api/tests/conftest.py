@@ -16,11 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 os.environ["TESTING"] = "true"
 
 from src.config import settings
+
 # Override settings for testing
 settings.testing = True
 
-from src.main import app
 from src.database import get_engine, get_session_maker, reset_database
+from src.main import app
 
 
 @pytest.fixture(scope="session")
