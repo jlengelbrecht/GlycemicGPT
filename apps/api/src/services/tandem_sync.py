@@ -1,13 +1,15 @@
-"""Story 3.4: Tandem Pump Data Sync Service.
+"""Story 3.4 & 3.5: Tandem Pump Data Sync Service.
 
-Handles fetching pump data from Tandem t:connect API and storing them.
+Handles fetching pump data from Tandem t:connect API and storing them,
+including Control-IQ activity parsing.
 """
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tconnectsync.api.common import ApiException
@@ -21,7 +23,7 @@ from src.models.integration import (
     IntegrationStatus,
     IntegrationType,
 )
-from src.models.pump_data import PumpEvent, PumpEventType
+from src.models.pump_data import ControlIQMode, PumpEvent, PumpEventType
 
 logger = get_logger(__name__)
 
@@ -54,6 +56,100 @@ class TandemConnectionError(TandemSyncError):
     pass
 
 
+@dataclass
+class ParsedEventData:
+    """Parsed Control-IQ event data from tconnectsync."""
+
+    event_type: PumpEventType
+    is_automated: bool
+    control_iq_reason: str | None
+    control_iq_mode: ControlIQMode | None
+    basal_adjustment_pct: float | None
+
+
+def detect_control_iq_mode(event_data: dict) -> ControlIQMode | None:
+    """Detect the Control-IQ mode active during an event.
+
+    Args:
+        event_data: Event dictionary from tconnectsync parser
+
+    Returns:
+        ControlIQMode or None if not determinable
+    """
+    # Check various field names that might indicate mode
+    mode_indicators = [
+        event_data.get("activityType", ""),
+        event_data.get("activity_type", ""),
+        event_data.get("mode", ""),
+        event_data.get("controlIQMode", ""),
+        event_data.get("control_iq_mode", ""),
+    ]
+
+    for indicator in mode_indicators:
+        if not indicator:
+            continue
+        indicator_lower = str(indicator).lower()
+        if "sleep" in indicator_lower:
+            return ControlIQMode.SLEEP
+        if "exercise" in indicator_lower:
+            return ControlIQMode.EXERCISE
+        if "standard" in indicator_lower or "normal" in indicator_lower:
+            return ControlIQMode.STANDARD
+
+    # Check for sleep/exercise flags
+    if event_data.get("isSleepMode") or event_data.get("is_sleep_mode"):
+        return ControlIQMode.SLEEP
+    if event_data.get("isExerciseMode") or event_data.get("is_exercise_mode"):
+        return ControlIQMode.EXERCISE
+
+    return None
+
+
+def calculate_basal_adjustment(event_data: dict) -> float | None:
+    """Calculate the basal rate adjustment percentage from event data.
+
+    Args:
+        event_data: Event dictionary from tconnectsync parser
+
+    Returns:
+        Percentage adjustment (positive = increase, negative = decrease) or None
+    """
+    # Try to get direct adjustment percentage
+    for pct_key in ["adjustmentPercent", "adjustment_percent", "percentChange", "percent_change"]:
+        if pct_key in event_data:
+            try:
+                return float(event_data[pct_key])
+            except (ValueError, TypeError):
+                pass
+
+    # Try to calculate from profile rate vs actual rate
+    profile_rate = None
+    actual_rate = None
+
+    for profile_key in ["profileRate", "profile_rate", "scheduledRate", "scheduled_rate"]:
+        if profile_key in event_data:
+            try:
+                profile_rate = float(event_data[profile_key])
+                break
+            except (ValueError, TypeError):
+                pass
+
+    for actual_key in ["rate", "actualRate", "actual_rate", "deliveredRate"]:
+        if actual_key in event_data:
+            try:
+                actual_rate = float(event_data[actual_key])
+                break
+            except (ValueError, TypeError):
+                pass
+
+    if profile_rate and actual_rate and profile_rate > 0:
+        # Calculate percentage difference
+        adjustment = ((actual_rate - profile_rate) / profile_rate) * 100
+        return round(adjustment, 1)
+
+    return None
+
+
 def map_event_type(event_data: dict) -> tuple[PumpEventType, bool, str | None]:
     """Map tconnectsync event data to our PumpEventType.
 
@@ -62,6 +158,10 @@ def map_event_type(event_data: dict) -> tuple[PumpEventType, bool, str | None]:
 
     Returns:
         Tuple of (event_type, is_automated, control_iq_reason)
+
+    Note:
+        For full Control-IQ parsing including mode and basal adjustment,
+        use parse_control_iq_event() instead.
     """
     event_type_str = (event_data.get("type") or "").lower()
 
@@ -101,6 +201,51 @@ def map_event_type(event_data: dict) -> tuple[PumpEventType, bool, str | None]:
     # Default to bolus for unknown types
     logger.warning("Unknown event type, defaulting to BOLUS", event_type=event_type_str)
     return PumpEventType.BOLUS, is_automated, control_iq_reason
+
+
+def parse_control_iq_event(event_data: dict) -> ParsedEventData:
+    """Parse a tconnectsync event with full Control-IQ activity data.
+
+    This is the comprehensive parser for Story 3.5 that extracts:
+    - Event type (basal, bolus, correction, suspend, resume)
+    - Automation status (is this a Control-IQ action?)
+    - Control-IQ reason (correction, basal_adjustment, suspend)
+    - Control-IQ mode (Sleep, Exercise, Standard)
+    - Basal adjustment percentage
+
+    Args:
+        event_data: Event dictionary from tconnectsync parser
+
+    Returns:
+        ParsedEventData with all Control-IQ fields populated
+    """
+    # Get basic event info
+    event_type, is_automated, control_iq_reason = map_event_type(event_data)
+
+    # Detect Control-IQ mode
+    control_iq_mode = detect_control_iq_mode(event_data)
+
+    # Calculate basal adjustment for basal events
+    basal_adjustment_pct = None
+    if event_type == PumpEventType.BASAL and is_automated:
+        basal_adjustment_pct = calculate_basal_adjustment(event_data)
+
+        # Refine the reason based on adjustment direction
+        if basal_adjustment_pct is not None:
+            if basal_adjustment_pct > 0:
+                control_iq_reason = "basal_increase"
+            elif basal_adjustment_pct < 0:
+                control_iq_reason = "basal_decrease"
+            else:
+                control_iq_reason = "basal_unchanged"
+
+    return ParsedEventData(
+        event_type=event_type,
+        is_automated=is_automated,
+        control_iq_reason=control_iq_reason,
+        control_iq_mode=control_iq_mode,
+        basal_adjustment_pct=basal_adjustment_pct,
+    )
 
 
 def fetch_with_retry(
@@ -337,8 +482,8 @@ async def sync_tandem_for_user(
         if not event_time:
             continue
 
-        # Map event type
-        event_type, is_automated, control_iq_reason = map_event_type(event_data)
+        # Parse Control-IQ event data (Story 3.5 enhanced parsing)
+        parsed = parse_control_iq_event(event_data)
 
         # Extract insulin units
         units = None
@@ -352,7 +497,7 @@ async def sync_tandem_for_user(
 
         # Extract duration for basal
         duration_minutes = None
-        if event_type == PumpEventType.BASAL:
+        if parsed.event_type == PumpEventType.BASAL:
             for dur_key in ["duration", "durationMinutes", "duration_minutes"]:
                 if dur_key in event_data:
                     try:
@@ -395,12 +540,14 @@ async def sync_tandem_for_user(
             .values(
                 id=uuid.uuid4(),
                 user_id=user_id,
-                event_type=event_type,
+                event_type=parsed.event_type,
                 event_timestamp=event_time,
                 units=units,
                 duration_minutes=duration_minutes,
-                is_automated=is_automated,
-                control_iq_reason=control_iq_reason,
+                is_automated=parsed.is_automated,
+                control_iq_reason=parsed.control_iq_reason,
+                control_iq_mode=parsed.control_iq_mode.value if parsed.control_iq_mode else None,
+                basal_adjustment_pct=parsed.basal_adjustment_pct,
                 iob_at_event=iob,
                 cob_at_event=cob,
                 bg_at_event=bg,
@@ -419,10 +566,11 @@ async def sync_tandem_for_user(
         # Track the most recent event
         if last_event is None or event_time > last_event["timestamp"]:
             last_event = {
-                "event_type": event_type.value,
+                "event_type": parsed.event_type.value,
                 "timestamp": event_time,
                 "units": units,
-                "is_automated": is_automated,
+                "is_automated": parsed.is_automated,
+                "control_iq_mode": parsed.control_iq_mode.value if parsed.control_iq_mode else None,
             }
 
     # Update integration status
@@ -500,4 +648,168 @@ async def get_pump_events(
     query = query.order_by(PumpEvent.event_timestamp.desc()).limit(limit)
 
     result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+@dataclass
+class ControlIQActivitySummary:
+    """Summary of Control-IQ activity over a time period."""
+
+    total_events: int
+    automated_events: int
+    manual_events: int
+
+    # Correction boluses
+    correction_count: int
+    total_correction_units: float
+
+    # Basal adjustments
+    basal_increase_count: int
+    basal_decrease_count: int
+    avg_basal_adjustment_pct: float | None
+
+    # Suspends
+    suspend_count: int
+    automated_suspend_count: int
+
+    # Mode activity
+    sleep_mode_events: int
+    exercise_mode_events: int
+    standard_mode_events: int
+
+    # Time range
+    start_time: datetime
+    end_time: datetime
+
+
+async def get_control_iq_activity(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    hours: int = 24,
+) -> ControlIQActivitySummary:
+    """Get a summary of Control-IQ activity for a user.
+
+    This aggregates Control-IQ actions to provide context for AI analysis,
+    helping the AI focus on what Control-IQ cannot adjust (carb ratios,
+    correction factors) rather than what it's already handling automatically.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        hours: Number of hours of history to analyze (default 24)
+
+    Returns:
+        ControlIQActivitySummary with aggregated Control-IQ metrics
+    """
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=hours)
+
+    # Get all events in the time range
+    events = await get_pump_events(db, user_id, hours=hours, limit=1000)
+
+    # Initialize counters
+    total_events = len(events)
+    automated_events = 0
+    manual_events = 0
+    correction_count = 0
+    total_correction_units = 0.0
+    basal_increase_count = 0
+    basal_decrease_count = 0
+    basal_adjustments = []
+    suspend_count = 0
+    automated_suspend_count = 0
+    sleep_mode_events = 0
+    exercise_mode_events = 0
+    standard_mode_events = 0
+
+    for event in events:
+        # Count automated vs manual
+        if event.is_automated:
+            automated_events += 1
+        else:
+            manual_events += 1
+
+        # Count correction boluses
+        if event.event_type == PumpEventType.CORRECTION:
+            correction_count += 1
+            if event.units:
+                total_correction_units += event.units
+
+        # Count basal adjustments
+        if event.event_type == PumpEventType.BASAL and event.is_automated:
+            if event.basal_adjustment_pct is not None:
+                basal_adjustments.append(event.basal_adjustment_pct)
+                if event.basal_adjustment_pct > 0:
+                    basal_increase_count += 1
+                elif event.basal_adjustment_pct < 0:
+                    basal_decrease_count += 1
+
+        # Count suspends
+        if event.event_type == PumpEventType.SUSPEND:
+            suspend_count += 1
+            if event.is_automated:
+                automated_suspend_count += 1
+
+        # Count by mode
+        if event.control_iq_mode:
+            if event.control_iq_mode == ControlIQMode.SLEEP.value:
+                sleep_mode_events += 1
+            elif event.control_iq_mode == ControlIQMode.EXERCISE.value:
+                exercise_mode_events += 1
+            elif event.control_iq_mode == ControlIQMode.STANDARD.value:
+                standard_mode_events += 1
+
+    # Calculate average basal adjustment
+    avg_basal_adjustment = None
+    if basal_adjustments:
+        avg_basal_adjustment = round(sum(basal_adjustments) / len(basal_adjustments), 1)
+
+    return ControlIQActivitySummary(
+        total_events=total_events,
+        automated_events=automated_events,
+        manual_events=manual_events,
+        correction_count=correction_count,
+        total_correction_units=round(total_correction_units, 2),
+        basal_increase_count=basal_increase_count,
+        basal_decrease_count=basal_decrease_count,
+        avg_basal_adjustment_pct=avg_basal_adjustment,
+        suspend_count=suspend_count,
+        automated_suspend_count=automated_suspend_count,
+        sleep_mode_events=sleep_mode_events,
+        exercise_mode_events=exercise_mode_events,
+        standard_mode_events=standard_mode_events,
+        start_time=start_time,
+        end_time=end_time,
+    )
+
+
+async def get_automated_events(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    hours: int = 24,
+) -> list[PumpEvent]:
+    """Get only Control-IQ automated events for a user.
+
+    Useful for AI analysis to understand what Control-IQ is doing
+    automatically before making suggestions.
+
+    Args:
+        db: Database session
+        user_id: User ID
+        hours: Number of hours of history
+
+    Returns:
+        List of automated PumpEvent objects
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    result = await db.execute(
+        select(PumpEvent)
+        .where(
+            PumpEvent.user_id == user_id,
+            PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.is_automated == True,  # noqa: E712
+        )
+        .order_by(PumpEvent.event_timestamp.desc())
+    )
     return list(result.scalars().all())

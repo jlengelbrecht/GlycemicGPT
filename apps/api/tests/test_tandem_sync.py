@@ -1,4 +1,4 @@
-"""Story 3.4: Tests for Tandem pump data ingestion."""
+"""Story 3.4 & 3.5: Tests for Tandem pump data ingestion and Control-IQ parsing."""
 
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,8 +9,13 @@ from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
 from src.main import app
-from src.models.pump_data import PumpEvent, PumpEventType
-from src.services.tandem_sync import map_event_type
+from src.models.pump_data import ControlIQMode, PumpEvent, PumpEventType
+from src.services.tandem_sync import (
+    calculate_basal_adjustment,
+    detect_control_iq_mode,
+    map_event_type,
+    parse_control_iq_event,
+)
 
 
 def unique_email(prefix: str = "test") -> str:
@@ -563,3 +568,222 @@ class TestTandemSyncEndpoints:
 # Note: The get_pump_events function is tested indirectly through:
 # 1. TestTandemSyncService tests (sync stores events, which get_pump_events retrieves)
 # 2. test_get_tandem_sync_status_* tests (sync status endpoint uses get_pump_events)
+
+
+# Story 3.5: Tests for Control-IQ Activity Parsing
+
+
+class TestControlIQModeDetection:
+    """Tests for Control-IQ mode detection (Story 3.5)."""
+
+    def test_detect_sleep_mode_from_activity_type(self):
+        """Test detecting Sleep mode from activityType field."""
+        mode = detect_control_iq_mode({"activityType": "Sleep"})
+        assert mode == ControlIQMode.SLEEP
+
+    def test_detect_exercise_mode_from_activity_type(self):
+        """Test detecting Exercise mode from activityType field."""
+        mode = detect_control_iq_mode({"activityType": "Exercise"})
+        assert mode == ControlIQMode.EXERCISE
+
+    def test_detect_standard_mode(self):
+        """Test detecting Standard mode."""
+        mode = detect_control_iq_mode({"mode": "standard"})
+        assert mode == ControlIQMode.STANDARD
+
+    def test_detect_sleep_mode_from_flag(self):
+        """Test detecting Sleep mode from boolean flag."""
+        mode = detect_control_iq_mode({"isSleepMode": True})
+        assert mode == ControlIQMode.SLEEP
+
+    def test_detect_exercise_mode_from_flag(self):
+        """Test detecting Exercise mode from boolean flag."""
+        mode = detect_control_iq_mode({"isExerciseMode": True})
+        assert mode == ControlIQMode.EXERCISE
+
+    def test_detect_mode_returns_none_for_unknown(self):
+        """Test that unknown mode returns None."""
+        mode = detect_control_iq_mode({"type": "bolus"})
+        assert mode is None
+
+    def test_detect_mode_case_insensitive(self):
+        """Test that mode detection is case insensitive."""
+        mode = detect_control_iq_mode({"activityType": "SLEEP"})
+        assert mode == ControlIQMode.SLEEP
+
+
+class TestBasalAdjustmentCalculation:
+    """Tests for basal adjustment percentage calculation (Story 3.5)."""
+
+    def test_calculate_adjustment_from_direct_percentage(self):
+        """Test getting adjustment from direct percentage field."""
+        adj = calculate_basal_adjustment({"adjustmentPercent": 25.0})
+        assert adj == 25.0
+
+    def test_calculate_adjustment_from_rates(self):
+        """Test calculating adjustment from profile vs actual rates."""
+        # Profile rate: 1.0, Actual rate: 1.5 = 50% increase
+        adj = calculate_basal_adjustment({
+            "profileRate": 1.0,
+            "rate": 1.5,
+        })
+        assert adj == 50.0
+
+    def test_calculate_adjustment_decrease(self):
+        """Test calculating a decrease in basal rate."""
+        # Profile rate: 1.0, Actual rate: 0.5 = 50% decrease
+        adj = calculate_basal_adjustment({
+            "profileRate": 1.0,
+            "rate": 0.5,
+        })
+        assert adj == -50.0
+
+    def test_calculate_adjustment_returns_none_when_missing_data(self):
+        """Test that None is returned when data is missing."""
+        adj = calculate_basal_adjustment({"type": "basal"})
+        assert adj is None
+
+    def test_calculate_adjustment_with_zero_profile_rate(self):
+        """Test handling of zero profile rate (avoid division by zero)."""
+        adj = calculate_basal_adjustment({
+            "profileRate": 0,
+            "rate": 1.0,
+        })
+        assert adj is None
+
+
+class TestParseControlIQEvent:
+    """Tests for full Control-IQ event parsing (Story 3.5)."""
+
+    def test_parse_automated_correction(self):
+        """Test parsing an automated correction bolus."""
+        parsed = parse_control_iq_event({
+            "type": "correction",
+            "isAutomated": True,
+            "units": 0.5,
+        })
+        assert parsed.event_type == PumpEventType.CORRECTION
+        assert parsed.is_automated is True
+        assert parsed.control_iq_reason == "correction"
+
+    def test_parse_basal_increase_with_mode(self):
+        """Test parsing a basal increase in Sleep mode."""
+        parsed = parse_control_iq_event({
+            "type": "basal",
+            "isAutomated": True,
+            "profileRate": 1.0,
+            "rate": 1.5,
+            "activityType": "Sleep",
+        })
+        assert parsed.event_type == PumpEventType.BASAL
+        assert parsed.is_automated is True
+        assert parsed.control_iq_reason == "basal_increase"
+        assert parsed.control_iq_mode == ControlIQMode.SLEEP
+        assert parsed.basal_adjustment_pct == 50.0
+
+    def test_parse_basal_decrease(self):
+        """Test parsing a basal decrease."""
+        parsed = parse_control_iq_event({
+            "type": "basal",
+            "isAutomated": True,
+            "profileRate": 1.0,
+            "rate": 0.3,
+        })
+        assert parsed.event_type == PumpEventType.BASAL
+        assert parsed.control_iq_reason == "basal_decrease"
+        assert parsed.basal_adjustment_pct == -70.0
+
+    def test_parse_manual_bolus_no_mode(self):
+        """Test parsing a manual bolus has no Control-IQ mode."""
+        parsed = parse_control_iq_event({
+            "type": "bolus",
+            "units": 5.0,
+        })
+        assert parsed.event_type == PumpEventType.BOLUS
+        assert parsed.is_automated is False
+        assert parsed.control_iq_mode is None
+        assert parsed.basal_adjustment_pct is None
+
+    def test_parse_automated_suspend(self):
+        """Test parsing an automated suspend (predicted low)."""
+        parsed = parse_control_iq_event({
+            "type": "autoSuspend",
+            "isAutomated": True,
+        })
+        assert parsed.event_type == PumpEventType.SUSPEND
+        assert parsed.is_automated is True
+        assert parsed.control_iq_reason == "suspend"
+
+
+class TestControlIQActivityEndpoint:
+    """Tests for the Control-IQ activity endpoint (Story 3.5)."""
+
+    async def test_control_iq_activity_requires_auth(self):
+        """Test that the endpoint requires authentication."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.get("/api/integrations/tandem/control-iq/activity")
+        assert response.status_code == 401
+
+    async def test_control_iq_activity_empty_result(self):
+        """Test activity endpoint returns zeros when no events exist."""
+        email = unique_email("controliq_empty")
+        password = "SecurePass123"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            # Register and login
+            await client.post(
+                "/api/auth/register",
+                json={"email": email, "password": password},
+            )
+            login_resp = await client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+            session_cookie = login_resp.cookies.get(settings.jwt_cookie_name)
+
+            response = await client.get(
+                "/api/integrations/tandem/control-iq/activity",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_events"] == 0
+        assert data["automated_events"] == 0
+        assert data["correction_count"] == 0
+        assert data["hours_analyzed"] == 24
+
+    async def test_control_iq_activity_custom_hours(self):
+        """Test activity endpoint accepts custom hours parameter."""
+        email = unique_email("controliq_hours")
+        password = "SecurePass123"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            await client.post(
+                "/api/auth/register",
+                json={"email": email, "password": password},
+            )
+            login_resp = await client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+            session_cookie = login_resp.cookies.get(settings.jwt_cookie_name)
+
+            response = await client.get(
+                "/api/integrations/tandem/control-iq/activity",
+                params={"hours": 48},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["hours_analyzed"] == 48
