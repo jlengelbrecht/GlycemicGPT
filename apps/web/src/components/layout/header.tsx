@@ -1,0 +1,109 @@
+"use client";
+
+/**
+ * Header Component
+ *
+ * Story 4.1: Dashboard Layout & Navigation
+ * Displays logo (mobile), user menu, and mobile navigation toggle.
+ */
+
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { clsx } from "clsx";
+import { User, LogOut, Settings, ChevronDown, Activity } from "lucide-react";
+import { MobileNav } from "./sidebar";
+
+interface HeaderProps {
+  className?: string;
+}
+
+export function Header({ className }: HeaderProps) {
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <header
+      className={clsx(
+        "sticky top-0 z-40 flex items-center justify-between h-16 px-4 lg:px-6",
+        "bg-slate-900/95 backdrop-blur border-b border-slate-800",
+        className
+      )}
+    >
+      {/* Left side - Mobile nav toggle and logo */}
+      <div className="flex items-center gap-4">
+        <MobileNav />
+
+        {/* Mobile logo */}
+        <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
+          <Activity className="h-6 w-6 text-blue-500" />
+          <span className="text-lg font-bold">GlycemicGPT</span>
+        </Link>
+      </div>
+
+      {/* Right side - User menu */}
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+          className={clsx(
+            "flex items-center gap-2 px-3 py-2 rounded-lg transition-colors",
+            "text-slate-400 hover:text-white hover:bg-slate-800",
+            isUserMenuOpen && "bg-slate-800 text-white"
+          )}
+          aria-expanded={isUserMenuOpen}
+          aria-haspopup="true"
+        >
+          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600">
+            <User className="h-4 w-4 text-white" />
+          </div>
+          <span className="hidden sm:block text-sm font-medium">Account</span>
+          <ChevronDown
+            className={clsx(
+              "h-4 w-4 transition-transform",
+              isUserMenuOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        {/* Dropdown menu */}
+        {isUserMenuOpen && (
+          <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1">
+            <Link
+              href="/dashboard/settings"
+              onClick={() => setIsUserMenuOpen(false)}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:text-white hover:bg-slate-700"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Link>
+            <hr className="my-1 border-slate-700" />
+            <button
+              type="button"
+              onClick={() => {
+                setIsUserMenuOpen(false);
+                // TODO: Implement logout
+                window.location.href = "/";
+              }}
+              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-slate-700"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
