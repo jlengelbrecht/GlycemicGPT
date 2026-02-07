@@ -2,13 +2,22 @@
  * Dashboard Page
  *
  * Story 4.1: Dashboard Layout & Navigation
+ * Story 4.2: GlucoseHero Component
  * Main dashboard view showing glucose data and metrics.
- * Placeholder content - glucose components will be added in Stories 4.2-4.5.
  */
 
-import { Activity, TrendingUp, Droplets, Clock } from "lucide-react";
+import { Activity, Clock } from "lucide-react";
+import { GlucoseHero } from "@/components/dashboard";
 
 export default function DashboardPage() {
+  // Mock data - will be replaced with real data from API in Story 4.5
+  const mockGlucoseData = {
+    value: 142,
+    trend: "Stable" as const,
+    iob: 2.4,
+    cob: 15,
+  };
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -17,36 +26,16 @@ export default function DashboardPage() {
         <p className="text-slate-400">Your glucose overview at a glance</p>
       </div>
 
-      {/* Glucose hero placeholder - Story 4.2 */}
-      <div className="bg-slate-900 rounded-xl p-8 border border-slate-800">
-        <div className="flex flex-col items-center justify-center text-center">
-          <div className="flex items-center gap-4 mb-4">
-            <span className="text-7xl font-bold text-green-400">142</span>
-            <TrendingUp className="h-12 w-12 text-green-400" />
-          </div>
-          <p className="text-slate-400 text-lg">mg/dL</p>
-          <p className="text-slate-500 text-sm mt-2">
-            Placeholder - GlucoseHero component coming in Story 4.2
-          </p>
-        </div>
-      </div>
+      {/* Glucose hero - Story 4.2 */}
+      <GlucoseHero
+        value={mockGlucoseData.value}
+        trend={mockGlucoseData.trend}
+        iob={mockGlucoseData.iob}
+        cob={mockGlucoseData.cob}
+      />
 
       {/* Metrics grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* IoB Card */}
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-blue-500/10 rounded-lg">
-              <Droplets className="h-5 w-5 text-blue-400" />
-            </div>
-            <span className="text-slate-400 text-sm">Insulin on Board</span>
-          </div>
-          <p className="text-3xl font-bold">2.4u</p>
-          <p className="text-slate-500 text-xs mt-1">
-            Projected from last sync
-          </p>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Time in Range Card */}
         <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
           <div className="flex items-center gap-3 mb-2">
