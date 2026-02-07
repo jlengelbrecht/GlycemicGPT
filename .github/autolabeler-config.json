@@ -1,0 +1,69 @@
+{
+  "api": [
+    {
+      "includeGlobs": ["apps/api/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "web": [
+    {
+      "includeGlobs": ["apps/web/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "ci": [
+    {
+      "includeGlobs": [".github/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "docker": [
+    {
+      "includeGlobs": ["**/Dockerfile", "docker-compose.yml", "docker-compose.*.yml"],
+      "excludeGlobs": []
+    }
+  ],
+  "k8s": [
+    {
+      "includeGlobs": ["k8s/**", "helm/**", "charts/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "documentation": [
+    {
+      "includeGlobs": ["**/*.md", "docs/**"],
+      "excludeGlobs": ["CHANGELOG.md"]
+    }
+  ],
+  "dependencies": [
+    {
+      "includeGlobs": [
+        "**/package.json",
+        "**/package-lock.json",
+        "**/pyproject.toml",
+        "**/uv.lock",
+        "**/requirements*.txt"
+      ],
+      "excludeGlobs": []
+    }
+  ],
+  "database": [
+    {
+      "includeGlobs": ["apps/api/migrations/**", "apps/api/src/models/**"],
+      "excludeGlobs": []
+    }
+  ],
+  "tests": [
+    {
+      "includeGlobs": ["**/tests/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*"],
+      "excludeGlobs": []
+    }
+  ],
+  "new script": [
+    {
+      "includeGlobs": [],
+      "excludeGlobs": [],
+      "fileStatus": "added"
+    }
+  ]
+}
