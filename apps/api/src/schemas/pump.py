@@ -92,3 +92,28 @@ class ControlIQActivityResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     hours_analyzed: int
+
+
+class IoBProjectionResponse(BaseModel):
+    """Response schema for IoB projection (Story 3.7).
+
+    Provides projected insulin-on-board based on the last confirmed value
+    and the insulin decay curve for rapid-acting insulins.
+    """
+
+    # Last confirmed IoB from pump
+    confirmed_iob: float
+    confirmed_at: datetime
+
+    # Current projected IoB (accounting for decay since confirmation)
+    projected_iob: float
+    projected_at: datetime
+
+    # Future projections
+    projected_30min: float
+    projected_60min: float
+
+    # Data staleness
+    minutes_since_confirmed: int
+    is_stale: bool
+    stale_warning: str | None = None
