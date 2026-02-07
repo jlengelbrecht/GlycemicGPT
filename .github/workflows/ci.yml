@@ -50,6 +50,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://glycemicgpt:testpassword@localhost:5432/glycemicgpt_test
+        run: uv run alembic upgrade head
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql+asyncpg://glycemicgpt:testpassword@localhost:5432/glycemicgpt_test
