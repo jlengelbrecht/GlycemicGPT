@@ -15,7 +15,7 @@
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "pull-request-title-pattern": "chore: release ${version}",
-      "pull-request-header": ":robot: I have created a release",
+      "pull-request-header": "🤖 I have created a release",
       "extra-files": [
         "apps/api/pyproject.toml",
         "apps/web/package.json"
@@ -23,17 +23,17 @@
     }
   },
   "changelog-sections": [
-    {"type": "feat", "section": "Features", "hidden": false},
-    {"type": "fix", "section": "Bug Fixes", "hidden": false},
-    {"type": "perf", "section": "Performance Improvements", "hidden": false},
-    {"type": "deps", "section": "Dependencies", "hidden": false},
-    {"type": "revert", "section": "Reverts", "hidden": false},
-    {"type": "docs", "section": "Documentation", "hidden": false},
-    {"type": "style", "section": "Styles", "hidden": true},
-    {"type": "chore", "section": "Miscellaneous", "hidden": true},
-    {"type": "refactor", "section": "Code Refactoring", "hidden": true},
-    {"type": "test", "section": "Tests", "hidden": true},
-    {"type": "build", "section": "Build System", "hidden": true},
-    {"type": "ci", "section": "CI/CD", "hidden": true}
+    {"type": "feat", "section": "✨ Features", "hidden": false},
+    {"type": "fix", "section": "🐛 Bug Fixes", "hidden": false},
+    {"type": "perf", "section": "⚡ Performance Improvements", "hidden": false},
+    {"type": "deps", "section": "📦 Dependencies", "hidden": false},
+    {"type": "revert", "section": "⏪ Reverts", "hidden": false},
+    {"type": "docs", "section": "📚 Documentation", "hidden": false},
+    {"type": "refactor", "section": "♻️ Code Refactoring", "hidden": false},
+    {"type": "style", "section": "💄 Styles", "hidden": true},
+    {"type": "chore", "section": "🔧 Miscellaneous", "hidden": true},
+    {"type": "test", "section": "✅ Tests", "hidden": true},
+    {"type": "build", "section": "📦 Build System", "hidden": true},
+    {"type": "ci", "section": "👷 CI/CD", "hidden": false}
   ]
 }
