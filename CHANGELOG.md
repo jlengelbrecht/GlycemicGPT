@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.3](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.2...v0.1.3) (2026-02-07)
+
+
+### 👷 CI/CD
+
+* **autolabeler:** enhance PR labeling with JSON config and template parsing ([#14](https://github.com/jlengelbrecht/GlycemicGPT/issues/14)) ([750b432](https://github.com/jlengelbrecht/GlycemicGPT/commit/750b4329d232ad33676d4d8c36ba183ecd421e63))
+
 ## [0.1.2](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.1...v0.1.2) (2026-02-07)
 
 
