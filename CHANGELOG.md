@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.6](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.5...v0.1.6) (2026-02-07)
+
+
+### ✨ Features
+
+* **web:** add GlucoseHero component for dashboard ([#20](https://github.com/jlengelbrecht/GlycemicGPT/issues/20)) ([1456e7f](https://github.com/jlengelbrecht/GlycemicGPT/commit/1456e7f5fae3bc7dd58c93c4a07b7752933df708))
+
 ## [0.1.5](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.4...v0.1.5) (2026-02-07)
 
 
