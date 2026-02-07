@@ -42,6 +42,7 @@ from src.schemas.integration import (
 )
 from src.schemas.pump import (
     ControlIQActivityResponse,
+    IoBProjectionResponse,
     PumpEventResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
@@ -54,6 +55,7 @@ from src.services.dexcom_sync import (
     get_latest_glucose_reading,
     sync_dexcom_for_user,
 )
+from src.services.iob_projection import get_iob_projection
 from src.services.tandem_sync import (
     TandemAuthError,
     TandemConnectionError,
@@ -907,4 +909,52 @@ async def get_control_iq_activity_summary(
         start_time=activity.start_time,
         end_time=activity.end_time,
         hours_analyzed=hours,
+    )
+
+
+@router.get(
+    "/tandem/iob/projection",
+    response_model=IoBProjectionResponse,
+    responses={
+        200: {"description": "IoB projection data"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        404: {"model": ErrorResponse, "description": "No IoB data available"},
+    },
+)
+async def get_iob_projection_endpoint(
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> IoBProjectionResponse:
+    """Get projected insulin-on-board (IoB) values (Story 3.7).
+
+    This endpoint provides:
+    - Last confirmed IoB from the pump
+    - Current projected IoB based on insulin decay curve
+    - Projected IoB values for 30 and 60 minutes ahead
+    - Staleness warning if data is over 2 hours old
+
+    Uses the standard 4-hour decay curve for rapid-acting insulin (Novolog/Humalog).
+
+    Returns:
+        IoBProjectionResponse with confirmed and projected IoB values
+    """
+    projection = await get_iob_projection(db, current_user.id)
+
+    if projection is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No IoB data available. Please sync your pump data first.",
+        )
+
+    return IoBProjectionResponse(
+        confirmed_iob=projection.confirmed_iob,
+        confirmed_at=projection.confirmed_at,
+        projected_iob=projection.projected_iob,
+        projected_at=projection.projected_at,
+        projected_30min=projection.projected_30min,
+        projected_60min=projection.projected_60min,
+        minutes_since_confirmed=projection.minutes_since_confirmed,
+        is_stale=projection.is_stale,
+        stale_warning=projection.stale_warning,
     )
