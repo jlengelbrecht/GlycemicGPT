@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.0...v0.1.1) (2026-02-07)
+
+
+### Features
+
+* add FastAPI backend, Next.js frontend, and K8s deployment ([f2ae4b3](https://github.com/jlengelbrecht/GlycemicGPT/commit/f2ae4b3fc4424915acc447fe1d03ddc9ced02d95))
+* **api:** add Control-IQ activity parsing and aggregation ([1b7f86f](https://github.com/jlengelbrecht/GlycemicGPT/commit/1b7f86f36dbc5451ade93a81b8d8a556d57544df))
+* **api:** add IoB projection engine with decay curve ([#1](https://github.com/jlengelbrecht/GlycemicGPT/issues/1)) ([51ae57d](https://github.com/jlengelbrecht/GlycemicGPT/commit/51ae57dc3b43f394bd2dce2e6ea5da09d6ad59e9))
+* **web:** add dashboard layout and navigation ([#3](https://github.com/jlengelbrecht/GlycemicGPT/issues/3)) ([0f1bec3](https://github.com/jlengelbrecht/GlycemicGPT/commit/0f1bec301224026eb75597a4e3289b93ab614364))
+* **web:** add data freshness indicator component ([ff58074](https://github.com/jlengelbrecht/GlycemicGPT/commit/ff58074ce264a1ada627be6469f039d36e10cbd2))
+
+
+### Bug Fixes
+
+* **ci:** resolve workflow failures for renovate, release, and auto-label ([#4](https://github.com/jlengelbrecht/GlycemicGPT/issues/4)) ([018fd47](https://github.com/jlengelbrecht/GlycemicGPT/commit/018fd47fae1d283f4e050ce61f0500890788cac6))
+* **ci:** use homebot.0 for release PR and enable auto-merge ([#6](https://github.com/jlengelbrecht/GlycemicGPT/issues/6)) ([229e8a9](https://github.com/jlengelbrecht/GlycemicGPT/commit/229e8a9cb2a936b83889c2c6626246b432792ff1))
+
 ## [Unreleased]
 
 ### Features
