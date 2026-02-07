@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.4](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.3...v0.1.4) (2026-02-07)
+
+
+### 👷 CI/CD
+
+* **docker:** add container build and push workflow for ghcr.io ([#16](https://github.com/jlengelbrecht/GlycemicGPT/issues/16)) ([d7d2dee](https://github.com/jlengelbrecht/GlycemicGPT/commit/d7d2dee75fe0f3c7212fce2d8dca079aa41a0fdd))
+
 ## [0.1.3](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.2...v0.1.3) (2026-02-07)
 
 
