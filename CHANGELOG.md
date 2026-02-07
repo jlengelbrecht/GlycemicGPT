@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.5](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.4...v0.1.5) (2026-02-07)
+
+
+### 👷 CI/CD
+
+* **docker:** add release notes update and image cleanup ([#18](https://github.com/jlengelbrecht/GlycemicGPT/issues/18)) ([6066aac](https://github.com/jlengelbrecht/GlycemicGPT/commit/6066aac70cdef1db2c3fb5273d0159c7528d69af))
+
 ## [0.1.4](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.3...v0.1.4) (2026-02-07)
 
 
