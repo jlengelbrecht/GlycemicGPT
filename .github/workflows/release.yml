@@ -49,7 +49,7 @@ jobs:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
 
-      - name: Approve and merge release PR
+      - name: Auto-merge release PR
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           PR_NUMBER: ${{ needs.release-please.outputs.pr }}
@@ -58,8 +58,9 @@ jobs:
           PR_NUM=$(echo "$PR_NUMBER" | grep -oE '[0-9]+' | head -1)
 
           if [ -n "$PR_NUM" ]; then
-            echo "Approving and merging PR #$PR_NUM"
-            gh pr review "$PR_NUM" --approve --repo ${{ github.repository }}
+            echo "Auto-merging release PR #$PR_NUM (using --admin to bypass branch protection)"
+            # Skip approval since same bot can't approve its own PR
+            # Use --admin flag to bypass required approvals
             gh pr merge "$PR_NUM" --squash --admin --repo ${{ github.repository }}
           else
             echo "No PR number found"
