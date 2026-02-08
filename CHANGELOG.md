@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.14](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.13...v0.1.14) (2026-02-08)
+
+
+### ✨ Features
+
+* **api:** add daily brief generation (Story 5.3) ([#36](https://github.com/jlengelbrecht/GlycemicGPT/issues/36)) ([5d5b9ee](https://github.com/jlengelbrecht/GlycemicGPT/commit/5d5b9eee6d8a95e1269e50a17f27bb15a45cf0ad))
+
 ## [0.1.13](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.12...v0.1.13) (2026-02-08)
 
 
