@@ -7,7 +7,13 @@
  * Story 4.2: GlucoseHero Component
  * Story 4.4: Time in Range Bar Component
  * Story 4.5: Real-Time Updates via SSE
+ * Story 4.6: Dashboard Accessibility
  * Main dashboard view showing glucose data and metrics.
+ *
+ * Accessibility features:
+ * - Main landmark for skip link navigation
+ * - Proper heading hierarchy (h1 for page, h2 for sections)
+ * - Logical tab order
  */
 
 import { Activity, Clock } from "lucide-react";
@@ -61,7 +67,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <main id="main-content" className="space-y-6">
       {/* Connection status banner - Story 4.5 */}
       <ConnectionStatusBanner
         isReconnecting={isReconnecting}
@@ -70,15 +76,13 @@ export default function DashboardPage() {
         onReconnect={reconnect}
       />
 
-      {/* Page header */}
+      {/* Page header - using div instead of header to avoid banner role confusion inside main */}
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-slate-400">Your glucose overview at a glance</p>
       </div>
 
-      {/* Glucose hero - Story 4.2 */}
-      {/* Issue 3 fix: trend is now pre-mapped by the hook, no mapTrend needed */}
-      {/* Issue 6 fix: Pass cob prop */}
+      {/* Glucose hero - Story 4.2, 4.6 */}
       <GlucoseHero
         value={glucoseValue}
         trend={glucoseTrend}
@@ -87,37 +91,40 @@ export default function DashboardPage() {
         isLoading={!isLive && !glucose}
       />
 
-      {/* Metrics grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Time in Range Card */}
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-green-500/10 rounded-lg">
-              <Activity className="h-5 w-5 text-green-400" />
+      {/* Metrics grid with proper heading hierarchy */}
+      <section aria-labelledby="metrics-heading">
+        <h2 id="metrics-heading" className="sr-only">Dashboard Metrics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Time in Range Card */}
+          <article className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-green-500/10 rounded-lg">
+                <Activity className="h-5 w-5 text-green-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-slate-400 text-sm">Time in Range (24h)</h3>
             </div>
-            <span className="text-slate-400 text-sm">Time in Range (24h)</span>
-          </div>
-          <p className="text-3xl font-bold text-green-400">78%</p>
-          <p className="text-slate-500 text-xs mt-1">Target: 70-180 mg/dL</p>
-        </div>
+            <p className="text-3xl font-bold text-green-400" aria-label="Time in range: 78 percent">78%</p>
+            <p className="text-slate-500 text-xs mt-1">Target: 70-180 mg/dL</p>
+          </article>
 
-        {/* Last Updated Card */}
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-emerald-500/10 rounded-lg">
-              <Clock className="h-5 w-5 text-emerald-400" />
+          {/* Last Updated Card */}
+          <article className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 bg-emerald-500/10 rounded-lg">
+                <Clock className="h-5 w-5 text-emerald-400" aria-hidden="true" />
+              </div>
+              <h3 className="text-slate-400 text-sm">Last Updated</h3>
             </div>
-            <span className="text-slate-400 text-sm">Last Updated</span>
-          </div>
-          <p className="text-3xl font-bold text-emerald-400">
-            {getLastUpdatedText()}
-          </p>
-          <p className="text-slate-500 text-xs mt-1">{getFreshnessText()}</p>
+            <p className="text-3xl font-bold text-emerald-400" aria-label={`Last updated: ${getLastUpdatedText()}`}>
+              {getLastUpdatedText()}
+            </p>
+            <p className="text-slate-500 text-xs mt-1">{getFreshnessText()}</p>
+          </article>
         </div>
-      </div>
+      </section>
 
       {/* Time in Range bar - Story 4.4 */}
       <TimeInRangeBar data={mockTimeInRangeData} period="24h" />
-    </div>
+    </main>
   );
 }
