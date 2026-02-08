@@ -32,9 +32,9 @@ class ClaudeClient(BaseAIClient):
             max_tokens: Maximum tokens in the response.
 
         Returns:
-            Normalised AIResponse.
+            Normalized AIResponse.
         """
-        client = anthropic.AsyncAnthropic(api_key=self.api_key)
+        client = anthropic.AsyncAnthropic(api_key=self._api_key)
 
         kwargs: dict[str, Any] = {
             "model": self.model,
@@ -61,12 +61,16 @@ class ClaudeClient(BaseAIClient):
 
         content = response.content[0].text if response.content else ""
 
+        usage = AIUsage()
+        if response.usage:
+            usage = AIUsage(
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
+            )
+
         return AIResponse(
             content=content,
             model=response.model,
             provider=AIProviderType.CLAUDE,
-            usage=AIUsage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-            ),
+            usage=usage,
         )

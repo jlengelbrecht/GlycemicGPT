@@ -23,7 +23,7 @@ class AIUsage(BaseModel):
 
 
 class AIResponse(BaseModel):
-    """Normalised response from any AI provider."""
+    """Normalized response from any AI provider."""
 
     content: str = Field(..., description="Generated text content")
     model: str = Field(..., description="Model that generated the response")

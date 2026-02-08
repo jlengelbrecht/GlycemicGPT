@@ -24,7 +24,7 @@ class TestClaudeClient:
 
     @patch("src.integrations.claude.anthropic.AsyncAnthropic")
     async def test_generate_returns_normalized_response(self, mock_cls):
-        """Test that Claude generate() returns a normalised AIResponse."""
+        """Test that Claude generate() returns a normalized AIResponse."""
         mock_client = AsyncMock()
         mock_cls.return_value = mock_client
         mock_client.messages.create.return_value = SimpleNamespace(
@@ -150,13 +150,56 @@ class TestClaudeClient:
 
         assert result.content == ""
 
+    @patch("src.integrations.claude.anthropic.AsyncAnthropic")
+    async def test_generate_handles_null_usage(self, mock_cls):
+        """Test that missing usage info defaults to zero."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(text="response")],
+            model="claude-sonnet-4-5-20250929",
+            usage=None,
+        )
+
+        client = ClaudeClient(api_key="sk-test", model="claude-sonnet-4-5-20250929")
+        result = await client.generate(_user_message())
+
+        assert result.usage.input_tokens == 0
+        assert result.usage.output_tokens == 0
+
+    @patch("src.integrations.claude.anthropic.AsyncAnthropic")
+    async def test_generate_preserves_message_roles(self, mock_cls):
+        """Test that message roles are preserved in multi-turn conversations."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.messages.create.return_value = SimpleNamespace(
+            content=[SimpleNamespace(text="response")],
+            model="claude-sonnet-4-5-20250929",
+            usage=SimpleNamespace(input_tokens=20, output_tokens=5),
+        )
+
+        messages = [
+            AIMessage(role="user", content="What is my A1C?"),
+            AIMessage(role="assistant", content="Your A1C is 6.5%."),
+            AIMessage(role="user", content="Is that good?"),
+        ]
+
+        client = ClaudeClient(api_key="sk-test", model="claude-sonnet-4-5-20250929")
+        await client.generate(messages)
+
+        call_kwargs = mock_client.messages.create.call_args[1]
+        sent_messages = call_kwargs["messages"]
+        assert sent_messages[0]["role"] == "user"
+        assert sent_messages[1]["role"] == "assistant"
+        assert sent_messages[2]["role"] == "user"
+
 
 class TestOpenAIClient:
     """Tests for OpenAIClient.generate()."""
 
     @patch("src.integrations.openai_client.openai.AsyncOpenAI")
     async def test_generate_returns_normalized_response(self, mock_cls):
-        """Test that OpenAI generate() returns a normalised AIResponse."""
+        """Test that OpenAI generate() returns a normalized AIResponse."""
         mock_client = AsyncMock()
         mock_cls.return_value = mock_client
         mock_client.chat.completions.create.return_value = SimpleNamespace(
@@ -252,6 +295,21 @@ class TestOpenAIClient:
         assert result.usage.output_tokens == 0
 
     @patch("src.integrations.openai_client.openai.AsyncOpenAI")
+    async def test_generate_rate_limit_raises(self, mock_cls):
+        """Test that rate limit errors propagate."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = openai.RateLimitError(
+            message="rate limited",
+            response=MagicMock(status_code=429),
+            body=None,
+        )
+
+        client = OpenAIClient(api_key="sk-test", model="gpt-4o")
+        with pytest.raises(openai.RateLimitError):
+            await client.generate(_user_message())
+
+    @patch("src.integrations.openai_client.openai.AsyncOpenAI")
     async def test_generate_connection_error_raises(self, mock_cls):
         """Test that connection errors propagate."""
         mock_client = AsyncMock()
@@ -262,6 +320,17 @@ class TestOpenAIClient:
 
         client = OpenAIClient(api_key="sk-test", model="gpt-4o")
         with pytest.raises(openai.APIConnectionError):
+            await client.generate(_user_message())
+
+    @patch("src.integrations.openai_client.openai.AsyncOpenAI")
+    async def test_generate_unexpected_error_raises(self, mock_cls):
+        """Test that unexpected errors propagate."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = RuntimeError("unexpected")
+
+        client = OpenAIClient(api_key="sk-test", model="gpt-4o")
+        with pytest.raises(RuntimeError, match="unexpected"):
             await client.generate(_user_message())
 
     @patch("src.integrations.openai_client.openai.AsyncOpenAI")
@@ -279,6 +348,32 @@ class TestOpenAIClient:
         result = await client.generate(_user_message())
 
         assert result.content == ""
+
+    @patch("src.integrations.openai_client.openai.AsyncOpenAI")
+    async def test_generate_preserves_message_roles(self, mock_cls):
+        """Test that message roles are preserved in multi-turn conversations."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="response"))],
+            model="gpt-4o",
+            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=5),
+        )
+
+        messages = [
+            AIMessage(role="user", content="What is my A1C?"),
+            AIMessage(role="assistant", content="Your A1C is 6.5%."),
+            AIMessage(role="user", content="Is that good?"),
+        ]
+
+        client = OpenAIClient(api_key="sk-test", model="gpt-4o")
+        await client.generate(messages)
+
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        sent_messages = call_kwargs["messages"]
+        assert sent_messages[0]["role"] == "user"
+        assert sent_messages[1]["role"] == "assistant"
+        assert sent_messages[2]["role"] == "user"
 
 
 class TestResponseNormalization:
@@ -418,3 +513,33 @@ class TestAIClientFactory:
             client = await get_ai_client(mock_user, mock_db)
 
         assert client.model == "claude-opus-4-6"
+
+    async def test_factory_raises_400_on_unsupported_provider(self):
+        """Test factory raises HTTPException 400 for unsupported provider type."""
+        from fastapi import HTTPException
+
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type="gemini",
+            encrypted_api_key="encrypted-key",
+            model_name=None,
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        with (
+            patch(
+                "src.services.ai_client.decrypt_credential",
+                return_value="sk-gemini-key",
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_ai_client(mock_user, mock_db)
+
+        assert exc_info.value.status_code == 400
+        assert "Unsupported AI provider" in exc_info.value.detail

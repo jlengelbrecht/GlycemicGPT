@@ -28,11 +28,11 @@ class BaseAIClient(abc.ABC):
     """Abstract base class for AI provider clients.
 
     Subclasses implement provider-specific API calls while
-    returning a normalised AIResponse.
+    returning a normalized AIResponse.
     """
 
     def __init__(self, api_key: str, model: str) -> None:
-        self.api_key = api_key
+        self._api_key = api_key
         self.model = model
 
     @abc.abstractmethod
@@ -50,7 +50,7 @@ class BaseAIClient(abc.ABC):
             max_tokens: Maximum tokens in the response.
 
         Returns:
-            Normalised AIResponse with content, model, provider, and usage.
+            Normalized AIResponse with content, model, provider, and usage.
         """
 
 

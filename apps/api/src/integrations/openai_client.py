@@ -3,9 +3,13 @@
 Implements the BaseAIClient interface for OpenAI models.
 """
 
-from typing import Any
-
 import openai
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 from src.logging_config import get_logger
 from src.models.ai_provider import AIProviderType
@@ -32,14 +36,30 @@ class OpenAIClient(BaseAIClient):
             max_tokens: Maximum tokens in the response.
 
         Returns:
-            Normalised AIResponse.
+            Normalized AIResponse.
         """
-        client = openai.AsyncOpenAI(api_key=self.api_key)
+        client = openai.AsyncOpenAI(api_key=self._api_key)
 
-        openai_messages: list[dict[str, Any]] = []
+        openai_messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
-            openai_messages.append({"role": "system", "content": system_prompt})
-        openai_messages.extend({"role": m.role, "content": m.content} for m in messages)
+            sys_msg: ChatCompletionSystemMessageParam = {
+                "role": "system",
+                "content": system_prompt,
+            }
+            openai_messages.append(sys_msg)
+        for m in messages:
+            chat_msg: ChatCompletionMessageParam
+            if m.role == "assistant":
+                chat_msg = ChatCompletionAssistantMessageParam(
+                    role="assistant",
+                    content=m.content,
+                )
+            else:
+                chat_msg = ChatCompletionUserMessageParam(
+                    role="user",
+                    content=m.content,
+                )
+            openai_messages.append(chat_msg)
 
         try:
             response = await client.chat.completions.create(
