@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.11](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.10...v0.1.11) (2026-02-08)
+
+
+### 📚 Documentation
+
+* fix license and add development status banner ([#30](https://github.com/jlengelbrecht/GlycemicGPT/issues/30)) ([ad18e8c](https://github.com/jlengelbrecht/GlycemicGPT/commit/ad18e8cf767aa179f6e52cefbcf7f7a3f112d652))
+
 ## [0.1.10](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.9...v0.1.10) (2026-02-08)
 
 
