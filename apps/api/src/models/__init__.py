@@ -9,6 +9,7 @@ from src.models.integration import (
     IntegrationStatus,
     IntegrationType,
 )
+from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
 from src.models.user import User, UserRole
 
@@ -20,6 +21,7 @@ __all__ = [
     "TimestampMixin",
     "DailyBrief",
     "DisclaimerAcknowledgment",
+    "MealAnalysis",
     "GlucoseReading",
     "TrendDirection",
     "IntegrationCredential",
