@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.15](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.14...v0.1.15) (2026-02-08)
+
+
+### ✨ Features
+
+* **api:** add meal pattern analysis with carb ratio suggestions (Story 5.4) ([#38](https://github.com/jlengelbrecht/GlycemicGPT/issues/38)) ([306dfbc](https://github.com/jlengelbrecht/GlycemicGPT/commit/306dfbc33ce0870655b2bd8280593e86108fb1a4))
+
 ## [0.1.14](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.13...v0.1.14) (2026-02-08)
 
 
