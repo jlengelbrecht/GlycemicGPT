@@ -10,15 +10,11 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import clsx from "clsx";
-
-// Trend direction enum matching API values
-export type TrendDirection =
-  | "RisingFast"
-  | "Rising"
-  | "Stable"
-  | "Falling"
-  | "FallingFast"
-  | "Unknown";
+import {
+  type TrendDirection,
+  TREND_ARROWS,
+  TREND_DESCRIPTIONS,
+} from "./trend-arrow";
 
 // Glucose range classification
 export type GlucoseRange =
@@ -55,25 +51,6 @@ export interface GlucoseHeroProps {
   isLoading?: boolean;
 }
 
-// Trend arrow mapping
-const trendArrows: Record<TrendDirection, string> = {
-  RisingFast: "↑↑",
-  Rising: "↗",
-  Stable: "→",
-  Falling: "↘",
-  FallingFast: "↓↓",
-  Unknown: "?",
-};
-
-// Trend descriptions for screen readers
-const trendDescriptions: Record<TrendDirection, string> = {
-  RisingFast: "rising fast",
-  Rising: "rising",
-  Stable: "stable",
-  Falling: "falling",
-  FallingFast: "falling fast",
-  Unknown: "unknown trend",
-};
 
 /**
  * Classify glucose value into range category.
@@ -181,8 +158,8 @@ export function GlucoseHero({
   const range = classifyGlucose(safeValue);
   const colors = rangeColors[range];
   const pulseType = shouldPulse(range);
-  const arrow = trendArrows[trend];
-  const trendDescription = trendDescriptions[trend];
+  const arrow = TREND_ARROWS[trend];
+  const trendDescription = TREND_DESCRIPTIONS[trend];
 
   // Format display value
   const displayValue = safeValue !== null ? Math.round(safeValue).toString() : "--";
@@ -294,5 +271,9 @@ export function GlucoseHero({
     </div>
   );
 }
+
+// Re-export TrendDirection for backwards compatibility
+// Primary source is now trend-arrow.tsx
+export { type TrendDirection } from "./trend-arrow";
 
 export default GlucoseHero;
