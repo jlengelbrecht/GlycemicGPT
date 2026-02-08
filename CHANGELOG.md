@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.8](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.7...v0.1.8) (2026-02-08)
+
+
+### ✨ Features
+
+* **web:** add TimeInRangeBar component for dashboard ([#24](https://github.com/jlengelbrecht/GlycemicGPT/issues/24)) ([075c9a7](https://github.com/jlengelbrecht/GlycemicGPT/commit/075c9a7d43d68b4e46b7b12821e37cd52bee0f7d))
+
 ## [0.1.7](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.6...v0.1.7) (2026-02-08)
 
 
