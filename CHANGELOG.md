@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.16](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.15...v0.1.16) (2026-02-08)
+
+
+### ✨ Features
+
+* **api:** add correction factor analysis with ISF suggestions (Story 5.5) ([#40](https://github.com/jlengelbrecht/GlycemicGPT/issues/40)) ([7765de9](https://github.com/jlengelbrecht/GlycemicGPT/commit/7765de97391920611b62de89b2c04fc5824fe0a6))
+
 ## [0.1.15](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.14...v0.1.15) (2026-02-08)
 
 
