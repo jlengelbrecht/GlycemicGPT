@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.17](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.16...v0.1.17) (2026-02-08)
+
+
+### ✨ Features
+
+* **api:** add pre-validation safety layer for AI suggestions (Story 5.6) ([#42](https://github.com/jlengelbrecht/GlycemicGPT/issues/42)) ([a1aa06c](https://github.com/jlengelbrecht/GlycemicGPT/commit/a1aa06ca012124e4c976ba1a1139478737c20724))
+
 ## [0.1.16](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.15...v0.1.16) (2026-02-08)
 
 
