@@ -97,3 +97,78 @@ export async function getDisclaimerContent(): Promise<DisclaimerContent> {
 
   return response.json();
 }
+
+/**
+ * AI Insights API types (Story 5.7)
+ */
+export interface InsightSummary {
+  id: string;
+  analysis_type: "daily_brief" | "meal_analysis" | "correction_analysis";
+  title: string;
+  content: string;
+  created_at: string;
+  status: "pending" | "acknowledged" | "dismissed";
+}
+
+export interface InsightsListResponse {
+  insights: InsightSummary[];
+  total: number;
+}
+
+export interface SuggestionResponseResponse {
+  id: string;
+  analysis_type: string;
+  analysis_id: string;
+  response: string;
+  reason: string | null;
+  created_at: string;
+}
+
+/**
+ * Fetch AI insights for the current user
+ */
+export async function getInsights(
+  limit: number = 10
+): Promise<InsightsListResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/ai/insights?limit=${limit}`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch insights: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Record a response to an AI insight
+ */
+export async function respondToInsight(
+  analysisType: string,
+  analysisId: string,
+  response: "acknowledged" | "dismissed",
+  reason?: string
+): Promise<SuggestionResponseResponse> {
+  const res = await fetch(
+    `${API_BASE_URL}/api/ai/insights/${analysisType}/${analysisId}/respond`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ response, reason }),
+    }
+  );
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to respond to insight: ${res.status}`);
+  }
+
+  return res.json();
+}
