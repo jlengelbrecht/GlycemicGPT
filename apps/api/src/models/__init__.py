@@ -1,6 +1,7 @@
 # Database Models
 from src.models.ai_provider import AIProviderConfig, AIProviderStatus, AIProviderType
 from src.models.base import Base, TimestampMixin
+from src.models.correction_analysis import CorrectionAnalysis
 from src.models.daily_brief import DailyBrief
 from src.models.disclaimer import DisclaimerAcknowledgment
 from src.models.glucose import GlucoseReading, TrendDirection
@@ -18,6 +19,7 @@ __all__ = [
     "AIProviderStatus",
     "AIProviderType",
     "Base",
+    "CorrectionAnalysis",
     "TimestampMixin",
     "DailyBrief",
     "DisclaimerAcknowledgment",
