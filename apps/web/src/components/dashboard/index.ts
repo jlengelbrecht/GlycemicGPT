@@ -28,3 +28,15 @@ export {
   isStable,
   isUnknown,
 } from "./trend-arrow";
+
+export {
+  TimeInRangeBar,
+  type TimeInRangeBarProps,
+  type RangeData,
+  type TimePeriod,
+  normalizePercentages,
+  sanitizeRangeData,
+  formatPercentage,
+  getQualityAssessment,
+  PERIOD_LABELS,
+} from "./time-in-range-bar";
