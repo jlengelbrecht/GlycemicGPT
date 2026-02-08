@@ -40,3 +40,8 @@ export {
   getQualityAssessment,
   PERIOD_LABELS,
 } from "./time-in-range-bar";
+
+export {
+  ConnectionStatusBanner,
+  type ConnectionStatusBannerProps,
+} from "./connection-status-banner";
