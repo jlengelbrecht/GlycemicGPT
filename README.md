@@ -24,6 +24,14 @@
 
 ---
 
+> **🚧 DEVELOPMENT STATUS: NOT FUNCTIONAL**
+>
+> This project is currently in **active development** and is **not yet functional**. What you see here is the foundational framework of the application - it does not connect to real CGM/pump data or provide actual AI analysis yet.
+>
+> **Do not attempt to deploy this for actual diabetes management.** We are building in public, but the software is not ready for any real-world use. Check back for updates as we progress toward a functional release.
+
+---
+
 ## Overview
 
 GlycemicGPT bridges the gap between diabetes device data (Dexcom G7 CGM, Tandem t:slim pump) and actionable AI-powered insights.
@@ -76,7 +84,7 @@ docker compose up --build
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.
 
 ---
 
