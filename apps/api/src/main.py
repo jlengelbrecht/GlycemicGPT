@@ -13,6 +13,7 @@ from src.middleware import CorrelationIdMiddleware
 from src.routers import (
     ai,
     auth,
+    briefs,
     disclaimer,
     glucose_stream,
     health,
@@ -79,6 +80,7 @@ app.include_router(system.router)
 app.include_router(integrations.router)
 app.include_router(glucose_stream.router)
 app.include_router(ai.router)
+app.include_router(briefs.router)
 
 
 @app.get("/")
