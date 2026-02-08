@@ -18,6 +18,7 @@ from src.models.user import User
 from src.schemas.ai_response import AIMessage
 from src.schemas.meal_analysis import MealPeriodData
 from src.services.ai_client import get_ai_client
+from src.services.safety_validation import log_safety_validation, validate_ai_suggestion
 
 logger = get_logger(__name__)
 
@@ -300,7 +301,10 @@ async def generate_meal_analysis(
         system_prompt=SYSTEM_PROMPT,
     )
 
-    # Store the analysis
+    # Safety validation (Story 5.6)
+    safety_result = validate_ai_suggestion(ai_response.content, "meal_analysis")
+
+    # Store the analysis with sanitized text
     analysis = MealAnalysis(
         user_id=user.id,
         period_start=period_start,
@@ -309,7 +313,7 @@ async def generate_meal_analysis(
         total_spikes=total_spikes,
         avg_post_meal_peak=round(avg_post_meal_peak, 1),
         meal_periods_data=[mp.model_dump() for mp in meal_periods],
-        ai_analysis=ai_response.content,
+        ai_analysis=safety_result.sanitized_text,
         ai_model=ai_response.model,
         ai_provider=ai_response.provider.value,
         input_tokens=ai_response.usage.input_tokens,
@@ -317,6 +321,13 @@ async def generate_meal_analysis(
     )
 
     db.add(analysis)
+    await db.flush()
+
+    # Log safety validation for audit
+    await log_safety_validation(
+        user.id, "meal_analysis", analysis.id, safety_result, db
+    )
+
     await db.commit()
     await db.refresh(analysis)
 
@@ -325,6 +336,7 @@ async def generate_meal_analysis(
         user_id=str(user.id),
         analysis_id=str(analysis.id),
         spikes=total_spikes,
+        safety_status=safety_result.status.value,
     )
 
     return analysis

@@ -12,6 +12,7 @@ from src.models.integration import (
 )
 from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
+from src.models.safety_log import SafetyLog
 from src.models.user import User, UserRole
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "IntegrationType",
     "PumpEvent",
     "PumpEventType",
+    "SafetyLog",
     "User",
     "UserRole",
 ]
