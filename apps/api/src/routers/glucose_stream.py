@@ -81,7 +81,10 @@ async def generate_glucose_stream(
             event_counter += 1
 
             # Send glucose data every 60 seconds (or immediately on first request)
-            if current_time - last_glucose_check >= glucose_interval or last_glucose_check == 0:
+            if (
+                current_time - last_glucose_check >= glucose_interval
+                or last_glucose_check == 0
+            ):
                 last_glucose_check = current_time
 
                 try:
@@ -109,7 +112,9 @@ async def generate_glucose_stream(
                                         "is_stale": projection.is_stale,
                                     }
                             except Exception as e:
-                                logger.warning("Failed to get IoB projection", error=str(e))
+                                logger.warning(
+                                    "Failed to get IoB projection", error=str(e)
+                                )
 
                             # CoB is not yet implemented - will be added in future story
                             # For now, explicitly set to null (Issue 7 fix)
@@ -117,7 +122,9 @@ async def generate_glucose_stream(
 
                             glucose_event = {
                                 "value": latest.value,
-                                "trend": latest.trend.value if latest.trend else "Unknown",
+                                "trend": latest.trend.value
+                                if latest.trend
+                                else "Unknown",
                                 "trend_rate": latest.trend_rate,
                                 "reading_timestamp": latest.reading_timestamp.isoformat(),
                                 "minutes_ago": minutes_ago,

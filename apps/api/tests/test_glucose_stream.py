@@ -130,7 +130,10 @@ class TestGlucoseStreamEndpoint:
                     # Check required SSE headers
                     headers = response.headers
                     assert "text/event-stream" in headers["content-type"]
-                    assert headers["cache-control"] == "no-cache, no-store, must-revalidate"
+                    assert (
+                        headers["cache-control"]
+                        == "no-cache, no-store, must-revalidate"
+                    )
                     assert headers["connection"] == "keep-alive"
                     assert headers["x-accel-buffering"] == "no"
 

@@ -43,12 +43,12 @@ describe("ConnectionStatusBanner", () => {
       expect(banner).toHaveClass("border-amber-500");
     });
 
-    it("should show spinning refresh icon", () => {
+    it("should show spinning refresh icon with motion-safe animation", () => {
       render(<ConnectionStatusBanner isReconnecting={true} />);
       const banner = screen.getByTestId("connection-status-banner");
-      // The RefreshCw icon should have animate-spin class
+      // The RefreshCw icon should have motion-safe:animate-spin class for accessibility
       const icon = banner.querySelector("svg");
-      expect(icon).toHaveClass("animate-spin");
+      expect(icon).toHaveClass("motion-safe:animate-spin");
     });
   });
 
