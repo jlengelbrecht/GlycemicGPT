@@ -2,11 +2,18 @@
  * Dashboard Layout
  *
  * Story 4.1: Dashboard Layout & Navigation
- * Wraps all dashboard pages with the DashboardLayout component.
+ * Story 4.5: Real-Time Updates via SSE
+ * Wraps all dashboard pages with the DashboardLayout component
+ * and GlucoseStreamProvider for real-time glucose data.
  */
 
 import { DashboardLayout } from "@/components/layout";
+import { GlucoseStreamProvider } from "@/providers";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return (
+    <GlucoseStreamProvider>
+      <DashboardLayout>{children}</DashboardLayout>
+    </GlucoseStreamProvider>
+  );
 }
