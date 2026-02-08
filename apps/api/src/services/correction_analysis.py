@@ -18,6 +18,7 @@ from src.models.user import User
 from src.schemas.ai_response import AIMessage
 from src.schemas.correction_analysis import TimePeriodData
 from src.services.ai_client import get_ai_client
+from src.services.safety_validation import log_safety_validation, validate_ai_suggestion
 
 logger = get_logger(__name__)
 
@@ -342,7 +343,10 @@ async def generate_correction_analysis(
         system_prompt=SYSTEM_PROMPT,
     )
 
-    # Store the analysis
+    # Safety validation (Story 5.6)
+    safety_result = validate_ai_suggestion(ai_response.content, "correction_analysis")
+
+    # Store the analysis with sanitized text
     analysis = CorrectionAnalysis(
         user_id=user.id,
         period_start=period_start,
@@ -352,7 +356,7 @@ async def generate_correction_analysis(
         over_corrections=total_over,
         avg_observed_isf=avg_observed_isf,
         time_periods_data=[tp.model_dump() for tp in time_periods],
-        ai_analysis=ai_response.content,
+        ai_analysis=safety_result.sanitized_text,
         ai_model=ai_response.model,
         ai_provider=ai_response.provider.value,
         input_tokens=ai_response.usage.input_tokens,
@@ -360,6 +364,13 @@ async def generate_correction_analysis(
     )
 
     db.add(analysis)
+    await db.flush()
+
+    # Log safety validation for audit
+    await log_safety_validation(
+        user.id, "correction_analysis", analysis.id, safety_result, db
+    )
+
     await db.commit()
     await db.refresh(analysis)
 
@@ -369,6 +380,7 @@ async def generate_correction_analysis(
         analysis_id=str(analysis.id),
         under=total_under,
         over=total_over,
+        safety_status=safety_result.status.value,
     )
 
     return analysis

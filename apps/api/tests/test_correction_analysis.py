@@ -522,9 +522,11 @@ class TestGenerateCorrectionAnalysis:
         assert analysis.over_corrections == 1
         # Weighted avg ISF: (35*2 + 30*4 + 50*3 + 45*1) / 10 = 385/10 = 38.5
         assert analysis.avg_observed_isf == 38.5
-        assert analysis.ai_analysis == "Morning corrections consistently under-correct."
+        assert "Morning corrections consistently under-correct." in analysis.ai_analysis
+        assert "Safety Notice" in analysis.ai_analysis
         assert len(analysis.time_periods_data) == 4
-        mock_db.add.assert_called_once()
+        # db.add called twice: once for analysis, once for safety log
+        assert mock_db.add.call_count == 2
         mock_db.commit.assert_called_once()
 
     @patch("src.services.correction_analysis.analyze_correction_outcomes")
@@ -764,9 +766,10 @@ class TestCorrectionAnalysisEndpoints:
         assert data["under_corrections"] == 5
         assert data["over_corrections"] == 1
         assert (
-            data["ai_analysis"]
-            == "Your morning correction factor may need strengthening."
+            "Your morning correction factor may need strengthening."
+            in data["ai_analysis"]
         )
+        assert "Safety Notice" in data["ai_analysis"]
         assert len(data["time_periods_data"]) == 4
         assert "id" in data
         assert "created_at" in data

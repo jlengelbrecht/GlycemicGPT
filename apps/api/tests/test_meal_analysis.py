@@ -384,9 +384,11 @@ class TestGenerateMealAnalysis:
         assert analysis.total_spikes == 4
         # Weighted avg: (195*5 + 165*4 + 155*3) / 12 = 2100/12 = 175.0
         assert analysis.avg_post_meal_peak == 175.0
-        assert analysis.ai_analysis == "Breakfast shows consistent spikes."
+        assert "Breakfast shows consistent spikes." in analysis.ai_analysis
+        assert "Safety Notice" in analysis.ai_analysis
         assert len(analysis.meal_periods_data) == 4
-        mock_db.add.assert_called_once()
+        # db.add called twice: once for analysis, once for safety log
+        assert mock_db.add.call_count == 2
         mock_db.commit.assert_called_once()
 
     @patch("src.services.meal_analysis.analyze_post_meal_patterns")
@@ -604,7 +606,8 @@ class TestMealAnalysisEndpoints:
         data = response.json()
         assert data["total_boluses"] == 15
         assert data["total_spikes"] == 5
-        assert data["ai_analysis"] == "Your breakfast carb ratio may need adjustment."
+        assert "Your breakfast carb ratio may need adjustment." in data["ai_analysis"]
+        assert "Safety Notice" in data["ai_analysis"]
         assert len(data["meal_periods_data"]) == 4
         assert "id" in data
         assert "created_at" in data
