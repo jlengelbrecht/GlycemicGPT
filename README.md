@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="GlycemicGPT Logo" width="200" height="200">
+  <img src="assets/logo.png" alt="GlycemicGPT Logo" width="200" height="200">
 </p>
 
 <h1 align="center">GlycemicGPT</h1>
