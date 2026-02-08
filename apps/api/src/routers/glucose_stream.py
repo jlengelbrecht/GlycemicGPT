@@ -1,0 +1,226 @@
+"""Story 4.5: Real-Time Glucose Streaming via Server-Sent Events (SSE).
+
+This router provides a real-time data stream for glucose readings,
+allowing the frontend dashboard to receive updates as they occur.
+"""
+
+import asyncio
+import json
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
+
+from src.core.auth import DiabeticOrAdminUser
+from src.database import get_db_session
+from src.logging_config import get_logger
+from src.services.dexcom_sync import get_latest_glucose_reading
+from src.services.iob_projection import get_iob_projection
+
+logger = get_logger(__name__)
+
+router = APIRouter(prefix="/api/v1/glucose", tags=["glucose-stream"])
+
+
+async def format_sse_event(
+    event_type: str, data: dict, event_id: str | None = None
+) -> str:
+    """Format data as an SSE event.
+
+    Args:
+        event_type: The event type (e.g., 'glucose', 'heartbeat')
+        data: Dictionary to serialize as JSON data
+        event_id: Optional event ID for client tracking
+
+    Returns:
+        Formatted SSE event string
+    """
+    lines = []
+    if event_id:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event_type}")
+    lines.append(f"data: {json.dumps(data)}")
+    lines.append("")  # Empty line to end the event
+    return "\n".join(lines) + "\n"
+
+
+async def generate_glucose_stream(
+    user_id: str,
+    request: Request,
+) -> None:
+    """Async generator that yields SSE events with glucose data.
+
+    Sends glucose updates every 60 seconds and heartbeats every 30 seconds.
+    Handles client disconnection gracefully.
+
+    Note: Creates a fresh database session for each query to avoid
+    connection pool exhaustion and stale session issues.
+
+    Args:
+        user_id: The authenticated user's ID
+        request: The HTTP request (for disconnect detection)
+
+    Yields:
+        SSE-formatted event strings
+    """
+    heartbeat_interval = 30  # seconds
+    glucose_interval = 60  # seconds
+    last_glucose_check = 0
+    event_counter = 0
+
+    logger.info("SSE stream started", user_id=user_id)
+
+    try:
+        while True:
+            # Check if client disconnected
+            if await request.is_disconnected():
+                logger.info("SSE client disconnected", user_id=user_id)
+                break
+
+            current_time = asyncio.get_event_loop().time()
+            event_counter += 1
+
+            # Send glucose data every 60 seconds (or immediately on first request)
+            if current_time - last_glucose_check >= glucose_interval or last_glucose_check == 0:
+                last_glucose_check = current_time
+
+                try:
+                    # Create fresh database session for each query (Issue 4 fix)
+                    async with get_db_session() as db:
+                        # Get latest glucose reading
+                        latest = await get_latest_glucose_reading(db, user_id)
+
+                        if latest:
+                            now = datetime.now(UTC)
+                            reading_time = latest.reading_timestamp
+                            if reading_time.tzinfo is None:
+                                reading_time = reading_time.replace(tzinfo=UTC)
+
+                            minutes_ago = int((now - reading_time).total_seconds() / 60)
+                            is_stale = minutes_ago > 10
+
+                            # Get IoB projection if available
+                            iob_data = None
+                            try:
+                                projection = await get_iob_projection(db, user_id)
+                                if projection:
+                                    iob_data = {
+                                        "current": projection.projected_iob,
+                                        "is_stale": projection.is_stale,
+                                    }
+                            except Exception as e:
+                                logger.warning("Failed to get IoB projection", error=str(e))
+
+                            # CoB is not yet implemented - will be added in future story
+                            # For now, explicitly set to null (Issue 7 fix)
+                            cob_data = None
+
+                            glucose_event = {
+                                "value": latest.value,
+                                "trend": latest.trend.value if latest.trend else "Unknown",
+                                "trend_rate": latest.trend_rate,
+                                "reading_timestamp": latest.reading_timestamp.isoformat(),
+                                "minutes_ago": minutes_ago,
+                                "is_stale": is_stale,
+                                "iob": iob_data,
+                                "cob": cob_data,  # Issue 7: Include CoB (null for now)
+                                "timestamp": now.isoformat(),
+                            }
+
+                            yield await format_sse_event(
+                                event_type="glucose",
+                                data=glucose_event,
+                                event_id=str(event_counter),
+                            )
+                        else:
+                            # No readings available
+                            yield await format_sse_event(
+                                event_type="no_data",
+                                data={
+                                    "message": "No glucose readings available",
+                                    "timestamp": datetime.now(UTC).isoformat(),
+                                },
+                                event_id=str(event_counter),
+                            )
+
+                except Exception as e:
+                    logger.error("Error fetching glucose data for SSE", error=str(e))
+                    yield await format_sse_event(
+                        event_type="error",
+                        data={
+                            "message": "Failed to fetch glucose data",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        },
+                        event_id=str(event_counter),
+                    )
+
+            # Wait for heartbeat interval then send heartbeat
+            await asyncio.sleep(heartbeat_interval)
+
+            # Check for disconnect again after sleep
+            if await request.is_disconnected():
+                logger.info("SSE client disconnected during sleep", user_id=user_id)
+                break
+
+            event_counter += 1
+            yield await format_sse_event(
+                event_type="heartbeat",
+                data={"timestamp": datetime.now(UTC).isoformat()},
+                event_id=str(event_counter),
+            )
+
+    except asyncio.CancelledError:
+        logger.info("SSE stream cancelled", user_id=user_id)
+    except Exception as e:
+        logger.error("SSE stream error", user_id=user_id, error=str(e))
+        raise
+    finally:
+        logger.info("SSE stream ended", user_id=user_id)
+
+
+@router.get(
+    "/stream",
+    responses={
+        200: {
+            "description": "SSE stream of glucose updates",
+            "content": {"text/event-stream": {}},
+        },
+        401: {"description": "Not authenticated"},
+        403: {"description": "Permission denied"},
+    },
+)
+async def stream_glucose(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+) -> StreamingResponse:
+    """Stream glucose updates via Server-Sent Events.
+
+    Provides real-time glucose data for the dashboard. Events include:
+    - `glucose`: Current glucose reading with trend, IoB, and CoB data
+    - `heartbeat`: Keep-alive signal every 30 seconds
+    - `no_data`: Sent when no glucose readings are available
+    - `error`: Sent when there's an error fetching data
+
+    The stream sends glucose updates every 60 seconds to match
+    the CGM update frequency (Dexcom G6/G7 updates every 5 minutes,
+    but we check more frequently for freshness).
+
+    Returns:
+        StreamingResponse with SSE content type
+    """
+    logger.info(
+        "SSE stream requested",
+        user_id=str(current_user.id),
+        email=current_user.email,
+    )
+
+    # Issue 1 fix: Remove CORS header - let CORS middleware handle it
+    return StreamingResponse(
+        generate_glucose_stream(str(current_user.id), request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
