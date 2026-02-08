@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.9](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.8...v0.1.9) (2026-02-08)
+
+
+### ✨ Features
+
+* add real-time glucose updates via SSE (Story 4.5) ([#26](https://github.com/jlengelbrecht/GlycemicGPT/issues/26)) ([35e493d](https://github.com/jlengelbrecht/GlycemicGPT/commit/35e493dbe7d735d4ae16c3411b5232f58e1fde68))
+
 ## [0.1.8](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.7...v0.1.8) (2026-02-08)
 
 
