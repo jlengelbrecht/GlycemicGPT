@@ -1,0 +1,131 @@
+/**
+ * Dashboard Page Accessibility Tests
+ *
+ * Story 4.6: Dashboard Accessibility
+ * Tests for page landmarks, heading hierarchy, and navigation.
+ */
+
+import { render, screen } from "@testing-library/react";
+
+// Mock the providers
+jest.mock("@/providers", () => ({
+  useGlucoseStreamContext: () => ({
+    glucose: null,
+    isLive: false,
+    isReconnecting: false,
+    error: null,
+    reconnect: jest.fn(),
+  }),
+}));
+
+// Import after mocking
+import DashboardPage from "@/app/dashboard/page";
+
+describe("Dashboard Page Accessibility", () => {
+  describe("Landmarks", () => {
+    it("has a main landmark", () => {
+      render(<DashboardPage />);
+
+      const main = screen.getByRole("main");
+      expect(main).toBeInTheDocument();
+    });
+
+    it("main landmark has id for skip link", () => {
+      render(<DashboardPage />);
+
+      const main = screen.getByRole("main");
+      expect(main).toHaveAttribute("id", "main-content");
+    });
+
+    // Note: Page header uses <div> instead of <header> to avoid
+    // banner role confusion when nested inside <main> landmark
+  });
+
+  describe("Heading Hierarchy", () => {
+    it("has h1 as page title", () => {
+      render(<DashboardPage />);
+
+      const h1 = screen.getByRole("heading", { level: 1 });
+      expect(h1).toBeInTheDocument();
+      expect(h1).toHaveTextContent("Dashboard");
+    });
+
+    it("has h2 for metrics section (visually hidden)", () => {
+      render(<DashboardPage />);
+
+      const h2 = screen.getByRole("heading", { level: 2, name: /dashboard metrics/i });
+      expect(h2).toBeInTheDocument();
+      expect(h2).toHaveClass("sr-only");
+    });
+
+    it("has h3 for individual metric cards", () => {
+      render(<DashboardPage />);
+
+      const h3s = screen.getAllByRole("heading", { level: 3 });
+      expect(h3s.length).toBeGreaterThanOrEqual(2);
+      expect(h3s.some(h => h.textContent?.includes("Time in Range"))).toBe(true);
+      expect(h3s.some(h => h.textContent?.includes("Last Updated"))).toBe(true);
+    });
+  });
+
+  describe("Semantic Structure", () => {
+    it("uses article elements for metric cards", () => {
+      render(<DashboardPage />);
+
+      const articles = screen.getAllByRole("article");
+      expect(articles.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("uses section element for metrics grid", () => {
+      render(<DashboardPage />);
+
+      const section = screen.getByRole("region", { name: /dashboard metrics/i });
+      expect(section).toBeInTheDocument();
+    });
+
+    it("hides decorative icons from screen readers", () => {
+      render(<DashboardPage />);
+
+      // Icons should have aria-hidden="true"
+      const articles = screen.getAllByRole("article");
+      articles.forEach(article => {
+        const svg = article.querySelector("svg");
+        if (svg) {
+          expect(svg).toHaveAttribute("aria-hidden", "true");
+        }
+      });
+    });
+  });
+
+  describe("Metric Card Accessibility", () => {
+    it("provides accessible label for time in range value", () => {
+      render(<DashboardPage />);
+
+      const tirValue = screen.getByLabelText(/time in range.*78.*percent/i);
+      expect(tirValue).toBeInTheDocument();
+    });
+
+    it("provides accessible label for last updated value", () => {
+      render(<DashboardPage />);
+
+      // When no data, should show "No data"
+      const lastUpdated = screen.getByLabelText(/last updated/i);
+      expect(lastUpdated).toBeInTheDocument();
+    });
+  });
+});
+
+describe("Dashboard Layout Accessibility", () => {
+  // Note: Skip link is in layout.tsx, which wraps the page
+  // These tests would require rendering the full layout
+
+  describe("Skip Link", () => {
+    it("skip link target matches main content id", () => {
+      render(<DashboardPage />);
+
+      const main = screen.getByRole("main");
+      expect(main.id).toBe("main-content");
+      // Skip link href="#main-content" should work with this id
+    });
+  });
+});

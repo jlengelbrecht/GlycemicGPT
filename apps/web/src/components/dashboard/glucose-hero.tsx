@@ -4,8 +4,15 @@
  * GlucoseHero Component
  *
  * Story 4.2: GlucoseHero Component
+ * Story 4.6: Dashboard Accessibility
  * Prominently displays current glucose with trend arrow so users
  * can understand their status in under 2 seconds.
+ *
+ * Accessibility features:
+ * - Screen reader announcements with value, trend, and range status
+ * - Dynamic aria-live (assertive for urgent, polite for normal)
+ * - Keyboard focusable with visible focus ring
+ * - Accessible labels for IoB/CoB metrics
  */
 
 import { motion, useReducedMotion } from "framer-motion";
@@ -62,6 +69,55 @@ export function classifyGlucose(value: number | null): GlucoseRange {
   if (value <= GLUCOSE_THRESHOLDS.HIGH) return "inRange";
   if (value <= GLUCOSE_THRESHOLDS.URGENT_HIGH) return "high";
   return "urgentHigh";
+}
+
+// Accessible range status descriptions
+type RangeStatus = "in-range" | "low" | "high" | "urgent-low" | "urgent-high";
+
+const RANGE_STATUS_TEXT: Record<RangeStatus, string> = {
+  "in-range": "in target range",
+  "low": "below target",
+  "high": "above target",
+  "urgent-low": "dangerously low",
+  "urgent-high": "dangerously high",
+};
+
+/**
+ * Get accessible range status text for screen readers.
+ */
+export function getRangeStatus(range: GlucoseRange): RangeStatus {
+  const mapping: Record<GlucoseRange, RangeStatus> = {
+    inRange: "in-range",
+    low: "low",
+    high: "high",
+    urgentLow: "urgent-low",
+    urgentHigh: "urgent-high",
+  };
+  return mapping[range];
+}
+
+/**
+ * Build accessible announcement for screen readers.
+ * Format: "Glucose 142 milligrams per deciliter, falling slowly, in target range"
+ */
+export function buildGlucoseAnnouncement(
+  value: number | null,
+  trendDescription: string,
+  rangeStatus: RangeStatus
+): string {
+  if (value === null) {
+    return "Glucose reading unavailable";
+  }
+
+  const rangeText = RANGE_STATUS_TEXT[rangeStatus];
+  return `Glucose ${Math.round(value)} milligrams per deciliter, ${trendDescription}, ${rangeText}`;
+}
+
+/**
+ * Determine if glucose state is urgent (requires assertive announcement).
+ */
+export function isUrgentState(range: GlucoseRange): boolean {
+  return range === "urgentLow" || range === "urgentHigh";
 }
 
 // Color configuration per glucose range
@@ -164,19 +220,22 @@ export function GlucoseHero({
   // Format display value
   const displayValue = safeValue !== null ? Math.round(safeValue).toString() : "--";
 
-  // Build accessible description
-  const ariaLabel = safeValue !== null
-    ? `Glucose ${displayValue} ${unit}, ${trendDescription}`
-    : "Glucose data unavailable";
+  // Accessibility: Build announcement and determine aria-live priority
+  const rangeStatus = getRangeStatus(range);
+  const announcement = buildGlucoseAnnouncement(safeValue, trendDescription, rangeStatus);
+  const isUrgent = isUrgentState(range);
+  const ariaLivePriority = isUrgent ? "assertive" : "polite";
 
   return (
     <div
       className={clsx(
         "rounded-xl p-8 border border-slate-800",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900",
         colors.bg
       )}
       role="region"
       aria-label="Current glucose reading"
+      tabIndex={0}
     >
       <motion.div
         className="flex flex-col items-center justify-center text-center"
@@ -185,6 +244,7 @@ export function GlucoseHero({
         transition={{ duration: 0.3 }}
       >
         {/* Main glucose display */}
+        {/* Main glucose display with dynamic aria-live priority */}
         <motion.div
           className="flex items-center gap-4 mb-4"
           animate={
@@ -192,7 +252,7 @@ export function GlucoseHero({
               ? pulseVariants[pulseType]
               : undefined
           }
-          aria-live="polite"
+          aria-live={ariaLivePriority}
           aria-atomic="true"
         >
           <span
@@ -201,7 +261,7 @@ export function GlucoseHero({
               colors.text
             )}
             data-testid="glucose-value"
-            aria-label={ariaLabel}
+            aria-label={announcement}
           >
             {displayValue}
           </span>
@@ -238,30 +298,42 @@ export function GlucoseHero({
           </p>
         )}
 
-        {/* Secondary metrics: IoB and CoB */}
+        {/* Secondary metrics: IoB and CoB with accessible labels */}
         <div
           className="flex items-center gap-6 mt-4 text-sm"
+          role="group"
+          aria-label="Insulin and carbohydrate metrics"
           data-testid="secondary-metrics"
         >
-          <div className="flex flex-col items-center">
-            <span className="text-slate-500 text-xs uppercase tracking-wide">
+          <div
+            className="flex flex-col items-center"
+            aria-label={safeIob !== null ? `Insulin on board: ${safeIob.toFixed(1)} units` : "Insulin on board: unavailable"}
+          >
+            <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
               IoB
             </span>
+            <span className="sr-only">Insulin on board</span>
             <span
               className="text-slate-300 font-medium"
               data-testid="iob-value"
+              aria-hidden="true"
             >
               {safeIob !== null ? `${safeIob.toFixed(1)}u` : "--"}
             </span>
           </div>
           <div className="w-px h-6 bg-slate-700" aria-hidden="true" />
-          <div className="flex flex-col items-center">
-            <span className="text-slate-500 text-xs uppercase tracking-wide">
+          <div
+            className="flex flex-col items-center"
+            aria-label={safeCob !== null ? `Carbohydrates on board: ${Math.round(safeCob)} grams` : "Carbohydrates on board: unavailable"}
+          >
+            <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
               CoB
             </span>
+            <span className="sr-only">Carbohydrates on board</span>
             <span
               className="text-slate-300 font-medium"
               data-testid="cob-value"
+              aria-hidden="true"
             >
               {safeCob !== null ? `${Math.round(safeCob)}g` : "--"}
             </span>

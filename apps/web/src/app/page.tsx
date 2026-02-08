@@ -7,6 +7,7 @@
  * Shows the disclaimer modal on first visit.
  */
 
+import Image from "next/image";
 import { DisclaimerModal } from "@/components/disclaimer-modal";
 
 export default function Home() {
@@ -15,6 +16,16 @@ export default function Home() {
       <DisclaimerModal />
       <main className="flex min-h-screen flex-col items-center justify-center p-8">
         <div className="text-center">
+          <div className="flex justify-center mb-6">
+            <Image
+              src="/logo.png"
+              alt="GlycemicGPT Logo"
+              width={120}
+              height={120}
+              className="rounded-2xl"
+              priority
+            />
+          </div>
           <h1 className="text-4xl font-bold mb-4">GlycemicGPT</h1>
           <p className="text-xl text-gray-400 mb-8">
             Your on-call endo at home

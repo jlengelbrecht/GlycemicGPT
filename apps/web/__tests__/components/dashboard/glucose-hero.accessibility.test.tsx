@@ -1,0 +1,264 @@
+/**
+ * GlucoseHero Accessibility Tests
+ *
+ * Story 4.6: Dashboard Accessibility
+ * Tests for screen reader announcements, keyboard navigation,
+ * and WCAG compliance.
+ */
+
+import { render, screen } from "@testing-library/react";
+
+import {
+  GlucoseHero,
+  buildGlucoseAnnouncement,
+  getRangeStatus,
+  isUrgentState,
+  classifyGlucose,
+} from "@/components/dashboard/glucose-hero";
+
+describe("GlucoseHero Accessibility", () => {
+  describe("Screen Reader Announcements", () => {
+    it("announces glucose with value, trend, and range status", () => {
+      render(<GlucoseHero value={142} trend="Falling" iob={2.5} cob={15} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/glucose 142 milligrams per deciliter/i)
+      );
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/in target range/i)
+      );
+    });
+
+    it("has exact announcement format matching AC1 pattern", () => {
+      // AC1 pattern: "Glucose {value} milligrams per deciliter, {trend}, {range status}"
+      // Example: "Glucose 142 milligrams per deciliter, falling, in target range"
+      render(<GlucoseHero value={142} trend="Falling" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        "Glucose 142 milligrams per deciliter, falling, in target range"
+      );
+    });
+
+    it("announces low glucose correctly", () => {
+      render(<GlucoseHero value={65} trend="Falling" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/below target/i)
+      );
+    });
+
+    it("announces urgent low glucose correctly", () => {
+      render(<GlucoseHero value={50} trend="FallingFast" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/dangerously low/i)
+      );
+    });
+
+    it("announces high glucose correctly", () => {
+      render(<GlucoseHero value={200} trend="Rising" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/above target/i)
+      );
+    });
+
+    it("announces urgent high glucose correctly", () => {
+      render(<GlucoseHero value={280} trend="RisingFast" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        expect.stringMatching(/dangerously high/i)
+      );
+    });
+
+    it("announces unavailable glucose correctly", () => {
+      render(<GlucoseHero value={null} trend="Unknown" iob={null} cob={null} />);
+
+      const glucoseValue = screen.getByTestId("glucose-value");
+      expect(glucoseValue).toHaveAttribute(
+        "aria-label",
+        "Glucose reading unavailable"
+      );
+    });
+  });
+
+  describe("Aria-live Priority", () => {
+    it("uses polite aria-live for in-range glucose", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+
+      const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
+      expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    });
+
+    it("uses assertive aria-live for urgent low glucose", () => {
+      render(<GlucoseHero value={50} trend="FallingFast" iob={null} cob={null} />);
+
+      const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
+      expect(liveRegion).toHaveAttribute("aria-live", "assertive");
+    });
+
+    it("uses assertive aria-live for urgent high glucose", () => {
+      render(<GlucoseHero value={280} trend="RisingFast" iob={null} cob={null} />);
+
+      const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
+      expect(liveRegion).toHaveAttribute("aria-live", "assertive");
+    });
+
+    it("uses polite aria-live for low (non-urgent) glucose", () => {
+      render(<GlucoseHero value={65} trend="Falling" iob={null} cob={null} />);
+
+      const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
+      expect(liveRegion).toHaveAttribute("aria-live", "polite");
+    });
+  });
+
+  describe("Keyboard Navigation", () => {
+    it("is keyboard focusable", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+
+      const region = screen.getByRole("region");
+      expect(region).toHaveAttribute("tabIndex", "0");
+    });
+
+    it("has visible focus indicator class", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+
+      const region = screen.getByRole("region");
+      expect(region.className).toMatch(/focus-visible:ring/);
+    });
+  });
+
+  describe("Accessible IoB/CoB Labels", () => {
+    it("provides accessible IoB label", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={2.5} cob={null} />);
+
+      const metricsGroup = screen.getByRole("group", {
+        name: /insulin and carbohydrate metrics/i,
+      });
+      expect(metricsGroup).toBeInTheDocument();
+
+      // Check for aria-label on IoB container
+      const iobContainer = metricsGroup.querySelector('[aria-label*="Insulin on board"]');
+      expect(iobContainer).toHaveAttribute(
+        "aria-label",
+        "Insulin on board: 2.5 units"
+      );
+    });
+
+    it("provides accessible CoB label", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={15} />);
+
+      const metricsGroup = screen.getByRole("group");
+
+      // Check for aria-label on CoB container
+      const cobContainer = metricsGroup.querySelector('[aria-label*="Carbohydrates on board"]');
+      expect(cobContainer).toHaveAttribute(
+        "aria-label",
+        "Carbohydrates on board: 15 grams"
+      );
+    });
+
+    it("indicates unavailable IoB accessibly", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+
+      const metricsGroup = screen.getByRole("group");
+      const iobContainer = metricsGroup.querySelector('[aria-label*="Insulin on board"]');
+      expect(iobContainer).toHaveAttribute(
+        "aria-label",
+        "Insulin on board: unavailable"
+      );
+    });
+
+    it("has screen-reader-only full text for IoB abbreviation", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={2.5} cob={15} />);
+
+      expect(screen.getAllByText("Insulin on board").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Carbohydrates on board").length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("Loading State Accessibility", () => {
+    it("indicates loading state with aria-busy", () => {
+      render(<GlucoseHero value={null} trend="Unknown" iob={null} cob={null} isLoading />);
+
+      const region = screen.getByRole("region");
+      expect(region).toHaveAttribute("aria-busy", "true");
+      expect(region).toHaveAttribute("aria-label", "Loading glucose reading");
+    });
+  });
+});
+
+describe("Accessibility Helper Functions", () => {
+  describe("buildGlucoseAnnouncement", () => {
+    it("builds correct announcement for in-range glucose", () => {
+      const result = buildGlucoseAnnouncement(142, "falling slowly", "in-range");
+      expect(result).toBe(
+        "Glucose 142 milligrams per deciliter, falling slowly, in target range"
+      );
+    });
+
+    it("builds correct announcement for urgent low", () => {
+      const result = buildGlucoseAnnouncement(50, "falling fast", "urgent-low");
+      expect(result).toBe(
+        "Glucose 50 milligrams per deciliter, falling fast, dangerously low"
+      );
+    });
+
+    it("returns unavailable message for null value", () => {
+      const result = buildGlucoseAnnouncement(null, "unknown", "in-range");
+      expect(result).toBe("Glucose reading unavailable");
+    });
+
+    it("rounds glucose value", () => {
+      const result = buildGlucoseAnnouncement(142.7, "stable", "in-range");
+      expect(result).toContain("Glucose 143");
+    });
+  });
+
+  describe("getRangeStatus", () => {
+    it("returns correct status for each range", () => {
+      expect(getRangeStatus("inRange")).toBe("in-range");
+      expect(getRangeStatus("low")).toBe("low");
+      expect(getRangeStatus("high")).toBe("high");
+      expect(getRangeStatus("urgentLow")).toBe("urgent-low");
+      expect(getRangeStatus("urgentHigh")).toBe("urgent-high");
+    });
+  });
+
+  describe("isUrgentState", () => {
+    it("returns true for urgent states", () => {
+      expect(isUrgentState("urgentLow")).toBe(true);
+      expect(isUrgentState("urgentHigh")).toBe(true);
+    });
+
+    it("returns false for non-urgent states", () => {
+      expect(isUrgentState("inRange")).toBe(false);
+      expect(isUrgentState("low")).toBe(false);
+      expect(isUrgentState("high")).toBe(false);
+    });
+  });
+
+  describe("classifyGlucose", () => {
+    it("classifies glucose ranges correctly", () => {
+      expect(classifyGlucose(50)).toBe("urgentLow");
+      expect(classifyGlucose(65)).toBe("low");
+      expect(classifyGlucose(120)).toBe("inRange");
+      expect(classifyGlucose(200)).toBe("high");
+      expect(classifyGlucose(280)).toBe("urgentHigh");
+      expect(classifyGlucose(null)).toBe("inRange");
+    });
+  });
+});

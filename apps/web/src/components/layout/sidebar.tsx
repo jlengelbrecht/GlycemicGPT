@@ -10,6 +10,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import {
@@ -19,7 +20,6 @@ import {
   Settings,
   Menu,
   X,
-  Activity,
 } from "lucide-react";
 
 interface NavItem {
@@ -52,7 +52,13 @@ export function Sidebar({ className }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 h-16 px-6 border-b border-slate-800">
-        <Activity className="h-8 w-8 text-blue-500" />
+        <Image
+          src="/logo.png"
+          alt="GlycemicGPT"
+          width={32}
+          height={32}
+          className="rounded"
+        />
         <span className="text-xl font-bold">GlycemicGPT</span>
       </div>
 
@@ -121,7 +127,13 @@ export function MobileNav() {
             {/* Header */}
             <div className="flex items-center justify-between h-16 px-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <Activity className="h-8 w-8 text-blue-500" />
+                <Image
+                  src="/logo.png"
+                  alt="GlycemicGPT"
+                  width={32}
+                  height={32}
+                  className="rounded"
+                />
                 <span className="text-xl font-bold">GlycemicGPT</span>
               </div>
               <button

@@ -283,9 +283,10 @@ describe("GlucoseHero", () => {
       render(<GlucoseHero {...defaultProps} value={142} trend="Stable" />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
+      // Story 4.6: Enhanced accessible announcement format
       expect(glucoseValue).toHaveAttribute(
         "aria-label",
-        "Glucose 142 mg/dL, stable"
+        "Glucose 142 milligrams per deciliter, stable, in target range"
       );
     });
 
@@ -293,9 +294,10 @@ describe("GlucoseHero", () => {
       render(<GlucoseHero {...defaultProps} value={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
+      // Story 4.6: Enhanced accessible announcement format
       expect(glucoseValue).toHaveAttribute(
         "aria-label",
-        "Glucose data unavailable"
+        "Glucose reading unavailable"
       );
     });
 
