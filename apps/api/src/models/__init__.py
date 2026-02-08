@@ -1,4 +1,5 @@
 # Database Models
+from src.models.ai_provider import AIProviderConfig, AIProviderStatus, AIProviderType
 from src.models.base import Base, TimestampMixin
 from src.models.disclaimer import DisclaimerAcknowledgment
 from src.models.glucose import GlucoseReading, TrendDirection
@@ -11,6 +12,9 @@ from src.models.pump_data import PumpEvent, PumpEventType
 from src.models.user import User, UserRole
 
 __all__ = [
+    "AIProviderConfig",
+    "AIProviderStatus",
+    "AIProviderType",
     "Base",
     "TimestampMixin",
     "DisclaimerAcknowledgment",
