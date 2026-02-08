@@ -10,7 +10,15 @@ from src.config import settings
 from src.database import close_database
 from src.logging_config import get_logger, setup_logging
 from src.middleware import CorrelationIdMiddleware
-from src.routers import auth, disclaimer, glucose_stream, health, integrations, system
+from src.routers import (
+    ai,
+    auth,
+    disclaimer,
+    glucose_stream,
+    health,
+    integrations,
+    system,
+)
 from src.services.scheduler import start_scheduler, stop_scheduler
 
 # Configure structured logging (Story 1.5)
@@ -70,6 +78,7 @@ app.include_router(auth.router)
 app.include_router(system.router)
 app.include_router(integrations.router)
 app.include_router(glucose_stream.router)
+app.include_router(ai.router)
 
 
 @app.get("/")
