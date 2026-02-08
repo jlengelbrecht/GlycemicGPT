@@ -1,4 +1,4 @@
 # API Routers
-from src.routers import auth, disclaimer, health, integrations, system
+from src.routers import ai, auth, disclaimer, health, integrations, system
 
-__all__ = ["auth", "disclaimer", "health", "integrations", "system"]
+__all__ = ["ai", "auth", "disclaimer", "health", "integrations", "system"]
