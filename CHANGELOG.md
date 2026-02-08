@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.10](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.9...v0.1.10) (2026-02-08)
+
+
+### ✨ Features
+
+* **web:** add dashboard accessibility and branding (Story 4.6) ([#28](https://github.com/jlengelbrecht/GlycemicGPT/issues/28)) ([53651a8](https://github.com/jlengelbrecht/GlycemicGPT/commit/53651a89824fea1b290ec11cbc7f2a564b668b87))
+
 ## [0.1.9](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.8...v0.1.9) (2026-02-08)
 
 
