@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.7](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.6...v0.1.7) (2026-02-08)
+
+
+### ✨ Features
+
+* **web:** add TrendArrow component for reusable trend display ([#22](https://github.com/jlengelbrecht/GlycemicGPT/issues/22)) ([92af665](https://github.com/jlengelbrecht/GlycemicGPT/commit/92af665b0d96f0a9e105490a1d59e30133c66f0b))
+
 ## [0.1.6](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.5...v0.1.6) (2026-02-07)
 
 
