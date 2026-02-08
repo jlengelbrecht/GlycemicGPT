@@ -18,6 +18,7 @@ from src.routers import (
     glucose_stream,
     health,
     integrations,
+    meal_analysis,
     system,
 )
 from src.services.scheduler import start_scheduler, stop_scheduler
@@ -81,6 +82,7 @@ app.include_router(integrations.router)
 app.include_router(glucose_stream.router)
 app.include_router(ai.router)
 app.include_router(briefs.router)
+app.include_router(meal_analysis.router)
 
 
 @app.get("/")
