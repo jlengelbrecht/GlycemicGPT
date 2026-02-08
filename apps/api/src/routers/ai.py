@@ -28,7 +28,9 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
-def _build_response(config: AIProviderConfig, masked_key: str) -> AIProviderConfigResponse:
+def _build_response(
+    config: AIProviderConfig, masked_key: str
+) -> AIProviderConfigResponse:
     """Build an API response from an AIProviderConfig model instance.
 
     Args:
@@ -69,9 +71,7 @@ async def get_ai_provider(
     Returns provider type, status, and masked API key.
     """
     result = await db.execute(
-        select(AIProviderConfig).where(
-            AIProviderConfig.user_id == current_user.id
-        )
+        select(AIProviderConfig).where(AIProviderConfig.user_id == current_user.id)
     )
     config = result.scalar_one_or_none()
 
@@ -128,9 +128,7 @@ async def configure_ai_provider(
 
     # Check if configuration already exists
     result = await db.execute(
-        select(AIProviderConfig).where(
-            AIProviderConfig.user_id == current_user.id
-        )
+        select(AIProviderConfig).where(AIProviderConfig.user_id == current_user.id)
     )
     existing = result.scalar_one_or_none()
 
@@ -190,9 +188,7 @@ async def delete_ai_provider(
     Deletes the stored API key and provider settings.
     """
     result = await db.execute(
-        select(AIProviderConfig).where(
-            AIProviderConfig.user_id == current_user.id
-        )
+        select(AIProviderConfig).where(AIProviderConfig.user_id == current_user.id)
     )
     config = result.scalar_one_or_none()
 
@@ -234,9 +230,7 @@ async def test_ai_provider(
     Decrypts the stored key and makes a validation request to the provider.
     """
     result = await db.execute(
-        select(AIProviderConfig).where(
-            AIProviderConfig.user_id == current_user.id
-        )
+        select(AIProviderConfig).where(AIProviderConfig.user_id == current_user.id)
     )
     config = result.scalar_one_or_none()
 

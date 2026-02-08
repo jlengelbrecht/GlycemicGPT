@@ -21,7 +21,9 @@ MASK_MIN_LENGTH = 5
 MASK_PREFIX = "sk-"
 
 # Standardised error message templates
-_AUTH_ERROR_TEMPLATE = "Invalid {provider} API key. Please check your key and try again."
+_AUTH_ERROR_TEMPLATE = (
+    "Invalid {provider} API key. Please check your key and try again."
+)
 _CONNECTION_ERROR_TEMPLATE = (
     "Unable to connect to {provider} API. Please try again later."
 )

@@ -39,9 +39,7 @@ class AIProviderConfig(Base, TimestampMixin):
     __tablename__ = "ai_provider_configs"
 
     # One active AI provider per user (user picks Claude or OpenAI, not both)
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_ai_provider_user"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", name="uq_ai_provider_user"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
