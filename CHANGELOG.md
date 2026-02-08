@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.13](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.12...v0.1.13) (2026-02-08)
+
+
+### ✨ Features
+
+* **api:** add BYOAI abstraction layer (Story 5.2) ([#34](https://github.com/jlengelbrecht/GlycemicGPT/issues/34)) ([b87d9a7](https://github.com/jlengelbrecht/GlycemicGPT/commit/b87d9a7157908c06cb3e0c5a5a442af6dbebac14))
+
 ## [0.1.12](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.11...v0.1.12) (2026-02-08)
 
 
