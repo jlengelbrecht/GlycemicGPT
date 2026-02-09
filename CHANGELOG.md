@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.31](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.30...v0.1.31) (2026-02-09)
+
+
+### ✨ Features
+
+* **api:** add AI chat via Telegram (Story 7.5) ([#75](https://github.com/jlengelbrecht/GlycemicGPT/issues/75)) ([1697b6b](https://github.com/jlengelbrecht/GlycemicGPT/commit/1697b6b1e89d3506532754f3f493220a3d80c6cf))
+
 ## [0.1.30](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.29...v0.1.30) (2026-02-09)
 
 
