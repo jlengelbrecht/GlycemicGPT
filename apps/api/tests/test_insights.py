@@ -821,9 +821,7 @@ class TestGetInsightDetail:
             result = MagicMock()
             if call_count == 1:
                 result.scalar_one_or_none.return_value = brief
-            elif call_count == 2:
-                result.scalar_one_or_none.return_value = None
-            elif call_count == 3:
+            elif call_count in (2, 3):
                 result.scalar_one_or_none.return_value = None
             return result
 
