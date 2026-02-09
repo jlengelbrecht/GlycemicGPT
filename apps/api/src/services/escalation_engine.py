@@ -4,11 +4,12 @@ Automatically escalates unacknowledged URGENT and EMERGENCY alerts
 to emergency contacts based on user-configured timing.
 """
 
+import html
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,9 @@ from src.models.escalation_event import (
     EscalationTier,
     NotificationStatus,
 )
+from src.models.telegram_link import TelegramLink
 from src.services.escalation_config import get_or_create_config
+from src.services.telegram_bot import TelegramBotError, send_message
 
 logger = get_logger(__name__)
 
@@ -232,19 +235,22 @@ def build_escalation_message(
     Returns:
         Formatted message string.
     """
+    safe_email = html.escape(user_email)
+    safe_message = html.escape(alert.message)
+
     if tier == EscalationTier.REMINDER:
         return (
             f"[REMINDER] You have an unacknowledged "
             f"{alert.severity.value.upper()} alert:\n"
-            f"{alert.message}\n"
+            f"{safe_message}\n"
             f"Current glucose: {alert.current_value:.0f} mg/dL\n"
             f"Please acknowledge this alert if you are okay."
         )
 
     if tier == EscalationTier.PRIMARY_CONTACT:
         return (
-            f"{user_email} has a glucose emergency and has not responded.\n"
-            f"Alert: {alert.message}\n"
+            f"{safe_email} has a glucose emergency and has not responded.\n"
+            f"Alert: {safe_message}\n"
             f"Current glucose: {alert.current_value:.0f} mg/dL\n"
             f"Severity: {alert.severity.value.upper()}\n"
             f"Please check on them immediately."
@@ -252,15 +258,45 @@ def build_escalation_message(
 
     # ALL_CONTACTS
     return (
-        f"{user_email} has a glucose emergency and has not responded.\n"
-        f"Alert: {alert.message}\n"
+        f"{safe_email} has a glucose emergency and has not responded.\n"
+        f"Alert: {safe_message}\n"
         f"Current glucose: {alert.current_value:.0f} mg/dL\n"
         f"Severity: {alert.severity.value.upper()}\n"
         f"Primary contact has not responded. Please check on them immediately."
     )
 
 
+async def _resolve_contact_chat_id(
+    db: AsyncSession,
+    telegram_username: str,
+) -> int | None:
+    """Resolve a Telegram username to a chat_id via TelegramLink.
+
+    Strips leading ``@`` if present for matching against the
+    TelegramLink.username field (stored without ``@``).
+
+    Args:
+        db: Database session.
+        telegram_username: Contact's Telegram username.
+
+    Returns:
+        The chat_id if found, or None.
+    """
+    clean_username = telegram_username.lstrip("@").lower()
+    if not clean_username:
+        return None
+
+    result = await db.execute(
+        select(TelegramLink.chat_id).where(
+            func.lower(TelegramLink.username) == clean_username,
+            TelegramLink.is_verified.is_(True),
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def dispatch_notification(
+    db: AsyncSession,
     tier: EscalationTier,
     message: str,
     contacts: list[EmergencyContact],
@@ -269,15 +305,13 @@ async def dispatch_notification(
 
     For REMINDER tier, the user's own Telegram is handled by Path A
     (Story 7.2 immediate alert delivery in predictive_alerts).
-    For contact tiers, dispatches to each contact's Telegram.
-
-    Note: Full Telegram delivery to contacts requires contact-to-chat_id
-    resolution (contacts must also link via the bot). For now, dispatches
-    are logged for the audit trail.
+    For contact tiers, resolves each contact's Telegram username to
+    a chat_id via TelegramLink and sends the message.
 
     Args:
+        db: Database session.
         tier: Escalation tier.
-        message: Message content.
+        message: Message content (HTML formatted).
         contacts: Contacts to notify.
 
     Returns:
@@ -307,13 +341,33 @@ async def dispatch_notification(
             )
             continue
 
-        logger.info(
-            "Escalation notification dispatched to contact",
-            tier=tier.value,
-            contact_name=contact.name,
-            telegram_username=contact.telegram_username,
-        )
-        success_count += 1
+        chat_id = await _resolve_contact_chat_id(db, contact.telegram_username)
+        if chat_id is None:
+            logger.warning(
+                "Contact not linked to Telegram bot, skipping",
+                contact_name=contact.name,
+                telegram_username=contact.telegram_username,
+                tier=tier.value,
+            )
+            continue
+
+        try:
+            await send_message(chat_id, message)
+            success_count += 1
+            logger.info(
+                "Escalation notification sent to contact",
+                tier=tier.value,
+                contact_name=contact.name,
+                chat_id=chat_id,
+            )
+        except TelegramBotError:
+            logger.warning(
+                "Failed to send escalation to contact",
+                contact_name=contact.name,
+                chat_id=chat_id,
+                tier=tier.value,
+                exc_info=True,
+            )
 
     return NotificationStatus.SENT if success_count > 0 else NotificationStatus.FAILED
 
@@ -404,7 +458,19 @@ async def escalate_alert(
     )
 
     contacts = await get_contacts_for_tier(db, alert.user_id, tier)
-    message = build_escalation_message(alert, tier, user_email)
+
+    # Use HTML-formatted messages for contact tiers (sent via Telegram)
+    if tier in (EscalationTier.PRIMARY_CONTACT, EscalationTier.ALL_CONTACTS):
+        from src.services.alert_notifier import format_escalation_contact_message
+
+        tier_label = (
+            "Primary Contact Alert"
+            if tier == EscalationTier.PRIMARY_CONTACT
+            else "All Contacts Alert"
+        )
+        message = format_escalation_contact_message(alert, user_email, tier_label)
+    else:
+        message = build_escalation_message(alert, tier, user_email)
 
     # Persist event as PENDING first to ensure audit trail exists
     # before dispatching notification
@@ -417,7 +483,7 @@ async def escalate_alert(
         return None
 
     # Dispatch notification, then update status
-    status = await dispatch_notification(tier, message, contacts)
+    status = await dispatch_notification(db, tier, message, contacts)
     event.notification_status = status
     await db.commit()
     await db.refresh(event)

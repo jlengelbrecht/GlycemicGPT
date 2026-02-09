@@ -162,6 +162,18 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    caregiver_links = relationship(
+        "CaregiverLink",
+        foreign_keys="[CaregiverLink.caregiver_id]",
+        cascade="all, delete-orphan",
+        overlaps="caregiver",
+    )
+    patient_links = relationship(
+        "CaregiverLink",
+        foreign_keys="[CaregiverLink.patient_id]",
+        cascade="all, delete-orphan",
+        overlaps="patient",
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.email} ({self.role.value})>"
