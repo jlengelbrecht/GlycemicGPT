@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.21](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.20...v0.1.21) (2026-02-09)
+
+
+### ✨ Features
+
+* add predictive alert engine with IoB escalation (Story 6.2) ([#50](https://github.com/jlengelbrecht/GlycemicGPT/issues/50)) ([33d6525](https://github.com/jlengelbrecht/GlycemicGPT/commit/33d6525fa97b99bdbe6419008adabeea8df4a6fa))
+
 ## [0.1.20](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.19...v0.1.20) (2026-02-09)
 
 
