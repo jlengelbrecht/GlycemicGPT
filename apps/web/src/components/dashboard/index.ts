@@ -45,3 +45,9 @@ export {
   ConnectionStatusBanner,
   type ConnectionStatusBannerProps,
 } from "./connection-status-banner";
+
+export {
+  AIInsightCard,
+  type AIInsightCardProps,
+  type InsightData,
+} from "./ai-insight-card";

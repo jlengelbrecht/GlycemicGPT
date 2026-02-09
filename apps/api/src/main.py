@@ -18,6 +18,7 @@ from src.routers import (
     disclaimer,
     glucose_stream,
     health,
+    insights,
     integrations,
     meal_analysis,
     safety,
@@ -87,6 +88,7 @@ app.include_router(briefs.router)
 app.include_router(meal_analysis.router)
 app.include_router(correction_analysis.router)
 app.include_router(safety.router)
+app.include_router(insights.router)
 
 
 @app.get("/")
