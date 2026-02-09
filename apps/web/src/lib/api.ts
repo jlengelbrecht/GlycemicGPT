@@ -229,3 +229,69 @@ export async function respondToInsight(
 
   return res.json();
 }
+
+/**
+ * Alert Threshold API types (Story 6.1)
+ */
+export interface AlertThresholdResponse {
+  id: string;
+  low_warning: number;
+  urgent_low: number;
+  high_warning: number;
+  urgent_high: number;
+  iob_warning: number;
+  updated_at: string;
+}
+
+export interface AlertThresholdUpdate {
+  low_warning?: number;
+  urgent_low?: number;
+  high_warning?: number;
+  urgent_high?: number;
+  iob_warning?: number;
+}
+
+/**
+ * Fetch current alert thresholds
+ */
+export async function getAlertThresholds(): Promise<AlertThresholdResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/alert-thresholds`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to fetch thresholds: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update alert thresholds
+ */
+export async function updateAlertThresholds(
+  updates: AlertThresholdUpdate
+): Promise<AlertThresholdResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/alert-thresholds`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to update thresholds: ${response.status}`);
+  }
+
+  return response.json();
+}
