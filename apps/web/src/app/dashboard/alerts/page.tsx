@@ -645,6 +645,7 @@ export default function AlertsPage() {
           {/* Sound toggle */}
           <label className="flex items-center gap-3 cursor-pointer group">
             <input
+              id="pref-sound"
               type="checkbox"
               checked={preferences.soundEnabled}
               onChange={(e) =>
@@ -654,6 +655,7 @@ export default function AlertsPage() {
                 })
               }
               className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              aria-describedby="pref-sound-desc"
             />
             <Volume2
               className="h-4 w-4 text-slate-400 group-hover:text-slate-300"
@@ -663,7 +665,7 @@ export default function AlertsPage() {
               <span className="text-sm text-slate-300 group-hover:text-slate-200">
                 Alert sounds
               </span>
-              <p className="text-xs text-slate-500">
+              <p id="pref-sound-desc" className="text-xs text-slate-500">
                 Play audio tones when alerts are received
               </p>
             </div>
@@ -672,6 +674,7 @@ export default function AlertsPage() {
           {/* Browser notifications toggle */}
           <label className="flex items-center gap-3 cursor-pointer group">
             <input
+              id="pref-browser-notif"
               type="checkbox"
               checked={preferences.browserNotificationsEnabled}
               onChange={async (e) => {
@@ -689,6 +692,7 @@ export default function AlertsPage() {
                 }
               }}
               className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              aria-describedby="pref-browser-notif-desc"
             />
             <Bell
               className="h-4 w-4 text-slate-400 group-hover:text-slate-300"
@@ -698,7 +702,7 @@ export default function AlertsPage() {
               <span className="text-sm text-slate-300 group-hover:text-slate-200">
                 Browser notifications
               </span>
-              <p className="text-xs text-slate-500">
+              <p id="pref-browser-notif-desc" className="text-xs text-slate-500">
                 Show OS-level notifications for urgent and emergency alerts
               </p>
             </div>

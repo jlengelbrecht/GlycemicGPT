@@ -28,7 +28,7 @@ class TestFormatSseAlertEvent:
             "expires_at": "2025-01-01T00:30:00+00:00",
         }
 
-        result = await format_sse_event(
+        result = format_sse_event(
             event_type="alert",
             data=alert_data,
             event_id="42",
@@ -193,7 +193,7 @@ class TestAlertEventPayload:
             "expires_at": "2025-01-01T00:30:00+00:00",
         }
 
-        result = await format_sse_event("alert", alert_data, event_id="1")
+        result = format_sse_event("alert", alert_data, event_id="1")
 
         data_line = [line for line in result.split("\n") if line.startswith("data:")][0]
         parsed = json.loads(data_line[5:].strip())

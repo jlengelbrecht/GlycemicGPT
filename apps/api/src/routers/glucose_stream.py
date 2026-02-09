@@ -25,9 +25,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/glucose", tags=["glucose-stream"])
 
 
-async def format_sse_event(
-    event_type: str, data: dict, event_id: str | None = None
-) -> str:
+def format_sse_event(event_type: str, data: dict, event_id: str | None = None) -> str:
     """Format data as an SSE event.
 
     Args:
@@ -138,14 +136,14 @@ async def generate_glucose_stream(
                                 "timestamp": now.isoformat(),
                             }
 
-                            yield await format_sse_event(
+                            yield format_sse_event(
                                 event_type="glucose",
                                 data=glucose_event,
                                 event_id=str(event_counter),
                             )
                         else:
                             # No readings available
-                            yield await format_sse_event(
+                            yield format_sse_event(
                                 event_type="no_data",
                                 data={
                                     "message": "No glucose readings available",
@@ -156,7 +154,7 @@ async def generate_glucose_stream(
 
                 except Exception as e:
                     logger.error("Error fetching glucose data for SSE", error=str(e))
-                    yield await format_sse_event(
+                    yield format_sse_event(
                         event_type="error",
                         data={
                             "message": "Failed to fetch glucose data",
@@ -177,7 +175,7 @@ async def generate_glucose_stream(
                             if alert_id_str not in delivered_alert_ids:
                                 delivered_alert_ids.add(alert_id_str)
                                 event_counter += 1
-                                yield await format_sse_event(
+                                yield format_sse_event(
                                     event_type="alert",
                                     data={
                                         "id": alert_id_str,
@@ -211,7 +209,7 @@ async def generate_glucose_stream(
                 break
 
             event_counter += 1
-            yield await format_sse_event(
+            yield format_sse_event(
                 event_type="heartbeat",
                 data={"timestamp": datetime.now(UTC).isoformat()},
                 event_id=str(event_counter),
