@@ -48,7 +48,7 @@ ALERT_ACTION: dict[AlertType, str] = {
 }
 
 
-def _trend_description(trend_rate: float | None) -> str:
+def trend_description(trend_rate: float | None) -> str:
     """Convert a trend rate (mg/dL/min) to a human-readable description."""
     if trend_rate is None:
         return "unknown"
@@ -79,7 +79,7 @@ def format_alert_message(alert: Alert) -> str:
     emoji = SEVERITY_EMOJI.get(alert.severity, "\u2139\ufe0f")
     headline = ALERT_HEADLINE.get(alert.alert_type, "Glucose Alert")
     action = ALERT_ACTION.get(alert.alert_type, "Check your glucose levels")
-    trend = _trend_description(alert.trend_rate)
+    trend = trend_description(alert.trend_rate)
 
     lines = [
         f"{emoji} <b>{headline}</b>",
@@ -126,7 +126,7 @@ def format_escalation_contact_message(
     """
     emoji = SEVERITY_EMOJI.get(alert.severity, "\U0001f6a8")
     headline = ALERT_HEADLINE.get(alert.alert_type, "Glucose Alert")
-    trend = _trend_description(alert.trend_rate)
+    trend = trend_description(alert.trend_rate)
 
     safe_email = html.escape(user_email)
     safe_tier = html.escape(tier_label)
