@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.27](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.26...v0.1.27) (2026-02-09)
+
+
+### ✨ Features
+
+* add Telegram bot setup and configuration (Story 7.1) ([#62](https://github.com/jlengelbrecht/GlycemicGPT/issues/62)) ([64d6f98](https://github.com/jlengelbrecht/GlycemicGPT/commit/64d6f98feb2935488400eb429440ea8d675e9687))
+
 ## [0.1.26](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.25...v0.1.26) (2026-02-09)
 
 
