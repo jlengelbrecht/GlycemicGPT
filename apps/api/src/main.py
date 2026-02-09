@@ -26,6 +26,7 @@ from src.routers import (
     meal_analysis,
     safety,
     system,
+    telegram,
 )
 from src.routers import (
     settings as settings_router,
@@ -99,6 +100,7 @@ app.include_router(settings_router.router)
 app.include_router(alerts.router)
 app.include_router(emergency_contacts.router)
 app.include_router(escalation.router)
+app.include_router(telegram.router)
 
 
 @app.get("/")

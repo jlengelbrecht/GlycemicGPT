@@ -5,7 +5,8 @@
  * Placeholder page for settings - will be expanded in Epic 9.
  */
 
-import { Settings, User, Bell, Database, Link2, Users } from "lucide-react";
+import Link from "next/link";
+import { Settings, User, Bell, Database, Link2, Users, MessageCircle } from "lucide-react";
 
 const settingsSections = [
   {
@@ -33,6 +34,12 @@ const settingsSections = [
     href: "/dashboard/settings/emergency-contacts",
   },
   {
+    title: "Telegram",
+    description: "Link your Telegram account for alert notifications",
+    icon: MessageCircle,
+    href: "/dashboard/settings/telegram",
+  },
+  {
     title: "Data",
     description: "Manage data retention and export options",
     icon: Database,
@@ -52,7 +59,7 @@ export default function SettingsPage() {
       {/* Settings sections grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {settingsSections.map((section) => (
-          <a
+          <Link
             key={section.title}
             href={section.href}
             className="bg-slate-900 rounded-xl p-6 border border-slate-800 hover:border-slate-700 transition-colors group"
@@ -70,7 +77,7 @@ export default function SettingsPage() {
                 </p>
               </div>
             </div>
-          </a>
+          </Link>
         ))}
       </div>
 

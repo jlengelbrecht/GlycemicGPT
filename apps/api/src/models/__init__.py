@@ -23,6 +23,8 @@ from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
 from src.models.safety_log import SafetyLog
 from src.models.suggestion_response import SuggestionResponse
+from src.models.telegram_link import TelegramLink
+from src.models.telegram_verification import TelegramVerificationCode
 from src.models.user import User, UserRole
 
 __all__ = [
@@ -54,6 +56,8 @@ __all__ = [
     "PumpEventType",
     "SafetyLog",
     "SuggestionResponse",
+    "TelegramLink",
+    "TelegramVerificationCode",
     "User",
     "UserRole",
 ]

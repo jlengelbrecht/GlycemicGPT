@@ -1,0 +1,444 @@
+/**
+ * Telegram Settings Page
+ *
+ * Story 7.1: Telegram Bot Setup & Configuration
+ * Allows users to link/unlink their Telegram account for alert notifications.
+ */
+
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Copy,
+  Loader2,
+  MessageCircle,
+  Send,
+  Unlink,
+} from "lucide-react";
+import {
+  generateTelegramCode,
+  getTelegramStatus,
+  sendTelegramTestMessage,
+  TelegramStatusResponse,
+  TelegramVerificationCodeResponse,
+  unlinkTelegram,
+} from "@/lib/api";
+
+type PageState = "loading" | "not_linked" | "code_generated" | "linked";
+
+export default function TelegramSettingsPage() {
+  const [pageState, setPageState] = useState<PageState>("loading");
+  const [status, setStatus] = useState<TelegramStatusResponse | null>(null);
+  const [codeData, setCodeData] =
+    useState<TelegramVerificationCodeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [copied, setCopied] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTimers = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+  }, []);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const data = await getTelegramStatus();
+      setStatus(data);
+      if (data.linked) {
+        setPageState("linked");
+        clearTimers();
+      } else if (pageState !== "code_generated") {
+        setPageState("not_linked");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load status";
+      if (pageState === "loading") {
+        setError(msg);
+        setPageState("not_linked");
+      }
+    }
+  }, [clearTimers, pageState]);
+
+  // Initial load
+  useEffect(() => {
+    fetchStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => clearTimers();
+  }, [clearTimers]);
+
+  const handleGenerateCode = async () => {
+    setError(null);
+    setSuccess(null);
+    setActionLoading(true);
+
+    try {
+      const data = await generateTelegramCode();
+      setCodeData(data);
+      setPageState("code_generated");
+
+      // Start countdown timer
+      const expiresAt = new Date(data.expires_at).getTime();
+      const updateCountdown = () => {
+        const remaining = Math.max(
+          0,
+          Math.floor((expiresAt - Date.now()) / 1000)
+        );
+        setTimeLeft(remaining);
+        if (remaining <= 0) {
+          clearTimers();
+          setPageState("not_linked");
+          setCodeData(null);
+          setError("Verification code expired. Please generate a new one.");
+        }
+      };
+      updateCountdown();
+      countdownRef.current = setInterval(updateCountdown, 1000);
+
+      // Start polling for verification
+      pollRef.current = setInterval(async () => {
+        try {
+          const statusData = await getTelegramStatus();
+          if (statusData.linked) {
+            setStatus(statusData);
+            setPageState("linked");
+            setSuccess("Telegram account linked successfully!");
+            setCodeData(null);
+            clearTimers();
+          }
+        } catch {
+          // Silently ignore poll errors
+        }
+      }, 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate code");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnlink = async () => {
+    setError(null);
+    setSuccess(null);
+    setActionLoading(true);
+
+    try {
+      await unlinkTelegram();
+      setStatus(null);
+      setPageState("not_linked");
+      setSuccess("Telegram account disconnected.");
+      setConfirmDisconnect(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to unlink");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleTestMessage = async () => {
+    setError(null);
+    setSuccess(null);
+    setActionLoading(true);
+
+    try {
+      await sendTelegramTestMessage();
+      setSuccess("Test message sent! Check your Telegram.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to send test message"
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCopyCode = async () => {
+    if (!codeData) return;
+    try {
+      await navigator.clipboard.writeText(
+        `/start ${codeData.code}`
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API not available — show manual copy hint
+      setSuccess("Select and copy the command manually.");
+    }
+  };
+
+  const formatTimeLeft = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Back link */}
+      <Link
+        href="/dashboard/settings"
+        className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Settings
+      </Link>
+
+      {/* Page header */}
+      <div className="flex items-center gap-3">
+        <div className="p-3 bg-slate-800 rounded-lg">
+          <MessageCircle className="h-6 w-6 text-blue-400" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Telegram</h1>
+          <p className="text-slate-400 text-sm">
+            Link your Telegram account to receive alert notifications
+          </p>
+        </div>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div
+          role="alert"
+          className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 text-sm"
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Success banner */}
+      {success && (
+        <div
+          role="status"
+          className="bg-green-500/10 border border-green-500/30 text-green-400 rounded-lg px-4 py-3 text-sm"
+        >
+          {success}
+        </div>
+      )}
+
+      {/* Loading state */}
+      {pageState === "loading" && (
+        <div className="bg-slate-900 rounded-xl p-8 border border-slate-800 flex items-center justify-center">
+          <Loader2 className="h-6 w-6 text-slate-400 animate-spin" />
+        </div>
+      )}
+
+      {/* Not linked state */}
+      {pageState === "not_linked" && (
+        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 space-y-6">
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">
+              Connect Your Telegram Account
+            </h2>
+            <p className="text-slate-400 text-sm">
+              Link your Telegram account to receive glucose alerts and
+              notifications directly in Telegram.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium text-slate-300">
+              How it works:
+            </h3>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-slate-400">
+              <li>
+                Click &quot;Generate Code&quot; below to get a verification code
+              </li>
+              <li>
+                Open Telegram and search for{" "}
+                {status?.bot_username ? (
+                  <span className="text-white font-mono">
+                    @{status.bot_username}
+                  </span>
+                ) : (
+                  "the GlycemicGPT bot"
+                )}
+              </li>
+              <li>
+                Send the command <span className="font-mono text-white">/start YOUR_CODE</span> to the bot
+              </li>
+            </ol>
+          </div>
+
+          <button
+            onClick={handleGenerateCode}
+            disabled={actionLoading}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+            aria-label="Generate verification code"
+          >
+            {actionLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <MessageCircle className="h-4 w-4" />
+            )}
+            Generate Code
+          </button>
+        </div>
+      )}
+
+      {/* Code generated state */}
+      {pageState === "code_generated" && codeData && (
+        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 space-y-6">
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Verification Code</h2>
+            <p className="text-slate-400 text-sm">
+              Send this command to{" "}
+              <span className="text-white font-mono">
+                @{codeData.bot_username}
+              </span>{" "}
+              on Telegram:
+            </p>
+          </div>
+
+          {/* Code display */}
+          <div className="bg-slate-800 rounded-lg p-4 flex items-center justify-between gap-3">
+            <code className="text-2xl font-mono tracking-widest text-white select-all">
+              /start {codeData.code}
+            </code>
+            <button
+              onClick={handleCopyCode}
+              className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white shrink-0"
+              aria-label="Copy command to clipboard"
+            >
+              {copied ? (
+                <CheckCircle2 className="h-5 w-5 text-green-400" />
+              ) : (
+                <Copy className="h-5 w-5" />
+              )}
+            </button>
+          </div>
+
+          {/* Countdown */}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-slate-400">
+              Code expires in{" "}
+              <span
+                className={`font-mono ${timeLeft <= 60 ? "text-red-400" : "text-white"}`}
+              >
+                {formatTimeLeft(timeLeft)}
+              </span>
+            </span>
+            <span className="text-slate-500 flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Waiting for verification...
+            </span>
+          </div>
+
+          {/* Cancel */}
+          <button
+            onClick={() => {
+              clearTimers();
+              setPageState("not_linked");
+              setCodeData(null);
+            }}
+            className="w-full text-slate-400 hover:text-white text-sm transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Linked state */}
+      {pageState === "linked" && status?.link && (
+        <div className="space-y-4">
+          {/* Connection status card */}
+          <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Connection Status</h2>
+              <span className="inline-flex items-center gap-1.5 bg-green-500/10 text-green-400 text-xs font-medium px-2.5 py-1 rounded-full">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Connected
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              {status.link.username && (
+                <div>
+                  <span className="text-slate-500">Username</span>
+                  <p className="text-white font-mono mt-0.5">
+                    @{status.link.username}
+                  </p>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-500">Linked</span>
+                <p className="text-white mt-0.5">
+                  {new Date(status.link.linked_at).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 space-y-3">
+            <h2 className="text-lg font-semibold">Actions</h2>
+
+            <button
+              onClick={handleTestMessage}
+              disabled={actionLoading}
+              className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+              aria-label="Send test message"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Send Test Message
+            </button>
+
+            {!confirmDisconnect ? (
+              <button
+                onClick={() => setConfirmDisconnect(true)}
+                className="w-full text-red-400 hover:text-red-300 text-sm transition-colors flex items-center justify-center gap-2 py-2"
+                aria-label="Disconnect Telegram"
+              >
+                <Unlink className="h-4 w-4" />
+                Disconnect Telegram
+              </button>
+            ) : (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 space-y-3">
+                <p className="text-red-400 text-sm">
+                  Are you sure? You will stop receiving Telegram notifications.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleUnlink}
+                    disabled={actionLoading}
+                    className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                  >
+                    Yes, Disconnect
+                  </button>
+                  <button
+                    onClick={() => setConfirmDisconnect(false)}
+                    className="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

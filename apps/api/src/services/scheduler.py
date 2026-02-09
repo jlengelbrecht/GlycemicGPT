@@ -311,6 +311,28 @@ async def check_escalations_all_users() -> None:
     )
 
 
+async def poll_telegram_updates() -> None:
+    """Poll Telegram for verification /start messages.
+
+    This job runs every N seconds when telegram_bot_token is configured.
+    It processes incoming /start messages to link user accounts.
+    """
+    from src.services.telegram_bot import TelegramBotError, poll_for_verifications
+
+    async with get_session_maker()() as db:
+        try:
+            processed = await poll_for_verifications(db)
+            if processed > 0:
+                logger.info(
+                    "Processed Telegram verifications",
+                    count=processed,
+                )
+        except TelegramBotError as e:
+            logger.warning("Telegram polling error", error=str(e))
+        except Exception as e:
+            logger.error("Unexpected Telegram polling error", error=str(e))
+
+
 def start_scheduler() -> AsyncIOScheduler:
     """Start the background job scheduler.
 
@@ -380,6 +402,21 @@ def start_scheduler() -> AsyncIOScheduler:
         logger.info(
             "Scheduled escalation check job",
             interval_minutes=settings.escalation_check_interval_minutes,
+        )
+
+    # Add Telegram polling job if enabled and token configured (Story 7.1)
+    if settings.telegram_polling_enabled and settings.telegram_bot_token:
+        scheduler.add_job(
+            poll_telegram_updates,
+            trigger=IntervalTrigger(seconds=settings.telegram_polling_interval_seconds),
+            id="telegram_poll",
+            name="Telegram Bot Polling",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info(
+            "Scheduled Telegram polling job",
+            interval_seconds=settings.telegram_polling_interval_seconds,
         )
 
     scheduler.start()
