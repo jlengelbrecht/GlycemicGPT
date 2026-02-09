@@ -1,5 +1,6 @@
 # Database Models
 from src.models.ai_provider import AIProviderConfig, AIProviderStatus, AIProviderType
+from src.models.alert import Alert, AlertSeverity, AlertType
 from src.models.alert_threshold import AlertThreshold
 from src.models.base import Base, TimestampMixin
 from src.models.correction_analysis import CorrectionAnalysis
@@ -21,7 +22,10 @@ __all__ = [
     "AIProviderConfig",
     "AIProviderStatus",
     "AIProviderType",
+    "Alert",
+    "AlertSeverity",
     "AlertThreshold",
+    "AlertType",
     "Base",
     "CorrectionAnalysis",
     "TimestampMixin",

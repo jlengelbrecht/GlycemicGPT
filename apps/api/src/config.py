@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     tandem_sync_enabled: bool = True  # Enable/disable automatic sync
     tandem_sync_hours_back: int = 24  # Hours of history to fetch per sync
 
+    # Predictive Alert Engine (Story 6.2)
+    alert_check_interval_minutes: int = 5  # Run alert engine every 5 minutes
+    alert_check_enabled: bool = True  # Enable/disable automatic alert checking
+
     # Testing
     testing: bool = False  # Set to True during tests to disable connection pooling
 
