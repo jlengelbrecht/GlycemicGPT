@@ -778,9 +778,7 @@ class TestGetInsightDetail:
         mock_db.execute = AsyncMock(return_value=mock_result)
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_insight_detail(
-                uuid.uuid4(), "daily_brief", uuid.uuid4(), mock_db
-            )
+            await get_insight_detail(uuid.uuid4(), "daily_brief", uuid.uuid4(), mock_db)
 
         assert exc_info.value.status_code == 404
 
@@ -1017,9 +1015,7 @@ class TestGetInsightDetailEndpoint:
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             analysis_id = uuid.uuid4()
-            response = await client.get(
-                f"/api/ai/insights/daily_brief/{analysis_id}"
-            )
+            response = await client.get(f"/api/ai/insights/daily_brief/{analysis_id}")
             assert response.status_code == 401
 
     @pytest.mark.asyncio
