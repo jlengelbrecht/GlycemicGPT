@@ -9,10 +9,10 @@ import pytest
 from src.models.alert import Alert, AlertSeverity, AlertType
 from src.services.alert_notifier import (
     SEVERITY_EMOJI,
-    _trend_description,
     format_alert_message,
     format_escalation_contact_message,
     notify_user_of_alerts,
+    trend_description,
 )
 from src.services.telegram_bot import TelegramBotError
 
@@ -51,67 +51,67 @@ def make_alert(
 # Trend description tests (pure function)
 # ---------------------------------------------------------------------------
 class TestTrendDescription:
-    """Tests for _trend_description()."""
+    """Tests for trend_description()."""
 
     def test_none_returns_unknown(self):
-        assert _trend_description(None) == "unknown"
+        assert trend_description(None) == "unknown"
 
     def test_rising_fast(self):
-        result = _trend_description(3.5)
+        result = trend_description(3.5)
         assert "rising fast" in result
 
     def test_rising(self):
-        result = _trend_description(2.0)
+        result = trend_description(2.0)
         assert "rising" in result
         assert "fast" not in result
         assert "slowly" not in result
 
     def test_rising_slowly(self):
-        result = _trend_description(0.7)
+        result = trend_description(0.7)
         assert "rising slowly" in result
 
     def test_stable(self):
-        result = _trend_description(0.0)
+        result = trend_description(0.0)
         assert "stable" in result
 
     def test_falling_slowly(self):
-        result = _trend_description(-0.7)
+        result = trend_description(-0.7)
         assert "falling slowly" in result
 
     def test_falling(self):
-        result = _trend_description(-2.0)
+        result = trend_description(-2.0)
         assert "falling" in result
         assert "fast" not in result
         assert "slowly" not in result
 
     def test_falling_fast(self):
-        result = _trend_description(-3.5)
+        result = trend_description(-3.5)
         assert "falling fast" in result
 
     # Boundary value tests
     def test_boundary_exactly_3_0_is_rising(self):
-        result = _trend_description(3.0)
+        result = trend_description(3.0)
         assert "rising" in result
         assert "fast" not in result
 
     def test_boundary_exactly_1_0_is_rising_slowly(self):
-        result = _trend_description(1.0)
+        result = trend_description(1.0)
         assert "rising slowly" in result
 
     def test_boundary_exactly_0_5_is_stable(self):
-        result = _trend_description(0.5)
+        result = trend_description(0.5)
         assert "stable" in result
 
     def test_boundary_exactly_neg_0_5_is_stable(self):
-        result = _trend_description(-0.5)
+        result = trend_description(-0.5)
         assert "stable" in result
 
     def test_boundary_exactly_neg_1_0_is_falling_slowly(self):
-        result = _trend_description(-1.0)
+        result = trend_description(-1.0)
         assert "falling slowly" in result
 
     def test_boundary_exactly_neg_3_0_is_falling(self):
-        result = _trend_description(-3.0)
+        result = trend_description(-3.0)
         assert "falling" in result
         assert "fast" not in result
 
