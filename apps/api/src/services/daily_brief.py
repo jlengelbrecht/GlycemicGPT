@@ -17,6 +17,7 @@ from src.models.user import User
 from src.schemas.ai_response import AIMessage
 from src.schemas.daily_brief import DailyBriefMetrics
 from src.services.ai_client import get_ai_client
+from src.services.brief_notifier import notify_user_of_brief
 
 logger = get_logger(__name__)
 
@@ -238,6 +239,16 @@ async def generate_daily_brief(
         brief_id=str(brief.id),
         tir=metrics.time_in_range_pct,
     )
+
+    # Story 7.3: Telegram delivery
+    try:
+        await notify_user_of_brief(db, user.id, brief)
+    except Exception as e:
+        logger.warning(
+            "Telegram brief delivery failed",
+            user_id=str(user.id),
+            error=str(e),
+        )
 
     return brief
 
