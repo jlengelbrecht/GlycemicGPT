@@ -5,6 +5,7 @@ a verified Telegram link. Messages are kept under 500 characters.
 """
 
 import html
+import math
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +27,8 @@ _TIR_OK = 50.0  # >= 50% yellow
 
 def _tir_emoji(pct: float) -> str:
     """Return a colored circle emoji based on time-in-range percentage."""
+    if not math.isfinite(pct):
+        return "\U0001f534"  # red circle for NaN/Inf
     if pct >= _TIR_GOOD:
         return "\U0001f7e2"  # green circle
     if pct >= _TIR_OK:
@@ -35,6 +38,7 @@ def _tir_emoji(pct: float) -> str:
 
 def _truncate(text: str, max_len: int = 150) -> str:
     """Truncate text to max_len, appending ellipsis if trimmed."""
+    max_len = max(max_len, 2)  # ensure room for at least 1 char + ellipsis
     if len(text) <= max_len:
         return text
     return text[: max_len - 1] + "\u2026"
@@ -74,7 +78,8 @@ def format_brief_message(brief: DailyBrief) -> str:
         safe_summary = _truncate(html.escape(brief.ai_summary))
         lines.extend(["", f"\U0001f4dd {safe_summary}"])
 
-    lines.extend(["", f"/brief_{brief.id}"])
+    # Note: /brief_ command will be added once Story 7.4 (Telegram Command
+    # Handlers) implements bot-side handling. Omitted to avoid user confusion.
 
     return "\n".join(lines)
 
@@ -114,19 +119,17 @@ async def notify_user_of_brief(
             brief_id=str(brief.id),
         )
         return True
-    except TelegramBotError as e:
+    except TelegramBotError:
         logger.warning(
             "Failed to send Telegram daily brief",
             user_id=str(user_id),
             brief_id=str(brief.id),
-            error=str(e),
         )
         return False
-    except Exception as e:
+    except Exception:
         logger.error(
             "Unexpected error sending Telegram daily brief",
             user_id=str(user_id),
             brief_id=str(brief.id),
-            error=str(e),
         )
         return False

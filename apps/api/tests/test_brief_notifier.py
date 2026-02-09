@@ -64,6 +64,15 @@ class TestTirEmoji:
     def test_boundary_49_is_red(self):
         assert _tir_emoji(49.9) == "\U0001f534"
 
+    def test_nan_returns_red(self):
+        assert _tir_emoji(float("nan")) == "\U0001f534"
+
+    def test_inf_returns_red(self):
+        assert _tir_emoji(float("inf")) == "\U0001f534"
+
+    def test_negative_inf_returns_red(self):
+        assert _tir_emoji(float("-inf")) == "\U0001f534"
+
 
 # ---------------------------------------------------------------------------
 # Truncate helper tests
@@ -82,6 +91,14 @@ class TestTruncate:
     def test_exact_length_unchanged(self):
         text = "a" * 150
         assert _truncate(text, 150) == text
+
+    def test_max_len_zero_clamps_to_min(self):
+        result = _truncate("hello world", 0)
+        assert len(result) == 2  # 1 char + ellipsis
+
+    def test_max_len_one_clamps_to_min(self):
+        result = _truncate("hello world", 1)
+        assert len(result) == 2  # 1 char + ellipsis
 
 
 # ---------------------------------------------------------------------------
@@ -121,10 +138,11 @@ class TestFormatBriefMessage:
         assert "low" not in msg
         assert "high" not in msg
 
-    def test_contains_brief_command(self):
+    def test_no_dead_command_in_message(self):
+        """No /brief_ command until Story 7.4 implements bot-side handling."""
         brief = make_brief()
         msg = format_brief_message(brief)
-        assert f"/brief_{brief.id}" in msg
+        assert "/brief_" not in msg
 
     def test_contains_ai_summary(self):
         brief = make_brief(ai_summary="Your overnight was excellent.")
@@ -183,6 +201,7 @@ class TestFormatBriefMessage:
         msg = format_brief_message(brief)
         assert "2 low" in msg
         assert "5 high" in msg
+        assert "2 low  |  " in msg  # verify separator format
 
 
 # ---------------------------------------------------------------------------
