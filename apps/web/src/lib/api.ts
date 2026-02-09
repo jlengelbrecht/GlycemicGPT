@@ -708,3 +708,167 @@ export async function getAlertEscalationTimeline(
 
   return response.json();
 }
+
+/**
+ * Caregiver Invitation API types (Story 8.1)
+ */
+export interface CaregiverInvitation {
+  id: string;
+  token: string;
+  expires_at: string;
+  invite_url: string;
+}
+
+export interface CaregiverInvitationListItem {
+  id: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  accepted_by_email: string | null;
+}
+
+export interface CaregiverInvitationListResponse {
+  invitations: CaregiverInvitationListItem[];
+  count: number;
+}
+
+export interface InvitationDetail {
+  patient_email: string;
+  status: string;
+  expires_at: string;
+}
+
+export interface AcceptInvitationResponse {
+  message: string;
+  user_id: string;
+}
+
+export interface LinkedPatient {
+  patient_id: string;
+  patient_email: string;
+  linked_at: string;
+}
+
+export interface LinkedPatientsListResponse {
+  patients: LinkedPatient[];
+  count: number;
+}
+
+/**
+ * Create a new caregiver invitation
+ */
+export async function createCaregiverInvitation(): Promise<CaregiverInvitation> {
+  const response = await fetch(`${API_BASE_URL}/api/caregivers/invitations`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to create invitation: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * List all caregiver invitations for the current patient
+ */
+export async function listCaregiverInvitations(): Promise<CaregiverInvitationListResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/caregivers/invitations`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to list invitations: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Revoke a pending caregiver invitation
+ */
+export async function revokeCaregiverInvitation(id: string): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/invitations/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to revoke invitation: ${response.status}`
+    );
+  }
+}
+
+/**
+ * Get public invitation details (no auth required)
+ */
+export async function getInvitationDetails(
+  token: string
+): Promise<InvitationDetail> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/invitations/${encodeURIComponent(token)}/details`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch invitation details: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Accept a caregiver invitation (no auth required)
+ */
+export async function acceptCaregiverInvitation(
+  token: string,
+  email: string,
+  password: string
+): Promise<AcceptInvitationResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/caregivers/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, email, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to accept invitation: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * List linked patients for the current caregiver
+ */
+export async function listLinkedPatients(): Promise<LinkedPatientsListResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/caregivers/patients`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to list linked patients: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
