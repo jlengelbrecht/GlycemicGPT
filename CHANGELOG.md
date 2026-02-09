@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.18](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.17...v0.1.18) (2026-02-09)
+
+
+### ✨ Features
+
+* add AI insight card and unified insights feed (Story 5.7) ([#44](https://github.com/jlengelbrecht/GlycemicGPT/issues/44)) ([1509fa2](https://github.com/jlengelbrecht/GlycemicGPT/commit/1509fa21eb39dfcb7c04b2e9f093b39674dd809b))
+
 ## [0.1.17](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.16...v0.1.17) (2026-02-08)
 
 
