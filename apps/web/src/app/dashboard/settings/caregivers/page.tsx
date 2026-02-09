@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Story 8.1: Caregiver Invitation Management
+ * Stories 8.1 & 8.2: Caregiver Invitation Management & Permissions
  *
  * Allows diabetic users to create, view, and revoke caregiver invitations.
- * Each invitation generates a shareable link that caregivers use to register.
+ * Also shows linked caregivers with a link to manage their data permissions.
  */
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   UserPlus,
   Plus,
@@ -20,13 +21,17 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  Shield,
+  Settings2,
 } from "lucide-react";
 import clsx from "clsx";
 import {
   listCaregiverInvitations,
   createCaregiverInvitation,
   revokeCaregiverInvitation,
+  listLinkedCaregivers,
   type CaregiverInvitationListItem,
+  type LinkedCaregiverItem,
 } from "@/lib/api";
 
 const STATUS_CONFIG: Record<
@@ -66,6 +71,7 @@ export default function CaregiversPage() {
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
+  const [linkedCaregivers, setLinkedCaregivers] = useState<LinkedCaregiverItem[]>([]);
 
   const fetchInvitations = useCallback(async () => {
     try {
@@ -85,9 +91,22 @@ export default function CaregiversPage() {
     }
   }, []);
 
+  const fetchLinkedCaregivers = useCallback(async () => {
+    try {
+      const data = await listLinkedCaregivers();
+      setLinkedCaregivers(data.caregivers);
+    } catch (err) {
+      // Non-auth errors are surfaced; 401/fetch failures are expected when API is down
+      if (err instanceof Error && !err.message.includes("401")) {
+        console.error("Failed to load linked caregivers:", err.message);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     fetchInvitations();
-  }, [fetchInvitations]);
+    fetchLinkedCaregivers();
+  }, [fetchInvitations, fetchLinkedCaregivers]);
 
   const handleCreate = async () => {
     setIsCreating(true);
@@ -349,6 +368,64 @@ export default function CaregiversPage() {
               Maximum of 10 pending invitations reached
             </p>
           )}
+        </div>
+      )}
+
+      {/* Linked Caregivers section (Story 8.2) */}
+      {linkedCaregivers.length > 0 && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-green-500/10 rounded-lg">
+              <Shield className="h-5 w-5 text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Linked Caregivers</h2>
+              <p className="text-xs text-slate-500">
+                {linkedCaregivers.length} caregiver{linkedCaregivers.length !== 1 ? "s" : ""} linked
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {linkedCaregivers.map((cg) => {
+              const permCount = [
+                cg.permissions.can_view_glucose,
+                cg.permissions.can_view_history,
+                cg.permissions.can_view_iob,
+                cg.permissions.can_view_ai_suggestions,
+                cg.permissions.can_receive_alerts,
+              ].filter(Boolean).length;
+
+              return (
+                <div
+                  key={cg.link_id}
+                  className="flex items-center justify-between bg-slate-800/50 rounded-lg p-4 border border-slate-700/50"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-200 truncate">
+                      {cg.caregiver_email}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Linked {new Date(cg.linked_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {" "}&middot;{" "}
+                      {permCount}/5 permissions enabled
+                    </p>
+                  </div>
+                  <Link
+                    href={`/dashboard/settings/caregivers/${cg.link_id}/permissions`}
+                    className="shrink-0 ml-3 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Permissions
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

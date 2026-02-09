@@ -1,7 +1,8 @@
-"""Story 8.1: Caregiver invitation and linking router.
+"""Stories 8.1 & 8.2: Caregiver invitation, linking, and permissions router.
 
-Endpoints for creating/managing invitations (diabetic users) and
-accepting invitations (unauthenticated caregivers).
+Endpoints for creating/managing invitations (diabetic users),
+accepting invitations (unauthenticated caregivers), and
+configuring per-caregiver data access permissions.
 """
 
 import os
@@ -25,13 +26,23 @@ from src.schemas.caregiver import (
     LinkedPatientResponse,
     LinkedPatientsListResponse,
 )
+from src.schemas.caregiver_permissions import (
+    CaregiverPermissions,
+    LinkedCaregiverItem,
+    LinkedCaregiversResponse,
+    PermissionsUpdateRequest,
+    PermissionsUpdateResponse,
+)
 from src.services.caregiver import (
     accept_invitation,
     create_invitation,
     get_invitation_by_token,
+    get_link_permissions,
+    get_linked_caregivers,
     get_linked_patients,
     list_invitations,
     revoke_invitation,
+    update_link_permissions,
 )
 
 router = APIRouter(prefix="/api/caregivers", tags=["caregivers"])
@@ -249,3 +260,116 @@ async def list_linked_patients(
     ]
 
     return LinkedPatientsListResponse(patients=patients, count=len(patients))
+
+
+# ── Story 8.2: Caregiver permission endpoints ──
+
+
+@router.get(
+    "/linked",
+    response_model=LinkedCaregiversResponse,
+    dependencies=[Depends(require_diabetic)],
+)
+async def list_linked_caregivers_endpoint(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> LinkedCaregiversResponse:
+    """List all caregivers linked to the current patient, with permissions."""
+    links = await get_linked_caregivers(db, current_user.id)
+
+    caregivers = [
+        LinkedCaregiverItem(
+            link_id=link.id,
+            caregiver_id=link.caregiver_id,
+            caregiver_email=link.caregiver.email if link.caregiver else "Unknown",
+            linked_at=link.created_at,
+            permissions=CaregiverPermissions(
+                can_view_glucose=link.can_view_glucose,
+                can_view_history=link.can_view_history,
+                can_view_iob=link.can_view_iob,
+                can_view_ai_suggestions=link.can_view_ai_suggestions,
+                can_receive_alerts=link.can_receive_alerts,
+            ),
+        )
+        for link in links
+    ]
+
+    return LinkedCaregiversResponse(caregivers=caregivers, count=len(caregivers))
+
+
+@router.get(
+    "/linked/{link_id}/permissions",
+    response_model=PermissionsUpdateResponse,
+    dependencies=[Depends(require_diabetic)],
+)
+async def get_caregiver_permissions_endpoint(
+    link_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> PermissionsUpdateResponse:
+    """Get permissions for a specific caregiver link."""
+    link = await get_link_permissions(db, current_user.id, link_id)
+
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Caregiver link not found",
+        )
+
+    return PermissionsUpdateResponse(
+        link_id=link.id,
+        permissions=CaregiverPermissions(
+            can_view_glucose=link.can_view_glucose,
+            can_view_history=link.can_view_history,
+            can_view_iob=link.can_view_iob,
+            can_view_ai_suggestions=link.can_view_ai_suggestions,
+            can_receive_alerts=link.can_receive_alerts,
+        ),
+    )
+
+
+@router.patch(
+    "/linked/{link_id}/permissions",
+    response_model=PermissionsUpdateResponse,
+    dependencies=[Depends(require_diabetic)],
+)
+async def update_caregiver_permissions_endpoint(
+    link_id: uuid.UUID,
+    data: PermissionsUpdateRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> PermissionsUpdateResponse:
+    """Update permissions for a specific caregiver link.
+
+    Only provided fields are updated; omitted fields remain unchanged.
+    Changes take effect immediately.
+    """
+    updates = data.model_dump(exclude_unset=True)
+
+    if not updates:
+        # No fields provided — just return current state
+        link = await get_link_permissions(db, current_user.id, link_id)
+        if link is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Caregiver link not found",
+            )
+    else:
+        link = await update_link_permissions(db, current_user.id, link_id, **updates)
+
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Caregiver link not found",
+        )
+
+    return PermissionsUpdateResponse(
+        link_id=link.id,
+        permissions=CaregiverPermissions(
+            can_view_glucose=link.can_view_glucose,
+            can_view_history=link.can_view_history,
+            can_view_iob=link.can_view_iob,
+            can_view_ai_suggestions=link.can_view_ai_suggestions,
+            can_receive_alerts=link.can_receive_alerts,
+        ),
+    )
