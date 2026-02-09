@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.33](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.32...v0.1.33) (2026-02-09)
+
+
+### ✨ Features
+
+* add caregiver data access permission management (Story 8.2) ([#80](https://github.com/jlengelbrecht/GlycemicGPT/issues/80)) ([8813c3c](https://github.com/jlengelbrecht/GlycemicGPT/commit/8813c3ceca7aa572890f1808a139123d03e5eb48))
+
 ## [0.1.32](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.31...v0.1.32) (2026-02-09)
 
 
