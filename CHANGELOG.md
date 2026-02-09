@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.19](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.18...v0.1.19) (2026-02-09)
+
+
+### ✨ Features
+
+* add AI reasoning display and audit logging (Story 5.8) ([#46](https://github.com/jlengelbrecht/GlycemicGPT/issues/46)) ([a3b32b3](https://github.com/jlengelbrecht/GlycemicGPT/commit/a3b32b38ca149fa582e0f92ea490cc08e43a796e))
+
 ## [0.1.18](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.17...v0.1.18) (2026-02-09)
 
 
