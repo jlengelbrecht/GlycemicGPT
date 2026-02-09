@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.22](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.21...v0.1.22) (2026-02-09)
+
+
+### ✨ Features
+
+* add tiered alert delivery with real-time notifications (Story 6.3) ([#52](https://github.com/jlengelbrecht/GlycemicGPT/issues/52)) ([a83e945](https://github.com/jlengelbrecht/GlycemicGPT/commit/a83e945ec88ac8ddd05f245ac5d4ca736351178e))
+
 ## [0.1.21](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.20...v0.1.21) (2026-02-09)
 
 
