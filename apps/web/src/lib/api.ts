@@ -556,3 +556,47 @@ export async function updateEscalationConfig(
 
   return response.json();
 }
+
+/**
+ * Escalation Event types (Story 6.7)
+ */
+export interface EscalationEvent {
+  id: string;
+  alert_id: string;
+  tier: string;
+  triggered_at: string;
+  message_content: string;
+  notification_status: string;
+  contacts_notified: string[];
+  created_at: string;
+}
+
+export interface EscalationTimelineResponse {
+  alert_id: string;
+  events: EscalationEvent[];
+  count: number;
+}
+
+/**
+ * Get escalation timeline for a specific alert
+ */
+export async function getAlertEscalationTimeline(
+  alertId: string
+): Promise<EscalationTimelineResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/escalation/alerts/${encodeURIComponent(alertId)}/timeline`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to fetch escalation timeline: ${response.status}`
+    );
+  }
+
+  return response.json();
+}

@@ -21,6 +21,7 @@ import {
   formatTimeAgo,
   formatCountdown,
 } from "@/lib/alert-utils";
+import { EscalationTimeline } from "./escalation-timeline";
 
 export interface AlertCardProps {
   alert: PredictiveAlert;
@@ -173,6 +174,10 @@ export function AlertCard({
         )}
         {isAcknowledging ? "Acknowledging..." : "Acknowledge"}
       </button>
+
+      {/* Escalation timeline for critical alerts (Story 6.7) */}
+      {(alert.severity === "urgent" || alert.severity === "emergency") &&
+        !alert.acknowledged && <EscalationTimeline alertId={alert.id} />}
     </div>
   );
 }
