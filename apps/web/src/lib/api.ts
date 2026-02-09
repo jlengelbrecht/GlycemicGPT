@@ -872,3 +872,98 @@ export async function listLinkedPatients(): Promise<LinkedPatientsListResponse> 
 
   return response.json();
 }
+
+/**
+ * Caregiver Permissions API types (Story 8.2)
+ */
+export interface CaregiverPermissions {
+  can_view_glucose: boolean;
+  can_view_history: boolean;
+  can_view_iob: boolean;
+  can_view_ai_suggestions: boolean;
+  can_receive_alerts: boolean;
+}
+
+export interface LinkedCaregiverItem {
+  link_id: string;
+  caregiver_id: string;
+  caregiver_email: string;
+  linked_at: string;
+  permissions: CaregiverPermissions;
+}
+
+export interface LinkedCaregiversResponse {
+  caregivers: LinkedCaregiverItem[];
+  count: number;
+}
+
+export interface PermissionsUpdateResponse {
+  link_id: string;
+  permissions: CaregiverPermissions;
+}
+
+/**
+ * List all caregivers linked to the current patient, with permissions
+ */
+export async function listLinkedCaregivers(): Promise<LinkedCaregiversResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/caregivers/linked`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to list linked caregivers: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Get permissions for a specific caregiver link
+ */
+export async function getCaregiverPermissions(
+  linkId: string
+): Promise<PermissionsUpdateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/linked/${encodeURIComponent(linkId)}/permissions`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch caregiver permissions: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update permissions for a specific caregiver link
+ */
+export async function updateCaregiverPermissions(
+  linkId: string,
+  permissions: Partial<CaregiverPermissions>
+): Promise<PermissionsUpdateResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/linked/${encodeURIComponent(linkId)}/permissions`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(permissions),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to update caregiver permissions: ${response.status}`
+    );
+  }
+
+  return response.json();
+}

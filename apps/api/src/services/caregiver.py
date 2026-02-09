@@ -1,6 +1,10 @@
-"""Story 8.1: Caregiver invitation and linking service.
+"""Stories 8.1 & 8.2: Caregiver invitation, linking, and permission service.
 
-Handles invitation creation, acceptance, and caregiver-patient linking.
+Handles invitation creation, acceptance, caregiver-patient linking,
+and per-caregiver data access permission management.
+
+Note: Permission enforcement in data-access paths (Telegram caregiver
+handler, escalation engine) is implemented in stories 8.3-8.6.
 """
 
 import uuid
@@ -318,6 +322,151 @@ async def get_linked_patients(
         .order_by(CaregiverLink.created_at)
     )
     return list(result.scalars().all())
+
+
+# ── Story 8.2: Permission management ──
+
+# Valid permission field names on CaregiverLink
+PERMISSION_FIELDS = frozenset(
+    {
+        "can_view_glucose",
+        "can_view_history",
+        "can_view_iob",
+        "can_view_ai_suggestions",
+        "can_receive_alerts",
+    }
+)
+
+
+async def get_linked_caregivers(
+    db: AsyncSession,
+    patient_id: uuid.UUID,
+) -> list[CaregiverLink]:
+    """Get all caregivers linked to a patient.
+
+    Eagerly loads the caregiver relationship for email access.
+    """
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(CaregiverLink)
+        .where(CaregiverLink.patient_id == patient_id)
+        .options(selectinload(CaregiverLink.caregiver))
+        .order_by(CaregiverLink.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_link_permissions(
+    db: AsyncSession,
+    patient_id: uuid.UUID,
+    link_id: uuid.UUID,
+) -> CaregiverLink | None:
+    """Get a single CaregiverLink by ID, verifying patient ownership.
+
+    Returns None if not found or not owned by this patient.
+    """
+    result = await db.execute(
+        select(CaregiverLink).where(
+            and_(
+                CaregiverLink.id == link_id,
+                CaregiverLink.patient_id == patient_id,
+            )
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def update_link_permissions(
+    db: AsyncSession,
+    patient_id: uuid.UUID,
+    link_id: uuid.UUID,
+    **kwargs: bool,
+) -> CaregiverLink | None:
+    """Update permission flags on a CaregiverLink.
+
+    Only valid permission field names are applied. Returns None
+    if the link is not found or not owned by this patient.
+    """
+    link = await get_link_permissions(db, patient_id, link_id)
+    if link is None:
+        return None
+
+    changed = False
+    for field, value in kwargs.items():
+        if field in PERMISSION_FIELDS and value is not None:
+            if not isinstance(value, bool):
+                logger.warning(
+                    "Non-boolean permission value ignored",
+                    field=field,
+                    value_type=type(value).__name__,
+                )
+                continue
+            setattr(link, field, value)
+            changed = True
+
+    if changed:
+        await db.commit()
+        await db.refresh(link)
+
+        logger.info(
+            "Updated caregiver permissions",
+            link_id=str(link_id),
+            patient_id=str(patient_id),
+            caregiver_id=str(link.caregiver_id),
+            changes={
+                k: v
+                for k, v in kwargs.items()
+                if k in PERMISSION_FIELDS and v is not None
+            },
+        )
+
+    return link
+
+
+async def check_caregiver_permission(
+    db: AsyncSession,
+    caregiver_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    permission: str,
+) -> bool:
+    """Check whether a caregiver has a specific permission for a patient.
+
+    This function is called by stories 8.3-8.6 to enforce data access
+    permissions in Telegram caregiver handler and escalation engine.
+
+    Args:
+        db: Database session.
+        caregiver_id: The caregiver's user ID.
+        patient_id: The patient's user ID.
+        permission: One of the PERMISSION_FIELDS values.
+
+    Returns:
+        True if the permission is granted, False otherwise.
+    """
+    if permission not in PERMISSION_FIELDS:
+        logger.warning(
+            "Invalid permission name requested",
+            permission=permission,
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+        )
+        return False
+
+    result = await db.execute(
+        select(CaregiverLink).where(
+            and_(
+                CaregiverLink.caregiver_id == caregiver_id,
+                CaregiverLink.patient_id == patient_id,
+            )
+        )
+    )
+    link = result.scalar_one_or_none()
+
+    if link is None:
+        return False
+
+    return bool(getattr(link, permission, False))
 
 
 async def _expire_stale_invitations_for_patient(
