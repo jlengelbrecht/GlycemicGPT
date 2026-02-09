@@ -115,36 +115,40 @@ class TestHandleCaregiverStatus:
 
     @pytest.mark.asyncio
     @patch("src.services.telegram_commands._handle_status", new_callable=AsyncMock)
-    async def test_single_patient_shows_patient_label(self, mock_status):
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_single_patient_shows_patient_label(self, mock_perm, mock_status):
+        mock_perm.return_value = True
         mock_status.return_value = "120 mg/dL"
         patient = make_user(email="alice@example.com")
-        link = make_link(patient=patient)
+        caregiver_id = uuid.uuid4()
+        link = make_link(caregiver_id=caregiver_id, patient=patient)
 
-        result = await _handle_caregiver_status(AsyncMock(), [link])
+        result = await _handle_caregiver_status(AsyncMock(), caregiver_id, [link])
 
         assert "alice@example.com" in result
         assert "120 mg/dL" in result
         assert "Patient" in result
 
     @pytest.mark.asyncio
-    async def test_multiple_patients_lists_all(self):
+    @patch(
+        "src.services.dexcom_sync.get_latest_glucose_reading", new_callable=AsyncMock
+    )
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_multiple_patients_lists_all(self, mock_perm, mock_glucose):
+        mock_perm.return_value = True
         patient1 = make_user(email="alice@example.com")
         patient2 = make_user(email="bob@example.com")
-        link1 = make_link(patient=patient1)
-        link2 = make_link(patient=patient2)
+        caregiver_id = uuid.uuid4()
+        link1 = make_link(caregiver_id=caregiver_id, patient=patient1)
+        link2 = make_link(caregiver_id=caregiver_id, patient=patient2)
 
-        # Mock DB for each patient's latest reading
         reading1 = make_reading(value=110)
         reading2 = make_reading(value=200)
+        mock_glucose.side_effect = [reading1, reading2]
 
         db = AsyncMock()
-        mock_result1 = MagicMock()
-        mock_result1.scalar_one_or_none.return_value = reading1
-        mock_result2 = MagicMock()
-        mock_result2.scalar_one_or_none.return_value = reading2
-        db.execute.side_effect = [mock_result1, mock_result2]
 
-        result = await _handle_caregiver_status(db, [link1, link2])
+        result = await _handle_caregiver_status(db, caregiver_id, [link1, link2])
 
         assert "alice@example.com" in result
         assert "bob@example.com" in result
@@ -153,16 +157,22 @@ class TestHandleCaregiverStatus:
         assert "Linked Patients" in result
 
     @pytest.mark.asyncio
-    async def test_multiple_patients_no_data(self):
+    @patch(
+        "src.services.dexcom_sync.get_latest_glucose_reading", new_callable=AsyncMock
+    )
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_multiple_patients_no_data(self, mock_perm, mock_glucose):
+        mock_perm.return_value = True
+        mock_glucose.return_value = None
         patient = make_user(email="empty@example.com")
-        link = make_link(patient=patient)
+        caregiver_id = uuid.uuid4()
+        link = make_link(caregiver_id=caregiver_id, patient=patient)
 
         db = AsyncMock()
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        db.execute.return_value = mock_result
 
-        result = await _handle_caregiver_status(db, [link, make_link()])
+        result = await _handle_caregiver_status(
+            db, caregiver_id, [link, make_link(caregiver_id=caregiver_id)]
+        )
 
         assert "No data available" in result
 
@@ -178,7 +188,9 @@ class TestHandleCaregiverChat:
         "src.services.telegram_chat.handle_caregiver_chat",
         new_callable=AsyncMock,
     )
-    async def test_single_patient_routes_to_chat(self, mock_chat):
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_single_patient_routes_to_chat(self, mock_perm, mock_chat):
+        mock_perm.return_value = True
         mock_chat.return_value = "AI response"
         caregiver_id = uuid.uuid4()
         link = make_link(caregiver_id=caregiver_id)
@@ -212,7 +224,9 @@ class TestHandleCaregiverChat:
         "src.services.telegram_chat.handle_caregiver_chat",
         new_callable=AsyncMock,
     )
-    async def test_multiple_patients_name_match(self, mock_chat):
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_multiple_patients_name_match(self, mock_perm, mock_chat):
+        mock_perm.return_value = True
         mock_chat.return_value = "AI response about Alice"
         patient1 = make_user(email="alice@example.com")
         patient2 = make_user(email="bob@example.com")
@@ -231,10 +245,12 @@ class TestHandleCaregiverChat:
         assert call_args[0][2] == patient1.id
 
     @pytest.mark.asyncio
-    async def test_import_error_returns_unavailable(self):
+    @patch("src.services.caregiver.check_caregiver_permission", new_callable=AsyncMock)
+    async def test_import_error_returns_unavailable(self, mock_perm):
         """ImportError for telegram_chat is caught gracefully."""
         import builtins
 
+        mock_perm.return_value = True
         link = make_link()
         original_import = builtins.__import__
 

@@ -1,19 +1,31 @@
+"use client";
+
 /**
  * Settings Page
  *
  * Story 4.1: Dashboard Layout & Navigation
- * Placeholder page for settings - will be expanded in Epic 9.
+ * Story 8.3: Role-aware settings — caregivers only see Profile & Telegram.
  */
 
 import Link from "next/link";
 import { Settings, User, Bell, Database, Link2, Users, MessageCircle, UserPlus } from "lucide-react";
+import { useUserContext } from "@/providers";
 
-const settingsSections = [
+interface SettingsSection {
+  title: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  caregiverVisible?: boolean;
+}
+
+const settingsSections: SettingsSection[] = [
   {
     title: "Profile",
     description: "Manage your account and personal information",
     icon: User,
     href: "/dashboard/settings/profile",
+    caregiverVisible: true,
   },
   {
     title: "Integrations",
@@ -44,6 +56,7 @@ const settingsSections = [
     description: "Link your Telegram account for alert notifications",
     icon: MessageCircle,
     href: "/dashboard/settings/telegram",
+    caregiverVisible: true,
   },
   {
     title: "Data",
@@ -54,6 +67,12 @@ const settingsSections = [
 ];
 
 export default function SettingsPage() {
+  const { user } = useUserContext();
+  const isCaregiver = user?.role === "caregiver";
+  const visibleSections = isCaregiver
+    ? settingsSections.filter((s) => s.caregiverVisible)
+    : settingsSections;
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -64,7 +83,7 @@ export default function SettingsPage() {
 
       {/* Settings sections grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {settingsSections.map((section) => (
+        {visibleSections.map((section) => (
           <Link
             key={section.title}
             href={section.href}

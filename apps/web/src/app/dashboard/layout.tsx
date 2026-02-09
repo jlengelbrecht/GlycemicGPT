@@ -14,7 +14,7 @@
  */
 
 import { DashboardLayout } from "@/components/layout";
-import { AlertNotificationProvider } from "@/providers";
+import { AlertNotificationProvider, UserProvider } from "@/providers";
 
 /**
  * Skip link component for keyboard navigation.
@@ -35,9 +35,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <SkipLink />
-      <AlertNotificationProvider>
-        <DashboardLayout>{children}</DashboardLayout>
-      </AlertNotificationProvider>
+      <UserProvider>
+        <AlertNotificationProvider>
+          <DashboardLayout>{children}</DashboardLayout>
+        </AlertNotificationProvider>
+      </UserProvider>
     </>
   );
 }

@@ -18,3 +18,5 @@ export {
   type AlertNotificationContextValue,
   type AlertPreferences,
 } from "./alert-notification-provider";
+
+export { UserProvider, useUserContext } from "./user-provider";
