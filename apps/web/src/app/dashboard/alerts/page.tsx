@@ -5,9 +5,11 @@
  *
  * Story 6.1: Alert Threshold Configuration
  * Story 6.2: Predictive Alert Engine - Active alerts display
+ * Story 6.3: Notification Preferences
  *
  * Allows users to configure glucose and IoB alert thresholds,
- * and view active predictive alerts with acknowledgment.
+ * view active predictive alerts with acknowledgment, and
+ * manage notification preferences (sound, browser notifications).
  *
  * Accessibility: labeled inputs, error alerts, keyboard navigation.
  */
@@ -25,6 +27,8 @@ import {
   TrendingDown,
   TrendingUp,
   Syringe,
+  Volume2,
+  BellRing,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -35,6 +39,8 @@ import {
   type AlertThresholdUpdate,
   type PredictiveAlert,
 } from "@/lib/api";
+import { useAlertNotifications } from "@/providers";
+import { requestNotificationPermission } from "@/lib/browser-notifications";
 
 const DEFAULTS = {
   low_warning: 70,
@@ -164,6 +170,9 @@ export default function AlertsPage() {
   const [activeAlerts, setActiveAlerts] = useState<PredictiveAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+
+  // Story 6.3: Notification preferences
+  const { preferences, setPreferences } = useAlertNotifications();
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -616,6 +625,89 @@ export default function AlertsPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Story 6.3: Notification Preferences */}
+      <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-blue-500/10 rounded-lg">
+            <BellRing className="h-5 w-5 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Notification Preferences</h2>
+            <p className="text-xs text-slate-500">
+              Control how you receive alert notifications
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {/* Sound toggle */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              id="pref-sound"
+              type="checkbox"
+              checked={preferences.soundEnabled}
+              onChange={(e) =>
+                setPreferences({
+                  ...preferences,
+                  soundEnabled: e.target.checked,
+                })
+              }
+              className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              aria-describedby="pref-sound-desc"
+            />
+            <Volume2
+              className="h-4 w-4 text-slate-400 group-hover:text-slate-300"
+              aria-hidden="true"
+            />
+            <div>
+              <span className="text-sm text-slate-300 group-hover:text-slate-200">
+                Alert sounds
+              </span>
+              <p id="pref-sound-desc" className="text-xs text-slate-500">
+                Play audio tones when alerts are received
+              </p>
+            </div>
+          </label>
+
+          {/* Browser notifications toggle */}
+          <label className="flex items-center gap-3 cursor-pointer group">
+            <input
+              id="pref-browser-notif"
+              type="checkbox"
+              checked={preferences.browserNotificationsEnabled}
+              onChange={async (e) => {
+                if (e.target.checked) {
+                  const permission = await requestNotificationPermission();
+                  setPreferences({
+                    ...preferences,
+                    browserNotificationsEnabled: permission === "granted",
+                  });
+                } else {
+                  setPreferences({
+                    ...preferences,
+                    browserNotificationsEnabled: false,
+                  });
+                }
+              }}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+              aria-describedby="pref-browser-notif-desc"
+            />
+            <Bell
+              className="h-4 w-4 text-slate-400 group-hover:text-slate-300"
+              aria-hidden="true"
+            />
+            <div>
+              <span className="text-sm text-slate-300 group-hover:text-slate-200">
+                Browser notifications
+              </span>
+              <p id="pref-browser-notif-desc" className="text-xs text-slate-500">
+                Show OS-level notifications for urgent and emergency alerts
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );
