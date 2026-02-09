@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.29](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.28...v0.1.29) (2026-02-09)
+
+
+### ✨ Features
+
+* **api:** deliver daily briefs via Telegram (Story 7.3) ([#66](https://github.com/jlengelbrecht/GlycemicGPT/issues/66)) ([bfe5622](https://github.com/jlengelbrecht/GlycemicGPT/commit/bfe5622f2e347414dd4de7d8bec69de34b9ad33e))
+
 ## [0.1.28](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.27...v0.1.28) (2026-02-09)
 
 
