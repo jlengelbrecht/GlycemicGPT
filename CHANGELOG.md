@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.25](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.24...v0.1.25) (2026-02-09)
+
+
+### ✨ Features
+
+* add escalation timing configuration (Story 6.6) ([#58](https://github.com/jlengelbrecht/GlycemicGPT/issues/58)) ([a029bf9](https://github.com/jlengelbrecht/GlycemicGPT/commit/a029bf9b6f765afe4c758f9216dcccee9098ef28))
+
 ## [0.1.24](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.23...v0.1.24) (2026-02-09)
 
 
