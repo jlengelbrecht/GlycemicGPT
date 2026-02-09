@@ -368,3 +368,127 @@ export async function acknowledgeAlert(
 
   return response.json();
 }
+
+/**
+ * Emergency Contact API types (Story 6.5)
+ */
+export interface EmergencyContact {
+  id: string;
+  name: string;
+  telegram_username: string;
+  priority: "primary" | "secondary";
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmergencyContactListResponse {
+  contacts: EmergencyContact[];
+  count: number;
+}
+
+export interface EmergencyContactCreate {
+  name: string;
+  telegram_username: string;
+  priority: "primary" | "secondary";
+}
+
+export interface EmergencyContactUpdate {
+  name?: string;
+  telegram_username?: string;
+  priority?: "primary" | "secondary";
+}
+
+/**
+ * Fetch all emergency contacts
+ */
+export async function getEmergencyContacts(): Promise<EmergencyContactListResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/emergency-contacts`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch emergency contacts: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Create a new emergency contact
+ */
+export async function createEmergencyContact(
+  data: EmergencyContactCreate
+): Promise<EmergencyContact> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/emergency-contacts`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to create emergency contact: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update an existing emergency contact
+ */
+export async function updateEmergencyContact(
+  contactId: string,
+  data: EmergencyContactUpdate
+): Promise<EmergencyContact> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/emergency-contacts/${encodeURIComponent(contactId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to update emergency contact: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete an emergency contact
+ */
+export async function deleteEmergencyContact(
+  contactId: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/emergency-contacts/${encodeURIComponent(contactId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to delete emergency contact: ${response.status}`
+    );
+  }
+}

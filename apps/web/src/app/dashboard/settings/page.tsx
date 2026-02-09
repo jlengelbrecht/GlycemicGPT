@@ -5,7 +5,7 @@
  * Placeholder page for settings - will be expanded in Epic 9.
  */
 
-import { Settings, User, Bell, Database, Link2 } from "lucide-react";
+import { Settings, User, Bell, Database, Link2, Users } from "lucide-react";
 
 const settingsSections = [
   {
@@ -25,6 +25,12 @@ const settingsSections = [
     description: "Configure alert thresholds and escalation",
     icon: Bell,
     href: "/dashboard/settings/alerts",
+  },
+  {
+    title: "Emergency Contacts",
+    description: "Manage contacts for alert escalation via Telegram",
+    icon: Users,
+    href: "/dashboard/settings/emergency-contacts",
   },
   {
     title: "Data",
