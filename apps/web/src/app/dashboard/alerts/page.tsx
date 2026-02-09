@@ -6,10 +6,12 @@
  * Story 6.1: Alert Threshold Configuration
  * Story 6.2: Predictive Alert Engine - Active alerts display
  * Story 6.3: Notification Preferences
+ * Story 6.6: Escalation Timing Configuration
  *
  * Allows users to configure glucose and IoB alert thresholds,
- * view active predictive alerts with acknowledgment, and
- * manage notification preferences (sound, browser notifications).
+ * view active predictive alerts with acknowledgment,
+ * manage notification preferences (sound, browser notifications),
+ * and configure escalation timing for emergency contacts.
  *
  * Accessibility: labeled inputs, error alerts, keyboard navigation.
  */
@@ -24,6 +26,7 @@ import {
   Check,
   Volume2,
   BellRing,
+  Clock,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -31,8 +34,11 @@ import {
   updateAlertThresholds,
   getActiveAlerts,
   acknowledgeAlert,
+  getEscalationConfig,
+  updateEscalationConfig,
   type AlertThresholdUpdate,
   type PredictiveAlert,
+  type EscalationConfigUpdate,
 } from "@/lib/api";
 import { useAlertNotifications } from "@/providers";
 import { requestNotificationPermission } from "@/lib/browser-notifications";
@@ -110,6 +116,12 @@ const THRESHOLD_FIELDS: ThresholdFieldConfig[] = [
   },
 ];
 
+const ESCALATION_DEFAULTS = {
+  reminder_delay_minutes: 5,
+  primary_contact_delay_minutes: 10,
+  all_contacts_delay_minutes: 20,
+};
+
 export default function AlertsPage() {
   const [formValues, setFormValues] = useState<AlertThresholdUpdate>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -123,6 +135,15 @@ export default function AlertsPage() {
 
   // Story 6.3: Notification preferences
   const { preferences, setPreferences } = useAlertNotifications();
+
+  // Story 6.6: Escalation timing
+  const [escalationValues, setEscalationValues] =
+    useState<EscalationConfigUpdate>({});
+  const [escalationLoading, setEscalationLoading] = useState(true);
+  const [escalationSaving, setEscalationSaving] = useState(false);
+  const [escalationError, setEscalationError] = useState<string | null>(null);
+  const [escalationSuccess, setEscalationSuccess] = useState(false);
+  const [escalationHasChanges, setEscalationHasChanges] = useState(false);
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -174,14 +195,132 @@ export default function AlertsPage() {
     }
   }, []);
 
+  const fetchEscalationConfig = useCallback(async () => {
+    try {
+      const data = await getEscalationConfig();
+      setEscalationValues({
+        reminder_delay_minutes: data.reminder_delay_minutes,
+        primary_contact_delay_minutes: data.primary_contact_delay_minutes,
+        all_contacts_delay_minutes: data.all_contacts_delay_minutes,
+      });
+      setEscalationHasChanges(false);
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes("401"))) {
+        setEscalationError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load escalation config"
+        );
+      }
+      setEscalationValues({ ...ESCALATION_DEFAULTS });
+    } finally {
+      setEscalationLoading(false);
+    }
+  }, []);
+
+  const handleEscalationChange = (
+    key: keyof EscalationConfigUpdate,
+    value: string
+  ) => {
+    if (value === "") {
+      setEscalationValues((prev) => ({ ...prev, [key]: undefined }));
+      setEscalationHasChanges(true);
+      setEscalationSuccess(false);
+      setEscalationError(null);
+      return;
+    }
+
+    const numValue = parseInt(value, 10);
+    if (isNaN(numValue)) return;
+
+    setEscalationValues((prev) => ({ ...prev, [key]: numValue }));
+    setEscalationHasChanges(true);
+    setEscalationSuccess(false);
+    setEscalationError(null);
+  };
+
+  const handleEscalationSave = async () => {
+    setEscalationSuccess(false);
+
+    const r =
+      escalationValues.reminder_delay_minutes ??
+      ESCALATION_DEFAULTS.reminder_delay_minutes;
+    const p =
+      escalationValues.primary_contact_delay_minutes ??
+      ESCALATION_DEFAULTS.primary_contact_delay_minutes;
+    const a =
+      escalationValues.all_contacts_delay_minutes ??
+      ESCALATION_DEFAULTS.all_contacts_delay_minutes;
+
+    // Validate bounds
+    if (r < 2 || r > 60) {
+      setEscalationError("First Reminder must be between 2 and 60 minutes");
+      return;
+    }
+    if (p < 2 || p > 120) {
+      setEscalationError(
+        "Primary Contact Alert must be between 2 and 120 minutes"
+      );
+      return;
+    }
+    if (a < 2 || a > 240) {
+      setEscalationError(
+        "All Contacts Alert must be between 2 and 240 minutes"
+      );
+      return;
+    }
+
+    // Validate tier ordering
+    if (r >= p) {
+      setEscalationError(
+        `Reminder (${r} min) must be less than Primary Contact (${p} min)`
+      );
+      return;
+    }
+    if (p >= a) {
+      setEscalationError(
+        `Primary Contact (${p} min) must be less than All Contacts (${a} min)`
+      );
+      return;
+    }
+
+    setEscalationSaving(true);
+    setEscalationError(null);
+
+    try {
+      const data = await updateEscalationConfig(escalationValues);
+      setEscalationValues({
+        reminder_delay_minutes: data.reminder_delay_minutes,
+        primary_contact_delay_minutes: data.primary_contact_delay_minutes,
+        all_contacts_delay_minutes: data.all_contacts_delay_minutes,
+      });
+      setEscalationHasChanges(false);
+      setEscalationSuccess(true);
+    } catch (err) {
+      setEscalationError(
+        err instanceof Error ? err.message : "Failed to save escalation config"
+      );
+    } finally {
+      setEscalationSaving(false);
+    }
+  };
+
+  const handleEscalationReset = () => {
+    setEscalationValues({ ...ESCALATION_DEFAULTS });
+    setEscalationHasChanges(true);
+    setEscalationSuccess(false);
+    setEscalationError(null);
+  };
+
   useEffect(() => {
     fetchThresholds();
+    fetchEscalationConfig();
     fetchAlerts();
 
     // Poll for new alerts every 60 seconds
     const interval = setInterval(fetchAlerts, 60000);
     return () => clearInterval(interval);
-  }, [fetchThresholds, fetchAlerts]);
+  }, [fetchThresholds, fetchEscalationConfig, fetchAlerts]);
 
   const handleChange = (key: keyof AlertThresholdUpdate, value: string) => {
     const numValue = parseFloat(value);
@@ -589,6 +728,227 @@ export default function AlertsPage() {
           </label>
         </div>
       </div>
+
+      {/* Story 6.6: Escalation Timing */}
+      {escalationLoading && (
+        <div
+          className="bg-slate-900 rounded-xl p-12 border border-slate-800 text-center"
+          role="status"
+          aria-label="Loading escalation timing"
+        >
+          <Loader2 className="h-8 w-8 text-blue-400 animate-spin mx-auto mb-3" />
+          <p className="text-slate-400">Loading escalation timing...</p>
+        </div>
+      )}
+      {!escalationLoading && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-500/10 rounded-lg">
+              <Clock className="h-5 w-5 text-orange-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Escalation Timing</h2>
+              <p className="text-xs text-slate-500">
+                Configure how long before alerts escalate to emergency contacts
+              </p>
+            </div>
+          </div>
+
+          {escalationError && (
+            <div
+              className="bg-red-500/10 rounded-lg p-3 border border-red-500/20 mb-4"
+              role="alert"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                <p className="text-sm text-red-400">{escalationError}</p>
+              </div>
+            </div>
+          )}
+
+          {escalationSuccess && (
+            <div
+              className="bg-green-500/10 rounded-lg p-3 border border-green-500/20 mb-4"
+              role="status"
+            >
+              <div className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-green-400 shrink-0" />
+                <p className="text-sm text-green-400">
+                  Escalation timing saved successfully.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="reminder_delay"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                <span className="text-amber-400">First Reminder</span>
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Time before a reminder is sent to you
+              </p>
+              <div className="flex items-center gap-2 max-w-xs">
+                <input
+                  id="reminder_delay"
+                  type="number"
+                  min={2}
+                  max={60}
+                  step={1}
+                  value={escalationValues.reminder_delay_minutes ?? ""}
+                  onChange={(e) =>
+                    handleEscalationChange(
+                      "reminder_delay_minutes",
+                      e.target.value
+                    )
+                  }
+                  className={clsx(
+                    "w-full rounded-lg border px-3 py-2 text-sm",
+                    "bg-slate-800 border-slate-700 text-slate-200",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    "placeholder:text-slate-500"
+                  )}
+                  aria-describedby="reminder-range"
+                />
+                <span className="text-xs text-slate-500 shrink-0">min</span>
+              </div>
+              <p id="reminder-range" className="text-xs text-slate-600 mt-1">
+                Range: 2–60 minutes
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="primary_contact_delay"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                <span className="text-orange-400">Primary Contact Alert</span>
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Time before your primary emergency contact is notified
+              </p>
+              <div className="flex items-center gap-2 max-w-xs">
+                <input
+                  id="primary_contact_delay"
+                  type="number"
+                  min={2}
+                  max={120}
+                  step={1}
+                  value={
+                    escalationValues.primary_contact_delay_minutes ?? ""
+                  }
+                  onChange={(e) =>
+                    handleEscalationChange(
+                      "primary_contact_delay_minutes",
+                      e.target.value
+                    )
+                  }
+                  className={clsx(
+                    "w-full rounded-lg border px-3 py-2 text-sm",
+                    "bg-slate-800 border-slate-700 text-slate-200",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    "placeholder:text-slate-500"
+                  )}
+                  aria-describedby="primary-range"
+                />
+                <span className="text-xs text-slate-500 shrink-0">min</span>
+              </div>
+              <p id="primary-range" className="text-xs text-slate-600 mt-1">
+                Range: 2–120 minutes
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="all_contacts_delay"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                <span className="text-red-400">All Contacts Alert</span>
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Time before all emergency contacts are notified
+              </p>
+              <div className="flex items-center gap-2 max-w-xs">
+                <input
+                  id="all_contacts_delay"
+                  type="number"
+                  min={2}
+                  max={240}
+                  step={1}
+                  value={escalationValues.all_contacts_delay_minutes ?? ""}
+                  onChange={(e) =>
+                    handleEscalationChange(
+                      "all_contacts_delay_minutes",
+                      e.target.value
+                    )
+                  }
+                  className={clsx(
+                    "w-full rounded-lg border px-3 py-2 text-sm",
+                    "bg-slate-800 border-slate-700 text-slate-200",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                    "placeholder:text-slate-500"
+                  )}
+                  aria-describedby="all-contacts-range"
+                />
+                <span className="text-xs text-slate-500 shrink-0">min</span>
+              </div>
+              <p
+                id="all-contacts-range"
+                className="text-xs text-slate-600 mt-1"
+              >
+                Range: 2–240 minutes
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="flex items-center gap-3 mt-6 pt-4 border-t border-slate-800"
+            role="group"
+            aria-label="Escalation timing actions"
+          >
+            <button
+              onClick={handleEscalationSave}
+              disabled={escalationSaving || !escalationHasChanges}
+              className={clsx(
+                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                "bg-blue-600 text-white hover:bg-blue-500",
+                "transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+              aria-label="Save escalation timing"
+            >
+              {escalationSaving ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Save className="h-4 w-4" aria-hidden="true" />
+              )}
+              {escalationSaving ? "Saving..." : "Save Changes"}
+            </button>
+            <button
+              onClick={handleEscalationReset}
+              disabled={escalationSaving}
+              className={clsx(
+                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                "transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+              aria-label="Reset escalation timing to defaults"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              Reset to Defaults
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
