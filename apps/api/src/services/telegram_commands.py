@@ -1,16 +1,18 @@
-"""Stories 7.4 & 7.5: Telegram command and chat handlers.
+"""Stories 7.4, 7.5 & 7.6: Telegram command and chat handlers.
 
 Routes incoming Telegram messages to the appropriate handler and
 returns HTML-formatted response strings. The caller is responsible
 for sending the response via ``send_message``.
 
-Supported commands:
+Supported commands (diabetic users):
   /status      – Current glucose, trend, and IoB
   /acknowledge – Acknowledge the most recent (or a specific) alert
   /brief       – Latest daily brief summary
   /help        – List available commands
 
 Non-command messages are routed to the AI chat handler (Story 7.5).
+
+Caregiver users are routed to caregiver-specific handlers (Story 7.6).
 """
 
 import html
@@ -23,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.logging_config import get_logger
 from src.models.glucose import GlucoseReading
 from src.models.telegram_link import TelegramLink
+from src.models.user import User, UserRole
 from src.services.alert_notifier import trend_description
 from src.services.brief_notifier import format_brief_message
 from src.services.daily_brief import list_briefs
@@ -53,6 +56,23 @@ async def get_user_id_by_chat_id(
     )
     row = result.scalar_one_or_none()
     return row
+
+
+async def get_user_role(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> UserRole | None:
+    """Look up a user's role by their UUID.
+
+    Args:
+        db: Database session.
+        user_id: User's UUID.
+
+    Returns:
+        The user's role, or None if user not found.
+    """
+    result = await db.execute(select(User.role).where(User.id == user_id))
+    return result.scalar_one_or_none()
 
 
 def _reading_age(reading_timestamp: datetime) -> str:
@@ -233,6 +253,13 @@ async def _route_command(
             "\u26d4 Your Telegram account is not linked to GlycemicGPT.\n"
             "Link your account from the web app first."
         )
+
+    # Story 7.6: Route caregiver users to caregiver-specific handlers
+    user_role = await get_user_role(db, user_id)
+    if user_role == UserRole.CAREGIVER:
+        from src.services.telegram_caregiver import handle_caregiver_command
+
+        return await handle_caregiver_command(db, user_id, text)
 
     # Normalize and parse command
     stripped = text.strip()

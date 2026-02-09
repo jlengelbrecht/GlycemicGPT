@@ -1,4 +1,4 @@
-"""Stories 7.4 & 7.5: Tests for Telegram command handlers."""
+"""Stories 7.4, 7.5 & 7.6: Tests for Telegram command handlers."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -735,3 +735,110 @@ class TestPollAndHandleMessages:
         )
 
         assert poll_for_verifications is poll_and_handle_messages
+
+
+# ---------------------------------------------------------------------------
+# Caregiver routing tests (Story 7.6)
+# ---------------------------------------------------------------------------
+class TestCaregiverRouting:
+    """Tests for caregiver role detection and routing."""
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "src.services.telegram_commands.get_user_role",
+        new_callable=AsyncMock,
+    )
+    async def test_caregiver_dispatched_to_caregiver_handler(
+        self, mock_role, mock_user
+    ):
+        """Caregiver users are routed to handle_caregiver_command."""
+        from src.models.user import UserRole
+
+        mock_user.return_value = uuid.uuid4()
+        mock_role.return_value = UserRole.CAREGIVER
+
+        with patch(
+            "src.services.telegram_caregiver.handle_caregiver_command",
+            new_callable=AsyncMock,
+        ) as mock_cg_handler:
+            mock_cg_handler.return_value = "caregiver response"
+            result = await handle_command(AsyncMock(), 12345, "/status")
+
+        assert result == "caregiver response"
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "src.services.telegram_commands.get_user_role",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.telegram_commands._handle_status", new_callable=AsyncMock)
+    async def test_diabetic_not_dispatched_to_caregiver(
+        self, mock_status, mock_role, mock_user
+    ):
+        """Diabetic users go through normal routing, not caregiver handler."""
+        from src.models.user import UserRole
+
+        mock_user.return_value = uuid.uuid4()
+        mock_role.return_value = UserRole.DIABETIC
+        mock_status.return_value = "diabetic status"
+
+        result = await handle_command(AsyncMock(), 12345, "/status")
+
+        assert result == "diabetic status"
+        mock_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "src.services.telegram_commands.get_user_role",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.telegram_commands._handle_status", new_callable=AsyncMock)
+    async def test_none_role_uses_normal_routing(
+        self, mock_status, mock_role, mock_user
+    ):
+        """Users with None role (shouldn't happen) still go through normal routing."""
+        mock_user.return_value = uuid.uuid4()
+        mock_role.return_value = None
+        mock_status.return_value = "status"
+
+        result = await handle_command(AsyncMock(), 12345, "/status")
+
+        assert result == "status"
+        mock_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch(
+        "src.services.telegram_commands.get_user_role",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.telegram_commands._handle_status", new_callable=AsyncMock)
+    async def test_admin_role_uses_normal_routing(
+        self, mock_status, mock_role, mock_user
+    ):
+        """Admin users fall through to normal diabetic routing."""
+        from src.models.user import UserRole
+
+        mock_user.return_value = uuid.uuid4()
+        mock_role.return_value = UserRole.ADMIN
+        mock_status.return_value = "admin status"
+
+        result = await handle_command(AsyncMock(), 12345, "/status")
+
+        assert result == "admin status"
+        mock_status.assert_called_once()

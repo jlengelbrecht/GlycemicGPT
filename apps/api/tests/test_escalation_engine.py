@@ -18,6 +18,7 @@ from src.models.escalation_event import (
     NotificationStatus,
 )
 from src.services.escalation_engine import (
+    _resolve_contact_chat_id,
     build_escalation_message,
     create_escalation_event,
     determine_next_escalation_tier,
@@ -294,36 +295,62 @@ class TestBuildEscalationMessage:
 
 
 class TestDispatchNotification:
-    """Tests for dispatch_notification placeholder."""
+    """Tests for dispatch_notification with real Telegram delivery."""
 
     @pytest.mark.asyncio
     async def test_reminder_returns_sent(self):
-        status = await dispatch_notification(EscalationTier.REMINDER, "test msg", [])
+        status = await dispatch_notification(
+            AsyncMock(), EscalationTier.REMINDER, "test msg", []
+        )
         assert status == NotificationStatus.SENT
 
     @pytest.mark.asyncio
-    async def test_primary_contact_returns_sent(self):
+    @patch(
+        "src.services.escalation_engine._resolve_contact_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.escalation_engine.send_message", new_callable=AsyncMock)
+    async def test_primary_contact_resolves_and_sends(self, mock_send, mock_resolve):
+        mock_resolve.return_value = 12345
+        mock_send.return_value = True
+
         user_id = uuid.uuid4()
         contacts = [make_contact(user_id)]
         status = await dispatch_notification(
-            EscalationTier.PRIMARY_CONTACT, "test msg", contacts
+            AsyncMock(),
+            EscalationTier.PRIMARY_CONTACT,
+            "test msg",
+            contacts,
         )
         assert status == NotificationStatus.SENT
+        mock_send.assert_called_once_with(12345, "test msg")
 
     @pytest.mark.asyncio
-    async def test_all_contacts_returns_sent(self):
+    @patch(
+        "src.services.escalation_engine._resolve_contact_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.escalation_engine.send_message", new_callable=AsyncMock)
+    async def test_all_contacts_sends_to_each(self, mock_send, mock_resolve):
+        mock_resolve.return_value = 99999
+        mock_send.return_value = True
+
         user_id = uuid.uuid4()
         contacts = [make_contact(user_id), make_contact(user_id, name="Bob")]
         status = await dispatch_notification(
-            EscalationTier.ALL_CONTACTS, "test msg", contacts
+            AsyncMock(),
+            EscalationTier.ALL_CONTACTS,
+            "test msg",
+            contacts,
         )
         assert status == NotificationStatus.SENT
+        assert mock_send.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_contacts_returns_failed(self):
         """Contact tier with empty contact list should return FAILED."""
         status = await dispatch_notification(
-            EscalationTier.PRIMARY_CONTACT, "test msg", []
+            AsyncMock(), EscalationTier.PRIMARY_CONTACT, "test msg", []
         )
         assert status == NotificationStatus.FAILED
 
@@ -335,9 +362,110 @@ class TestDispatchNotification:
         contact.telegram_username = None
 
         status = await dispatch_notification(
-            EscalationTier.PRIMARY_CONTACT, "test msg", [contact]
+            AsyncMock(),
+            EscalationTier.PRIMARY_CONTACT,
+            "test msg",
+            [contact],
         )
         assert status == NotificationStatus.FAILED
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.escalation_engine._resolve_contact_chat_id",
+        new_callable=AsyncMock,
+    )
+    async def test_contact_not_linked_to_bot_skipped(self, mock_resolve):
+        """Contacts without a linked Telegram bot are skipped."""
+        mock_resolve.return_value = None
+
+        user_id = uuid.uuid4()
+        contacts = [make_contact(user_id)]
+        status = await dispatch_notification(
+            AsyncMock(),
+            EscalationTier.PRIMARY_CONTACT,
+            "test msg",
+            contacts,
+        )
+        assert status == NotificationStatus.FAILED
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.escalation_engine._resolve_contact_chat_id",
+        new_callable=AsyncMock,
+    )
+    @patch("src.services.escalation_engine.send_message", new_callable=AsyncMock)
+    async def test_send_failure_caught_gracefully(self, mock_send, mock_resolve):
+        """TelegramBotError per contact is caught, doesn't crash."""
+        from src.services.telegram_bot import TelegramBotError
+
+        mock_resolve.return_value = 12345
+        mock_send.side_effect = TelegramBotError("Bot blocked")
+
+        user_id = uuid.uuid4()
+        contacts = [make_contact(user_id)]
+        status = await dispatch_notification(
+            AsyncMock(),
+            EscalationTier.PRIMARY_CONTACT,
+            "test msg",
+            contacts,
+        )
+        assert status == NotificationStatus.FAILED
+
+
+# ── Resolve contact chat_id tests ──
+
+
+class TestResolveContactChatId:
+    """Direct unit tests for _resolve_contact_chat_id."""
+
+    @pytest.mark.asyncio
+    async def test_strips_at_sign(self):
+        """Leading @ is stripped before querying."""
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = 12345
+        db.execute.return_value = mock_result
+
+        result = await _resolve_contact_chat_id(db, "@alice")
+        assert result == 12345
+
+    @pytest.mark.asyncio
+    async def test_empty_after_strip_returns_none(self):
+        """Username that is just '@' returns None without DB call."""
+        db = AsyncMock()
+        result = await _resolve_contact_chat_id(db, "@")
+        assert result is None
+        db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_empty_string_returns_none(self):
+        """Empty string returns None without DB call."""
+        db = AsyncMock()
+        result = await _resolve_contact_chat_id(db, "")
+        assert result is None
+        db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_not_found_returns_none(self):
+        """Username not found in TelegramLink returns None."""
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        db.execute.return_value = mock_result
+
+        result = await _resolve_contact_chat_id(db, "unknown_user")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive_lookup(self):
+        """Username matching should be case-insensitive."""
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = 99999
+        db.execute.return_value = mock_result
+
+        result = await _resolve_contact_chat_id(db, "@Alice")
+        assert result == 99999
 
 
 # ── Contact retrieval tests ──
