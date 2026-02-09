@@ -6,6 +6,7 @@ from src.models.base import Base, TimestampMixin
 from src.models.correction_analysis import CorrectionAnalysis
 from src.models.daily_brief import DailyBrief
 from src.models.disclaimer import DisclaimerAcknowledgment
+from src.models.emergency_contact import ContactPriority, EmergencyContact
 from src.models.glucose import GlucoseReading, TrendDirection
 from src.models.integration import (
     IntegrationCredential,
@@ -27,10 +28,12 @@ __all__ = [
     "AlertThreshold",
     "AlertType",
     "Base",
+    "ContactPriority",
     "CorrectionAnalysis",
     "TimestampMixin",
     "DailyBrief",
     "DisclaimerAcknowledgment",
+    "EmergencyContact",
     "MealAnalysis",
     "GlucoseReading",
     "TrendDirection",

@@ -140,6 +140,11 @@ class User(Base, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    emergency_contacts = relationship(
+        "EmergencyContact",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.email} ({self.role.value})>"
