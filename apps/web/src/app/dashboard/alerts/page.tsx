@@ -23,7 +23,6 @@ import clsx from "clsx";
 import {
   getAlertThresholds,
   updateAlertThresholds,
-  type AlertThresholdResponse,
   type AlertThresholdUpdate,
 } from "@/lib/api";
 
@@ -100,9 +99,6 @@ const THRESHOLD_FIELDS: ThresholdFieldConfig[] = [
 ];
 
 export default function AlertsPage() {
-  const [thresholds, setThresholds] = useState<AlertThresholdResponse | null>(
-    null
-  );
   const [formValues, setFormValues] = useState<AlertThresholdUpdate>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -114,7 +110,6 @@ export default function AlertsPage() {
     try {
       setError(null);
       const data = await getAlertThresholds();
-      setThresholds(data);
       setFormValues({
         low_warning: data.low_warning,
         urgent_low: data.urgent_low,
@@ -175,7 +170,6 @@ export default function AlertsPage() {
 
     try {
       const data = await updateAlertThresholds(formValues);
-      setThresholds(data);
       setFormValues({
         low_warning: data.low_warning,
         urgent_low: data.urgent_low,
