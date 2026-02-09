@@ -1,6 +1,6 @@
-"""Story 6.1: Settings router.
+"""Stories 6.1, 6.6: Settings router.
 
-Provides endpoints for managing user alert thresholds.
+Provides endpoints for managing user alert thresholds and escalation timing.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,7 +14,13 @@ from src.schemas.alert_threshold import (
     AlertThresholdResponse,
     AlertThresholdUpdate,
 )
+from src.schemas.escalation_config import (
+    EscalationConfigDefaults,
+    EscalationConfigResponse,
+    EscalationConfigUpdate,
+)
 from src.services.alert_threshold import get_or_create_thresholds, update_thresholds
+from src.services.escalation_config import get_or_create_config, update_config
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -62,3 +68,50 @@ async def get_alert_threshold_defaults() -> AlertThresholdDefaults:
     This endpoint does not require authentication.
     """
     return AlertThresholdDefaults()
+
+
+# ── Escalation timing endpoints ──
+
+
+@router.get("/escalation-config", response_model=EscalationConfigResponse)
+async def get_escalation_config(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EscalationConfigResponse:
+    """Get the current user's escalation timing configuration.
+
+    Returns defaults if no configuration has been set yet.
+    """
+    config = await get_or_create_config(user.id, db)
+    return EscalationConfigResponse.model_validate(config)
+
+
+@router.patch("/escalation-config", response_model=EscalationConfigResponse)
+async def patch_escalation_config(
+    body: EscalationConfigUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EscalationConfigResponse:
+    """Update the current user's escalation timing configuration.
+
+    Only provided fields are updated. Validates that tier ordering
+    remains consistent (reminder < primary_contact < all_contacts).
+    """
+    try:
+        config = await update_config(user.id, body, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
+
+    return EscalationConfigResponse.model_validate(config)
+
+
+@router.get("/escalation-config/defaults", response_model=EscalationConfigDefaults)
+async def get_escalation_config_defaults() -> EscalationConfigDefaults:
+    """Get the default escalation timing values for reference.
+
+    This endpoint does not require authentication.
+    """
+    return EscalationConfigDefaults()
