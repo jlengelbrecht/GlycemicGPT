@@ -1,4 +1,4 @@
-"""Story 7.4: Tests for Telegram command handlers."""
+"""Stories 7.4 & 7.5: Tests for Telegram command handlers."""
 
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -393,6 +393,11 @@ class TestHandleHelp:
         msg = _handle_help()
         assert "<b>" in msg
 
+    def test_mentions_ai_chat(self):
+        """Story 7.5: Help text mentions AI chat for non-command messages."""
+        msg = _handle_help()
+        assert "question" in msg.lower() or "chat" in msg.lower()
+
 
 # ---------------------------------------------------------------------------
 # Unknown command tests
@@ -573,12 +578,59 @@ class TestHandleCommand:
     @patch(
         "src.services.telegram_commands.get_user_id_by_chat_id", new_callable=AsyncMock
     )
-    async def test_plain_text_treated_as_unknown(self, mock_user):
+    @patch(
+        "src.services.telegram_commands._handle_chat_message", new_callable=AsyncMock
+    )
+    async def test_plain_text_routed_to_ai_chat(self, mock_chat, mock_user):
+        """Story 7.5: Plain text routes to AI chat, not unknown handler."""
         mock_user.return_value = uuid.uuid4()
+        mock_chat.return_value = "AI response here"
 
         result = await handle_command(AsyncMock(), 12345, "hello there")
 
-        assert "Unrecognized" in result
+        assert result == "AI response here"
+        mock_chat.assert_called_once()
+        # Verify the stripped text was passed as the third argument
+        call_args = mock_chat.call_args
+        assert call_args[0][2] == "hello there"
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id", new_callable=AsyncMock
+    )
+    @patch(
+        "src.services.telegram_commands._handle_chat_message", new_callable=AsyncMock
+    )
+    async def test_whitespace_only_text_routes_to_chat_as_empty(
+        self, mock_chat, mock_user
+    ):
+        """Edge case: whitespace-only messages route to AI chat as empty string."""
+        mock_user.return_value = uuid.uuid4()
+        mock_chat.return_value = "AI response"
+
+        result = await handle_command(AsyncMock(), 12345, "   ")
+
+        assert result == "AI response"
+        call_args = mock_chat.call_args
+        assert call_args[0][2] == ""
+
+    @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_commands.get_user_id_by_chat_id", new_callable=AsyncMock
+    )
+    async def test_import_error_in_chat_returns_unavailable(self, mock_user):
+        """Finding #9: ImportError in lazy import returns friendly message."""
+        mock_user.return_value = uuid.uuid4()
+
+        with patch(
+            "src.services.telegram_commands._handle_chat_message",
+            new_callable=AsyncMock,
+        ) as mock_chat:
+            mock_chat.side_effect = ImportError("No module")
+            # ImportError propagates to handle_command's catch-all
+            result = await handle_command(AsyncMock(), 12345, "hello")
+
+        assert "Something went wrong" in result
 
     @pytest.mark.asyncio
     @patch(
