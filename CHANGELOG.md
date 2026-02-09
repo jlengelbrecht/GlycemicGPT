@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.23](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.22...v0.1.23) (2026-02-09)
+
+
+### ✨ Features
+
+* **web:** add AlertCard component with acknowledgment (Story 6.4) ([#54](https://github.com/jlengelbrecht/GlycemicGPT/issues/54)) ([1e8b18f](https://github.com/jlengelbrecht/GlycemicGPT/commit/1e8b18fb9c0403bbc65d22f9d842a2f13c1b6201))
+
 ## [0.1.22](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.21...v0.1.22) (2026-02-09)
 
 
