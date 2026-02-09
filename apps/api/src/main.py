@@ -24,6 +24,9 @@ from src.routers import (
     safety,
     system,
 )
+from src.routers import (
+    settings as settings_router,
+)
 from src.services.scheduler import start_scheduler, stop_scheduler
 
 # Configure structured logging (Story 1.5)
@@ -89,6 +92,7 @@ app.include_router(meal_analysis.router)
 app.include_router(correction_analysis.router)
 app.include_router(safety.router)
 app.include_router(insights.router)
+app.include_router(settings_router.router)
 
 
 @app.get("/")
