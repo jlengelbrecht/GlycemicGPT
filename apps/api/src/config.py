@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     escalation_check_interval_minutes: int = 1  # Check every 1 minute
     escalation_check_enabled: bool = True  # Enable/disable automatic escalation
 
+    # Telegram Bot (Story 7.1)
+    telegram_bot_token: str = ""
+    telegram_polling_enabled: bool = True
+    telegram_polling_interval_seconds: int = 5
+
     # Testing
     testing: bool = False  # Set to True during tests to disable connection pooling
 

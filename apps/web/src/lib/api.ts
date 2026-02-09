@@ -578,6 +578,114 @@ export interface EscalationTimelineResponse {
 }
 
 /**
+ * Telegram Bot API types (Story 7.1)
+ */
+export interface TelegramLink {
+  id: string;
+  chat_id: number;
+  username: string | null;
+  is_verified: boolean;
+  linked_at: string;
+}
+
+export interface TelegramStatusResponse {
+  linked: boolean;
+  link: TelegramLink | null;
+  bot_username: string;
+}
+
+export interface TelegramVerificationCodeResponse {
+  code: string;
+  expires_at: string;
+  bot_username: string;
+}
+
+export interface TelegramUnlinkResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface TelegramTestMessageResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Get Telegram link status for the current user
+ */
+export async function getTelegramStatus(): Promise<TelegramStatusResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/status`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch Telegram status: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Generate a Telegram verification code for account linking
+ */
+export async function generateTelegramCode(): Promise<TelegramVerificationCodeResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to generate Telegram code: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Unlink the user's Telegram account
+ */
+export async function unlinkTelegram(): Promise<TelegramUnlinkResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to unlink Telegram: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Send a test message to the user's linked Telegram account
+ */
+export async function sendTelegramTestMessage(): Promise<TelegramTestMessageResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/test`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to send test message: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Get escalation timeline for a specific alert
  */
 export async function getAlertEscalationTimeline(
