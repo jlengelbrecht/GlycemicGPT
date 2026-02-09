@@ -492,3 +492,67 @@ export async function deleteEmergencyContact(
     );
   }
 }
+
+/**
+ * Escalation Config API types (Story 6.6)
+ */
+export interface EscalationConfigResponse {
+  id: string;
+  reminder_delay_minutes: number;
+  primary_contact_delay_minutes: number;
+  all_contacts_delay_minutes: number;
+  updated_at: string;
+}
+
+export interface EscalationConfigUpdate {
+  reminder_delay_minutes?: number;
+  primary_contact_delay_minutes?: number;
+  all_contacts_delay_minutes?: number;
+}
+
+/**
+ * Fetch escalation timing configuration
+ */
+export async function getEscalationConfig(): Promise<EscalationConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/escalation-config`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to fetch escalation config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update escalation timing configuration
+ */
+export async function updateEscalationConfig(
+  data: EscalationConfigUpdate
+): Promise<EscalationConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/escalation-config`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to update escalation config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
