@@ -1,4 +1,4 @@
-"""Story 7.4: Telegram command handlers.
+"""Stories 7.4 & 7.5: Telegram command and chat handlers.
 
 Routes incoming Telegram messages to the appropriate handler and
 returns HTML-formatted response strings. The caller is responsible
@@ -9,6 +9,8 @@ Supported commands:
   /acknowledge – Acknowledge the most recent (or a specific) alert
   /brief       – Latest daily brief summary
   /help        – List available commands
+
+Non-command messages are routed to the AI chat handler (Story 7.5).
 """
 
 import html
@@ -158,13 +160,35 @@ def _handle_help() -> str:
         "/status \u2013 Current glucose, trend &amp; IoB\n"
         "/acknowledge \u2013 Acknowledge latest alert\n"
         "/brief \u2013 Latest daily brief\n"
-        "/help \u2013 Show this help message"
+        "/help \u2013 Show this help message\n"
+        "\n"
+        "\U0001f4ac Or just type a question to chat with your AI assistant."
     )
 
 
 def _handle_unknown() -> str:
     """Return guidance for an unrecognized command."""
     return "\u2753 Unrecognized command.\nSend /help to see available commands."
+
+
+async def _handle_chat_message(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    text: str,
+) -> str:
+    """Route a non-command message to the AI chat handler.
+
+    Uses lazy import to avoid pulling in AI dependencies at module level.
+    """
+    try:
+        from src.services.telegram_chat import handle_chat
+    except ImportError:
+        logger.error("Failed to import telegram_chat module", exc_info=True)
+        return (
+            "\u26a0\ufe0f AI chat is temporarily unavailable. Please try again later."
+        )
+
+    return await handle_chat(db, user_id, text)
 
 
 async def handle_command(
@@ -233,4 +257,9 @@ async def _route_command(
     if lower == "/help":
         return _handle_help()
 
-    return _handle_unknown()
+    # Unrecognized /commands get unknown handler; plain text goes to AI chat
+    if stripped.startswith("/"):
+        return _handle_unknown()
+
+    # Story 7.5: Route non-command messages to AI chat
+    return await _handle_chat_message(db, user_id, stripped)
