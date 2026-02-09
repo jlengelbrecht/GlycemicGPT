@@ -3,6 +3,7 @@ from src.models.ai_provider import AIProviderConfig, AIProviderStatus, AIProvide
 from src.models.alert import Alert, AlertSeverity, AlertType
 from src.models.alert_threshold import AlertThreshold
 from src.models.base import Base, TimestampMixin
+from src.models.caregiver_link import CaregiverLink
 from src.models.correction_analysis import CorrectionAnalysis
 from src.models.daily_brief import DailyBrief
 from src.models.disclaimer import DisclaimerAcknowledgment
@@ -36,6 +37,7 @@ __all__ = [
     "AlertThreshold",
     "AlertType",
     "Base",
+    "CaregiverLink",
     "ContactPriority",
     "CorrectionAnalysis",
     "TimestampMixin",

@@ -1,8 +1,11 @@
-"""Story 7.5: AI chat via Telegram.
+"""Stories 7.5 & 7.6: AI chat via Telegram.
 
 Handles natural language messages from Telegram by routing them
 to the user's configured AI provider with recent glucose context.
 Each message is a standalone Q&A (no conversation history).
+
+Story 7.6 adds caregiver chat: uses the patient's AI provider and
+glucose context with a caregiver-specific system prompt.
 """
 
 import html
@@ -243,6 +246,156 @@ async def handle_chat(
     logger.info(
         "Telegram AI chat response generated",
         user_id=str(user_id),
+        model=ai_response.model,
+        provider=ai_response.provider.value,
+        input_tokens=ai_response.usage.input_tokens,
+        output_tokens=ai_response.usage.output_tokens,
+    )
+
+    return _truncate_response(safe_content)
+
+
+# ── Story 7.6: Caregiver AI chat ──
+
+_CAREGIVER_SYSTEM_PROMPT_PREFIX = """\
+You are a supportive diabetes management assistant integrated with GlycemicGPT. \
+You are responding to a CAREGIVER who is checking on their patient's glucose data. \
+Help them understand the patient's current status and patterns.
+
+Guidelines:
+- Be concise (this is a Telegram chat, keep responses under 300 words)
+- Be supportive and reassuring
+- Reference the patient's recent glucose data when relevant
+- Do NOT recommend specific insulin dose changes
+- Do NOT recommend specific carb-to-insulin ratios
+- Suggest the patient discuss observations with their endocrinologist
+- Use plain text, avoid markdown (Telegram uses HTML)
+
+"""
+
+
+def _build_caregiver_system_prompt(
+    patient_email: str,
+    glucose_context: str,
+) -> str:
+    """Build a system prompt for caregiver AI chat.
+
+    Includes patient identification and glucose context.
+
+    Args:
+        patient_email: Patient's email for identification.
+        glucose_context: Formatted glucose data string.
+
+    Returns:
+        Complete system prompt for the AI provider.
+    """
+    patient_line = f"Patient: {patient_email}\n"
+    if glucose_context:
+        return _CAREGIVER_SYSTEM_PROMPT_PREFIX + patient_line + glucose_context
+    return (_CAREGIVER_SYSTEM_PROMPT_PREFIX + patient_line).rstrip()
+
+
+async def handle_caregiver_chat(
+    db: AsyncSession,
+    caregiver_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    text: str,
+) -> str:
+    """Process a caregiver's natural language message about a patient.
+
+    Uses the PATIENT's AI provider config and glucose context,
+    but with a caregiver-specific system prompt.
+
+    Args:
+        db: Database session.
+        caregiver_id: Caregiver's user UUID.
+        patient_id: Patient's user UUID.
+        text: The caregiver's message text.
+
+    Returns:
+        HTML-formatted response string with safety disclaimer.
+    """
+    # Fetch patient User object (needed for get_ai_client)
+    result = await db.execute(select(User).where(User.id == patient_id))
+    patient = result.scalar_one_or_none()
+
+    if patient is None:
+        logger.error(
+            "Patient not found for caregiver AI chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+        )
+        return "\u26a0\ufe0f Something went wrong. Please try again later."
+
+    # Use patient's AI client
+    try:
+        ai_client = await get_ai_client(patient, db)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return (
+                "\u2139\ufe0f No AI provider configured for this patient.\n"
+                "The patient needs to set up an AI provider in the "
+                "GlycemicGPT web app under Settings."
+            )
+        logger.error(
+            "AI provider configuration error for caregiver chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+            detail=exc.detail,
+        )
+        return (
+            "\u26a0\ufe0f There is an issue with the AI provider configuration. "
+            "Please try again later."
+        )
+
+    # Truncate overly long user messages
+    truncated_text = text[:MAX_USER_MESSAGE_LENGTH]
+
+    # Build context from patient's data
+    try:
+        glucose_context = await _build_glucose_context(db, patient_id)
+    except Exception:
+        logger.error(
+            "Failed to build glucose context for caregiver chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+            exc_info=True,
+        )
+        glucose_context = "Recent glucose data: unavailable due to a temporary error."
+    system_prompt = _build_caregiver_system_prompt(patient.email, glucose_context)
+
+    # Generate AI response
+    try:
+        ai_response = await ai_client.generate(
+            messages=[AIMessage(role="user", content=truncated_text)],
+            system_prompt=system_prompt,
+            max_tokens=800,
+        )
+    except Exception:
+        logger.error(
+            "AI provider error in caregiver Telegram chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+            exc_info=True,
+        )
+        return (
+            "\u26a0\ufe0f Unable to get a response from the AI provider. "
+            "Please try again later."
+        )
+
+    content = ai_response.content.strip()
+    if not content:
+        return (
+            "\u2139\ufe0f The AI returned an empty response. "
+            "Please try rephrasing your question." + SAFETY_DISCLAIMER
+        )
+
+    safe_content = html.escape(content)
+
+    logger.info(
+        "Caregiver Telegram AI chat response generated",
+        caregiver_id=str(caregiver_id),
+        patient_id=str(patient_id),
         model=ai_response.model,
         provider=ai_response.provider.value,
         input_tokens=ai_response.usage.input_tokens,
