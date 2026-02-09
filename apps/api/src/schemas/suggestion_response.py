@@ -50,3 +50,56 @@ class InsightsListResponse(BaseModel):
 
     insights: list[InsightSummary]
     total: int
+
+
+class SafetyInfo(BaseModel):
+    """Safety validation info for an analysis."""
+
+    status: str
+    has_dangerous_content: bool
+    flagged_items: list[dict]
+    validated_at: datetime
+
+
+class ModelInfo(BaseModel):
+    """AI model info for an analysis."""
+
+    model: str
+    provider: str
+    input_tokens: int
+    output_tokens: int
+
+
+class UserResponseInfo(BaseModel):
+    """User's response to an analysis."""
+
+    response: str
+    reason: str | None
+    responded_at: datetime
+
+
+class InsightDetail(BaseModel):
+    """Detailed view of an AI insight including reasoning and audit data."""
+
+    id: uuid.UUID
+    analysis_type: str
+    title: str
+    content: str
+    created_at: datetime
+    status: str = "pending"
+
+    # Analysis period
+    period_start: datetime
+    period_end: datetime
+
+    # Data context used for the analysis
+    data_context: dict
+
+    # AI model info
+    model_info: ModelInfo
+
+    # Safety validation
+    safety: SafetyInfo | None = None
+
+    # User response
+    user_response: UserResponseInfo | None = None
