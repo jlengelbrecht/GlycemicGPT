@@ -13,3 +13,5 @@ export {
   type BackendTrendDirection,
   type FrontendTrendDirection,
 } from "./use-glucose-stream";
+
+export { useCurrentUser } from "./use-current-user";

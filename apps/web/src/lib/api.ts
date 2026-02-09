@@ -967,3 +967,117 @@ export async function updateCaregiverPermissions(
 
   return response.json();
 }
+
+/**
+ * Current User API types (Story 8.3)
+ */
+export interface CurrentUserResponse {
+  id: string;
+  email: string;
+  role: "diabetic" | "caregiver" | "admin";
+  is_active: boolean;
+  email_verified: boolean;
+  disclaimer_acknowledged: boolean;
+}
+
+/**
+ * Get the currently authenticated user's profile
+ */
+export async function getCurrentUser(): Promise<CurrentUserResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch current user: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Caregiver Dashboard API types (Story 8.3)
+ */
+export interface CaregiverGlucoseData {
+  value: number;
+  trend: string;
+  trend_rate: number | null;
+  reading_timestamp: string;
+  minutes_ago: number;
+  is_stale: boolean;
+}
+
+export interface CaregiverIoBData {
+  current_iob: number;
+  projected_30min: number | null;
+  confirmed_at: string;
+  is_stale: boolean;
+}
+
+export interface CaregiverPatientStatus {
+  patient_id: string;
+  patient_email: string;
+  glucose: CaregiverGlucoseData | null;
+  iob: CaregiverIoBData | null;
+  permissions: CaregiverPermissions;
+}
+
+export interface CaregiverGlucoseHistoryReading {
+  value: number;
+  trend: string;
+  trend_rate: number | null;
+  reading_timestamp: string;
+}
+
+export interface CaregiverGlucoseHistoryResponse {
+  patient_id: string;
+  readings: CaregiverGlucoseHistoryReading[];
+  count: number;
+}
+
+/**
+ * Get permission-filtered patient status for caregiver dashboard
+ */
+export async function getCaregiverPatientStatus(
+  patientId: string
+): Promise<CaregiverPatientStatus> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/status`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch patient status: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Get glucose history for a linked patient (caregiver view)
+ */
+export async function getCaregiverGlucoseHistory(
+  patientId: string,
+  minutes: number = 180,
+  limit: number = 36
+): Promise<CaregiverGlucoseHistoryResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/glucose/history?minutes=${minutes}&limit=${limit}`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch glucose history: ${response.status}`
+    );
+  }
+
+  return response.json();
+}

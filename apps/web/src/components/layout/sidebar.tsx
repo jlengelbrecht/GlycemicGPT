@@ -4,7 +4,9 @@
  * Sidebar Navigation Component
  *
  * Story 4.1: Dashboard Layout & Navigation
+ * Story 8.3: Role-aware navigation for caregiver accounts
  * Provides navigation to Dashboard, Daily Briefs, Alerts, and Settings.
+ * Caregivers see only Dashboard and Settings.
  * Collapses to hamburger menu on mobile.
  */
 
@@ -21,6 +23,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { useUserContext } from "@/providers";
 
 interface NavItem {
   name: string;
@@ -28,10 +31,15 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const navigation: NavItem[] = [
+const diabeticNavigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Daily Briefs", href: "/dashboard/briefs", icon: FileText },
   { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+];
+
+const caregiverNavigation: NavItem[] = [
+  { name: "Dashboard", href: "/dashboard/caregiver", icon: LayoutDashboard },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -41,6 +49,9 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
+  const { user } = useUserContext();
+  const navigation =
+    user?.role === "caregiver" ? caregiverNavigation : diabeticNavigation;
 
   return (
     <aside
@@ -67,7 +78,9 @@ export function Sidebar({ className }: SidebarProps) {
         {navigation.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            (item.href !== "/dashboard" &&
+              item.href !== "/dashboard/caregiver" &&
+              pathname.startsWith(item.href));
 
           return (
             <Link
@@ -100,6 +113,9 @@ export function Sidebar({ className }: SidebarProps) {
 export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const { user } = useUserContext();
+  const navigation =
+    user?.role === "caregiver" ? caregiverNavigation : diabeticNavigation;
 
   return (
     <>
@@ -151,7 +167,9 @@ export function MobileNav() {
               {navigation.map((item) => {
                 const isActive =
                   pathname === item.href ||
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                  (item.href !== "/dashboard" &&
+                    item.href !== "/dashboard/caregiver" &&
+                    pathname.startsWith(item.href));
 
                 return (
                   <Link
