@@ -242,9 +242,12 @@ class TestBuildAnalysisPrompt:
 class TestGenerateDailyBrief:
     """Tests for the generate_daily_brief service function."""
 
+    @patch("src.services.daily_brief.notify_user_of_brief", new_callable=AsyncMock)
     @patch("src.services.daily_brief.get_ai_client")
     @patch("src.services.daily_brief.calculate_metrics")
-    async def test_generate_brief_success(self, mock_calc, mock_get_client):
+    async def test_generate_brief_success(
+        self, mock_calc, mock_get_client, mock_notify
+    ):
         """Test successful brief generation."""
         from src.services.daily_brief import generate_daily_brief
 
@@ -330,9 +333,12 @@ class TestGenerateDailyBrief:
         with pytest.raises(RuntimeError, match="AI provider failed"):
             await generate_daily_brief(mock_user, mock_db)
 
+    @patch("src.services.daily_brief.notify_user_of_brief", new_callable=AsyncMock)
     @patch("src.services.daily_brief.get_ai_client")
     @patch("src.services.daily_brief.calculate_metrics")
-    async def test_generate_brief_custom_hours(self, mock_calc, mock_get_client):
+    async def test_generate_brief_custom_hours(
+        self, mock_calc, mock_get_client, mock_notify
+    ):
         """Test that custom hours parameter is used."""
         from src.services.daily_brief import generate_daily_brief
 
