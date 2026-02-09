@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.30](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.29...v0.1.30) (2026-02-09)
+
+
+### ✨ Features
+
+* **api:** add Telegram command handlers (Story 7.4) ([#68](https://github.com/jlengelbrecht/GlycemicGPT/issues/68)) ([d5b8be9](https://github.com/jlengelbrecht/GlycemicGPT/commit/d5b8be946625a3b8a1c570f1464b9d9a761d0f5a))
+
 ## [0.1.29](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.28...v0.1.29) (2026-02-09)
 
 
