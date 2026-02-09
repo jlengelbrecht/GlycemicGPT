@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Clock, Loader2, User, Users } from "lucide-react";
+import { AlertCircle, Clock, Loader2, User, Users } from "lucide-react";
 import clsx from "clsx";
 import { getAlertEscalationTimeline } from "@/lib/api";
 import type { EscalationEvent } from "@/lib/api";
@@ -46,6 +46,14 @@ const TIER_CONFIG: Record<
   },
 };
 
+const UNKNOWN_TIER = {
+  label: "Unknown Escalation",
+  icon: AlertCircle,
+  color: "text-slate-400",
+  bg: "bg-slate-900/20",
+  border: "border-slate-700/30",
+};
+
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -78,8 +86,12 @@ export function EscalationTimeline({ alertId }: EscalationTimelineProps) {
   const [events, setEvents] = useState<EscalationEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchedAlertId, setFetchedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Skip re-fetch if data is already loaded for this alert
+    if (fetchedAlertId === alertId) return;
+
     let cancelled = false;
 
     async function fetchTimeline() {
@@ -89,6 +101,7 @@ export function EscalationTimeline({ alertId }: EscalationTimelineProps) {
         if (!cancelled) {
           setEvents(data.events);
           setError(null);
+          setFetchedAlertId(alertId);
         }
       } catch (err) {
         if (!cancelled) {
@@ -107,7 +120,7 @@ export function EscalationTimeline({ alertId }: EscalationTimelineProps) {
     return () => {
       cancelled = true;
     };
-  }, [alertId]);
+  }, [alertId, fetchedAlertId]);
 
   if (loading) {
     return (
@@ -136,7 +149,7 @@ export function EscalationTimeline({ alertId }: EscalationTimelineProps) {
         Escalation History
       </p>
       {events.map((event) => {
-        const tier = TIER_CONFIG[event.tier] || TIER_CONFIG.reminder;
+        const tier = TIER_CONFIG[event.tier] || UNKNOWN_TIER;
         const TierIcon = tier.icon;
 
         return (

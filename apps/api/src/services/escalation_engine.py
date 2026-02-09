@@ -382,17 +382,30 @@ async def escalate_alert(
 
     contacts = await get_contacts_for_tier(db, alert.user_id, tier)
     message = build_escalation_message(alert, tier, user_email)
+
+    # Persist event as PENDING first to ensure audit trail exists
+    # before dispatching notification
+    event = await create_escalation_event(
+        db, alert, tier, message, contacts, NotificationStatus.PENDING
+    )
+
+    if event is None:
+        # Duplicate — another process already handled this tier
+        return None
+
+    # Dispatch notification, then update status
     status = await dispatch_notification(tier, message, contacts)
+    event.notification_status = status
+    await db.commit()
+    await db.refresh(event)
 
-    event = await create_escalation_event(db, alert, tier, message, contacts, status)
-
-    if event:
-        logger.info(
-            "Escalation event created",
-            event_id=str(event.id),
-            tier=tier.value,
-            contacts_count=len(contacts),
-        )
+    logger.info(
+        "Escalation event completed",
+        event_id=str(event.id),
+        tier=tier.value,
+        contacts_count=len(contacts),
+        status=status.value,
+    )
 
     return event
 

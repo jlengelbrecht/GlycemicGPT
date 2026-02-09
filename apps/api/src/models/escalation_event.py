@@ -93,7 +93,7 @@ class EscalationEvent(Base):
     )
 
     # JSON array of contact UUIDs notified at this tier
-    contacts_notified: Mapped[list] = mapped_column(
+    contacts_notified: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
