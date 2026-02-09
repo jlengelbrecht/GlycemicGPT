@@ -312,15 +312,22 @@ async def verify_telegram_link(
     return True
 
 
-async def poll_for_verifications(db: AsyncSession) -> int:
-    """Poll Telegram for /start verification messages.
+async def poll_and_handle_messages(db: AsyncSession) -> int:
+    """Poll Telegram for messages and route to appropriate handlers.
+
+    Handles /start verification messages directly, and dispatches all
+    other commands to ``telegram_commands.handle_command``.
 
     Args:
         db: Database session.
 
     Returns:
-        Number of verifications processed.
+        Number of messages processed (verifications + commands).
     """
+    # Lazy import to avoid circular dependency
+    # (telegram_commands -> alert_notifier -> telegram_bot)
+    from src.services.telegram_commands import handle_command
+
     global _last_update_offset
 
     updates = await get_updates(_last_update_offset)
@@ -346,7 +353,7 @@ async def poll_for_verifications(db: AsyncSession) -> int:
         if not chat_id or not text:
             continue
 
-        # Parse /start <code> command
+        # Parse /start <code> command (handled locally for verification)
         if text.startswith("/start "):
             code = text[7:].strip()
             if code:
@@ -354,7 +361,6 @@ async def poll_for_verifications(db: AsyncSession) -> int:
                 if success:
                     processed += 1
                 else:
-                    # Send error message to user
                     try:
                         await send_message(
                             chat_id,
@@ -364,7 +370,6 @@ async def poll_for_verifications(db: AsyncSession) -> int:
                     except TelegramBotError:
                         pass
         elif text == "/start":
-            # Plain /start without a code
             try:
                 await send_message(
                     chat_id,
@@ -374,8 +379,30 @@ async def poll_for_verifications(db: AsyncSession) -> int:
                 )
             except TelegramBotError:
                 pass
+        else:
+            # Story 7.4: Route all other messages to command handlers
+            try:
+                response = await handle_command(db, chat_id, text)
+                await send_message(chat_id, response)
+                processed += 1
+            except TelegramBotError:
+                logger.warning(
+                    "Failed to send command response",
+                    chat_id=chat_id,
+                    exc_info=True,
+                )
+            except Exception:
+                logger.error(
+                    "Unexpected error handling command",
+                    chat_id=chat_id,
+                    exc_info=True,
+                )
 
     return processed
+
+
+# Backward-compatible alias
+poll_for_verifications = poll_and_handle_messages
 
 
 async def get_telegram_link(
