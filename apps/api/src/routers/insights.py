@@ -1,6 +1,7 @@
-"""Story 5.7: AI insights router.
+"""Stories 5.7-5.8: AI insights router.
 
-Provides endpoints for listing AI insights and recording user responses.
+Provides endpoints for listing AI insights, viewing insight details
+with reasoning & audit data, and recording user responses.
 """
 
 import uuid
@@ -12,11 +13,13 @@ from src.core.auth import get_current_user
 from src.database import get_db
 from src.models.user import User
 from src.schemas.suggestion_response import (
+    InsightDetail,
     InsightsListResponse,
     SuggestionResponseRequest,
     SuggestionResponseResponse,
 )
 from src.services.insights import (
+    get_insight_detail,
     list_insights,
     record_suggestion_response,
     verify_analysis_ownership,
@@ -40,6 +43,28 @@ async def get_insights(
     """
     insights, total = await list_insights(user.id, db, limit=limit)
     return InsightsListResponse(insights=insights, total=total)
+
+
+@router.get("/{analysis_type}/{analysis_id}", response_model=InsightDetail)
+async def get_insight(
+    analysis_type: str,
+    analysis_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> InsightDetail:
+    """Get detailed view of a single AI insight.
+
+    Returns full reasoning, data context, model info,
+    safety validation status, and user response history.
+    """
+    if analysis_type not in VALID_ANALYSIS_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid analysis type: {analysis_type}. "
+            f"Must be one of: {', '.join(sorted(VALID_ANALYSIS_TYPES))}",
+        )
+
+    return await get_insight_detail(user.id, analysis_type, analysis_id, db)
 
 
 @router.post(

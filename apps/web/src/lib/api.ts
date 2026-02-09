@@ -124,6 +124,63 @@ export interface SuggestionResponseResponse {
   created_at: string;
 }
 
+export interface ModelInfo {
+  model: string;
+  provider: string;
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export interface SafetyInfo {
+  status: string;
+  has_dangerous_content: boolean;
+  flagged_items: Record<string, unknown>[];
+  validated_at: string;
+}
+
+export interface UserResponseInfo {
+  response: string;
+  reason: string | null;
+  responded_at: string;
+}
+
+export interface InsightDetail {
+  id: string;
+  analysis_type: "daily_brief" | "meal_analysis" | "correction_analysis";
+  title: string;
+  content: string;
+  created_at: string;
+  status: "pending" | "acknowledged" | "dismissed";
+  period_start: string;
+  period_end: string;
+  data_context: Record<string, unknown>;
+  model_info: ModelInfo;
+  safety: SafetyInfo | null;
+  user_response: UserResponseInfo | null;
+}
+
+/**
+ * Fetch detailed view of a single AI insight
+ */
+export async function getInsightDetail(
+  analysisType: string,
+  analysisId: string
+): Promise<InsightDetail> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/ai/insights/${encodeURIComponent(analysisType)}/${encodeURIComponent(analysisId)}`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to fetch insight detail: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 /**
  * Fetch AI insights for the current user
  */

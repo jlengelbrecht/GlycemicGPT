@@ -1,10 +1,12 @@
-"""Story 5.7: AI insights service.
+"""Stories 5.7-5.8: AI insights service.
 
-Aggregates AI analyses into a unified insights feed and tracks
-user responses (acknowledge/dismiss).
+Aggregates AI analyses into a unified insights feed, tracks
+user responses (acknowledge/dismiss), and provides detailed
+reasoning & audit views for individual insights.
 """
 
 import uuid
+from collections.abc import Callable
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -14,8 +16,15 @@ from src.logging_config import get_logger
 from src.models.correction_analysis import CorrectionAnalysis
 from src.models.daily_brief import DailyBrief
 from src.models.meal_analysis import MealAnalysis
+from src.models.safety_log import SafetyLog
 from src.models.suggestion_response import SuggestionResponse
-from src.schemas.suggestion_response import InsightSummary
+from src.schemas.suggestion_response import (
+    InsightDetail,
+    InsightSummary,
+    ModelInfo,
+    SafetyInfo,
+    UserResponseInfo,
+)
 
 logger = get_logger(__name__)
 
@@ -281,3 +290,154 @@ async def get_response_for_analysis(
         )
     )
     return result.scalar_one_or_none()
+
+
+def _extract_data_context(analysis_type: str, record: object) -> dict:
+    """Extract data context dict from an analysis record."""
+    if analysis_type == "daily_brief":
+        return {
+            "time_in_range_pct": record.time_in_range_pct,
+            "average_glucose": record.average_glucose,
+            "low_count": record.low_count,
+            "high_count": record.high_count,
+            "readings_count": record.readings_count,
+            "correction_count": record.correction_count,
+            "total_insulin": record.total_insulin,
+        }
+    if analysis_type == "meal_analysis":
+        return {
+            "total_boluses": record.total_boluses,
+            "total_spikes": record.total_spikes,
+            "avg_post_meal_peak": record.avg_post_meal_peak,
+            "meal_periods_data": record.meal_periods_data,
+        }
+    # correction_analysis
+    return {
+        "total_corrections": record.total_corrections,
+        "under_corrections": record.under_corrections,
+        "over_corrections": record.over_corrections,
+        "avg_observed_isf": record.avg_observed_isf,
+        "time_periods_data": record.time_periods_data,
+    }
+
+
+def _get_content(analysis_type: str, record: object) -> str:
+    """Get the AI-generated content from an analysis record."""
+    if analysis_type == "daily_brief":
+        return record.ai_summary
+    return record.ai_analysis
+
+
+# Title generators indexed by type for convenience
+_TITLE_FNS: dict[str, Callable[..., str]] = {
+    "daily_brief": _brief_title,
+    "meal_analysis": _meal_title,
+    "correction_analysis": _correction_title,
+}
+
+
+async def get_insight_detail(
+    user_id: uuid.UUID,
+    analysis_type: str,
+    analysis_id: uuid.UUID,
+    db: AsyncSession,
+) -> InsightDetail:
+    """Get detailed view of a single AI insight with reasoning and audit data.
+
+    Includes analysis period, data context used for the analysis,
+    AI model info, safety validation status, and user response.
+
+    Args:
+        user_id: User's UUID.
+        analysis_type: Type of analysis.
+        analysis_id: ID of the analysis.
+        db: Database session.
+
+    Returns:
+        InsightDetail with full reasoning and audit information.
+
+    Raises:
+        HTTPException: 400 for invalid type, 404 if not found.
+    """
+    model = ANALYSIS_MODELS.get(analysis_type)
+    if model is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid analysis type: {analysis_type}",
+        )
+
+    # Fetch the analysis record
+    result = await db.execute(
+        select(model).where(
+            model.id == analysis_id,
+            model.user_id == user_id,
+        )
+    )
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found",
+        )
+
+    # Build title
+    title_fn = _TITLE_FNS[analysis_type]
+    title = title_fn(record)
+
+    # Extract data context
+    data_context = _extract_data_context(analysis_type, record)
+
+    # Model info
+    model_info = ModelInfo(
+        model=record.ai_model,
+        provider=record.ai_provider,
+        input_tokens=record.input_tokens,
+        output_tokens=record.output_tokens,
+    )
+
+    # Fetch safety log
+    safety_result = await db.execute(
+        select(SafetyLog).where(
+            SafetyLog.user_id == user_id,
+            SafetyLog.analysis_type == analysis_type,
+            SafetyLog.analysis_id == analysis_id,
+        )
+    )
+    safety_record = safety_result.scalar_one_or_none()
+    safety = None
+    if safety_record is not None:
+        safety = SafetyInfo(
+            status=safety_record.status,
+            has_dangerous_content=safety_record.has_dangerous_content,
+            flagged_items=safety_record.flagged_items,
+            validated_at=safety_record.created_at,
+        )
+
+    # Fetch user response
+    user_response_record = await get_response_for_analysis(
+        user_id, analysis_type, analysis_id, db
+    )
+    user_response = None
+    insight_status = "pending"
+    if user_response_record is not None:
+        insight_status = user_response_record.response
+        user_response = UserResponseInfo(
+            response=user_response_record.response,
+            reason=user_response_record.reason,
+            responded_at=user_response_record.created_at,
+        )
+
+    return InsightDetail(
+        id=record.id,
+        analysis_type=analysis_type,
+        title=title,
+        content=_get_content(analysis_type, record),
+        created_at=record.created_at,
+        status=insight_status,
+        period_start=record.period_start,
+        period_end=record.period_end,
+        data_context=data_context,
+        model_info=model_info,
+        safety=safety,
+        user_response=user_response,
+    )
