@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.20](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.19...v0.1.20) (2026-02-09)
+
+
+### ✨ Features
+
+* add alert threshold configuration (Story 6.1) ([#48](https://github.com/jlengelbrecht/GlycemicGPT/issues/48)) ([0ec59bb](https://github.com/jlengelbrecht/GlycemicGPT/commit/0ec59bbd952d21fca15e607e25f288a8fed9d1c3))
+
 ## [0.1.19](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.18...v0.1.19) (2026-02-09)
 
 
