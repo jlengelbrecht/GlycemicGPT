@@ -14,6 +14,14 @@
 
 ---
 
+## [0.1.32](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.31...v0.1.32) (2026-02-09)
+
+
+### ✨ Features
+
+* add caregiver account creation and linking (Story 8.1) ([#78](https://github.com/jlengelbrecht/GlycemicGPT/issues/78)) ([ddbf068](https://github.com/jlengelbrecht/GlycemicGPT/commit/ddbf068859c3cee817e1457890d02e8afab6dd64))
+* **api:** add caregiver Telegram access (Story 7.6) ([#77](https://github.com/jlengelbrecht/GlycemicGPT/issues/77)) ([cead938](https://github.com/jlengelbrecht/GlycemicGPT/commit/cead93821bdc9e09d8b4c482a2cd481f7c46335e))
+
 ## [0.1.31](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.30...v0.1.31) (2026-02-09)
 
 
