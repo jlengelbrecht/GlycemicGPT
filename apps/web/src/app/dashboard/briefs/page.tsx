@@ -14,6 +14,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FileText, Loader2, RefreshCw } from "lucide-react";
 import { AIInsightCard, type InsightData } from "@/components/dashboard";
+import { getInsightDetail, type InsightDetail } from "@/lib/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -81,6 +82,13 @@ export default function BriefsPage() {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.detail || "Failed to respond");
     }
+  };
+
+  const handleFetchDetail = async (
+    analysisType: string,
+    analysisId: string
+  ): Promise<InsightDetail> => {
+    return getInsightDetail(analysisType, analysisId);
   };
 
   return (
@@ -167,6 +175,7 @@ export default function BriefsPage() {
                 key={insight.id}
                 insight={insight}
                 onRespond={handleRespond}
+                onFetchDetail={handleFetchDetail}
               />
             ))}
           </div>

@@ -3,9 +3,10 @@
 /**
  * AIInsightCard Component
  *
- * Story 5.7: AI Insight Card
+ * Stories 5.7-5.8: AI Insight Card
  * Displays an AI-generated insight (daily brief, meal analysis,
- * or correction analysis) with acknowledge/dismiss actions.
+ * or correction analysis) with acknowledge/dismiss actions,
+ * "Not medical advice" disclaimer, and expandable reasoning/audit panel.
  *
  * Accessibility features:
  * - Semantic article element with aria-label
@@ -26,7 +27,14 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Info,
+  Shield,
+  ShieldAlert,
+  Bot,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
+import type { InsightDetail } from "@/lib/api";
 
 // Analysis type configuration
 const ANALYSIS_CONFIG = {
@@ -72,6 +80,10 @@ export interface AIInsightCardProps {
     response: "acknowledged" | "dismissed",
     reason?: string
   ) => Promise<void>;
+  onFetchDetail?: (
+    analysisType: AnalysisType,
+    analysisId: string
+  ) => Promise<InsightDetail>;
 }
 
 /**
@@ -86,6 +98,53 @@ function formatDate(dateStr: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/**
+ * Format a date range for the analysis period.
+ */
+function formatPeriod(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  if (isNaN(s.getTime()) || isNaN(e.getTime())) return "Unknown period";
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return `${fmt(s)} – ${fmt(e)}`;
+}
+
+/**
+ * Format data context values for display.
+ */
+function DataContextDisplay({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data).filter(
+    ([, v]) => v !== null && v !== undefined
+  );
+
+  if (entries.length === 0) return null;
+
+  const formatKey = (key: string) =>
+    key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const formatValue = (v: unknown): string => {
+    if (Array.isArray(v)) {
+      return `${v.length} ${v.length === 1 ? "period" : "periods"} analyzed`;
+    }
+    if (typeof v === "number") {
+      return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    }
+    return String(v);
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+      {entries.map(([key, value]) => (
+        <div key={key} className="flex justify-between text-xs">
+          <span className="text-slate-500">{formatKey(key)}</span>
+          <span className="text-slate-300 font-mono">{formatValue(value)}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -121,12 +180,16 @@ function StatusBadge({ status }: { status: InsightData["status"] }) {
   );
 }
 
-export function AIInsightCard({ insight, onRespond }: AIInsightCardProps) {
+export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
   const [localStatus, setLocalStatus] = useState(insight.status);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [detail, setDetail] = useState<InsightDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const prefersReducedMotion = useReducedMotion();
 
   const config = ANALYSIS_CONFIG[insight.analysis_type];
@@ -151,6 +214,7 @@ export function AIInsightCard({ insight, onRespond }: AIInsightCardProps) {
         response
       );
       setLocalStatus(response);
+      setDetail(null); // Invalidate cached detail so re-fetch picks up response
       setAnnouncement(
         `Insight ${response === "acknowledged" ? "acknowledged" : "dismissed"}`
       );
@@ -161,6 +225,33 @@ export function AIInsightCard({ insight, onRespond }: AIInsightCardProps) {
     } finally {
       setIsResponding(false);
     }
+  };
+
+  const handleToggleDetail = async () => {
+    if (showDetail) {
+      setShowDetail(false);
+      return;
+    }
+
+    // Fetch detail if not already loaded
+    if (!detail && onFetchDetail) {
+      setDetailLoading(true);
+      setDetailError(null);
+      try {
+        const result = await onFetchDetail(insight.analysis_type, insight.id);
+        setDetail(result);
+      } catch (err) {
+        setDetailError(
+          err instanceof Error ? err.message : "Failed to load details"
+        );
+        setDetailLoading(false);
+        return;
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+
+    setShowDetail(true);
   };
 
   return (
@@ -214,6 +305,18 @@ export function AIInsightCard({ insight, onRespond }: AIInsightCardProps) {
         </div>
       </div>
 
+      {/* Not medical advice disclaimer */}
+      <div
+        className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/10"
+        role="note"
+        aria-label="Not medical advice disclaimer"
+      >
+        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-hidden="true" />
+        <p className="text-xs text-amber-400/80">
+          Not medical advice. Always consult your healthcare provider.
+        </p>
+      </div>
+
       {/* Content */}
       <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
         {isExpanded ? insight.content : previewContent}
@@ -241,6 +344,118 @@ export function AIInsightCard({ insight, onRespond }: AIInsightCardProps) {
             </>
           )}
         </button>
+      )}
+
+      {/* View Details button */}
+      {onFetchDetail && (
+        <button
+          onClick={handleToggleDetail}
+          disabled={detailLoading}
+          className={clsx(
+            "mt-3 text-xs font-medium flex items-center gap-1.5",
+            "text-slate-400 hover:text-slate-200 transition-colors",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
+          aria-expanded={showDetail}
+          aria-label={showDetail ? "Hide reasoning and audit details" : "View reasoning and audit details"}
+        >
+          {detailLoading ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+              {showDetail ? "Hide Details" : "View Details"}
+              {showDetail ? (
+                <ChevronUp className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Detail error */}
+      {detailError && (
+        <p className="mt-2 text-xs text-red-400" role="alert">
+          {detailError}
+        </p>
+      )}
+
+      {/* Reasoning & Audit Detail Panel */}
+      {showDetail && detail && (
+        <div
+          className="mt-3 pt-3 border-t border-slate-800 space-y-4"
+          role="region"
+          aria-label="Insight reasoning and audit details"
+        >
+          {/* Analysis Period */}
+          <div>
+            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">
+              Analysis Period
+            </h4>
+            <p className="text-sm text-slate-300">
+              {formatPeriod(detail.period_start, detail.period_end)}
+            </p>
+          </div>
+
+          {/* Data Context */}
+          <div>
+            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              Data Used for Analysis
+            </h4>
+            <DataContextDisplay data={detail.data_context} />
+          </div>
+
+          {/* AI Model Info */}
+          <div>
+            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              AI Model
+            </h4>
+            <div className="flex items-center gap-2">
+              <Bot className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+              <span className="text-xs text-slate-300">
+                {detail.model_info.provider} / {detail.model_info.model}
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-slate-500">
+              Tokens: {detail.model_info.input_tokens.toLocaleString()} in / {detail.model_info.output_tokens.toLocaleString()} out
+            </div>
+          </div>
+
+          {/* Safety Validation */}
+          <div>
+            <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+              Safety Validation
+            </h4>
+            {detail.safety ? (
+              <div className="flex items-center gap-2">
+                {detail.safety.has_dangerous_content ? (
+                  <ShieldAlert className="h-3.5 w-3.5 text-red-400" aria-hidden="true" />
+                ) : (
+                  <Shield className="h-3.5 w-3.5 text-green-400" aria-hidden="true" />
+                )}
+                <span
+                  className={clsx(
+                    "text-xs",
+                    detail.safety.has_dangerous_content
+                      ? "text-red-400"
+                      : "text-green-400"
+                  )}
+                >
+                  {detail.safety.status}
+                  {detail.safety.has_dangerous_content && " — flagged content detected"}
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">No safety log available</p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Error message */}
