@@ -53,3 +53,5 @@ export {
 } from "./ai-insight-card";
 
 export { AlertCard, type AlertCardProps } from "./alert-card";
+
+export { EscalationTimeline } from "./escalation-timeline";

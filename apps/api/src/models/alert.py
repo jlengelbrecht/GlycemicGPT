@@ -143,8 +143,9 @@ class Alert(Base):
         nullable=False,
     )
 
-    # Relationship to user
+    # Relationships
     user = relationship("User", back_populates="alerts")
+    escalation_events = relationship("EscalationEvent", back_populates="alert")
 
     def __repr__(self) -> str:
         return (
