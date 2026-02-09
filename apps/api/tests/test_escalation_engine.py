@@ -319,6 +319,26 @@ class TestDispatchNotification:
         )
         assert status == NotificationStatus.SENT
 
+    @pytest.mark.asyncio
+    async def test_no_contacts_returns_failed(self):
+        """Contact tier with empty contact list should return FAILED."""
+        status = await dispatch_notification(
+            EscalationTier.PRIMARY_CONTACT, "test msg", []
+        )
+        assert status == NotificationStatus.FAILED
+
+    @pytest.mark.asyncio
+    async def test_contact_without_username_skipped(self):
+        """Contacts without telegram_username are skipped; all skipped = FAILED."""
+        user_id = uuid.uuid4()
+        contact = make_contact(user_id, name="No TG")
+        contact.telegram_username = None
+
+        status = await dispatch_notification(
+            EscalationTier.PRIMARY_CONTACT, "test msg", [contact]
+        )
+        assert status == NotificationStatus.FAILED
+
 
 # ── Contact retrieval tests ──
 

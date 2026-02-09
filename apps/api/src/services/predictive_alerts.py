@@ -16,6 +16,7 @@ from src.logging_config import get_logger
 from src.models.alert import Alert, AlertSeverity, AlertType
 from src.models.alert_threshold import AlertThreshold
 from src.models.glucose import GlucoseReading
+from src.services.alert_notifier import notify_user_of_alerts
 from src.services.alert_threshold import get_or_create_thresholds
 from src.services.iob_projection import get_iob_projection
 
@@ -633,5 +634,15 @@ async def evaluate_alerts_for_user(
             alert_count=len(new_alerts),
             types=[a.alert_type.value for a in new_alerts],
         )
+
+        # Story 7.2: Immediate Telegram delivery
+        try:
+            await notify_user_of_alerts(db, user_id, new_alerts)
+        except Exception as e:
+            logger.warning(
+                "Telegram alert delivery failed",
+                user_id=str(user_id),
+                error=str(e),
+            )
 
     return new_alerts

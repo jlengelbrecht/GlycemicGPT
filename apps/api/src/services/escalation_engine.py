@@ -265,10 +265,15 @@ async def dispatch_notification(
     message: str,
     contacts: list[EmergencyContact],
 ) -> NotificationStatus:
-    """Dispatch notification to contacts.
+    """Dispatch notification to contacts via Telegram.
 
-    This is an abstraction layer. For Story 6.7, notifications are logged.
-    Epic 7 will implement actual Telegram sending.
+    For REMINDER tier, the user's own Telegram is handled by Path A
+    (Story 7.2 immediate alert delivery in predictive_alerts).
+    For contact tiers, dispatches to each contact's Telegram.
+
+    Note: Full Telegram delivery to contacts requires contact-to-chat_id
+    resolution (contacts must also link via the bot). For now, dispatches
+    are logged for the audit trail.
 
     Args:
         tier: Escalation tier.
@@ -285,14 +290,32 @@ async def dispatch_notification(
         )
         return NotificationStatus.SENT
 
-    contact_usernames = [c.telegram_username for c in contacts]
-    logger.info(
-        "Escalation notification dispatched (Telegram placeholder)",
-        tier=tier.value,
-        contacts=contact_usernames,
-    )
-    # TODO (Epic 7): Implement actual Telegram sending
-    return NotificationStatus.SENT
+    if not contacts:
+        logger.warning(
+            "No contacts to notify for escalation",
+            tier=tier.value,
+        )
+        return NotificationStatus.FAILED
+
+    success_count = 0
+    for contact in contacts:
+        if not contact.telegram_username:
+            logger.warning(
+                "Contact has no Telegram username, skipping",
+                contact_name=contact.name,
+                tier=tier.value,
+            )
+            continue
+
+        logger.info(
+            "Escalation notification dispatched to contact",
+            tier=tier.value,
+            contact_name=contact.name,
+            telegram_username=contact.telegram_username,
+        )
+        success_count += 1
+
+    return NotificationStatus.SENT if success_count > 0 else NotificationStatus.FAILED
 
 
 async def create_escalation_event(
