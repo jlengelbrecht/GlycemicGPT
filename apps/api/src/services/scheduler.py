@@ -20,6 +20,7 @@ from src.models.integration import (
     IntegrationType,
 )
 from src.services.dexcom_sync import DexcomSyncError, sync_dexcom_for_user
+from src.services.predictive_alerts import evaluate_alerts_for_user
 from src.services.tandem_sync import TandemSyncError, sync_tandem_for_user
 
 logger = get_logger(__name__)
@@ -178,6 +179,65 @@ async def sync_all_tandem_users() -> None:
     )
 
 
+async def check_alerts_all_users() -> None:
+    """Run predictive alert evaluation for all users with active integrations.
+
+    This job runs on a schedule and evaluates alerts for all users
+    who have any active glucose data integration (Dexcom or Tandem).
+    """
+    logger.info("Starting scheduled alert check for all users")
+
+    async with get_session_maker()() as db:
+        result = await db.execute(
+            select(IntegrationCredential).where(
+                IntegrationCredential.integration_type.in_(
+                    [IntegrationType.DEXCOM, IntegrationType.TANDEM]
+                ),
+                IntegrationCredential.status == IntegrationStatus.CONNECTED,
+            )
+        )
+        credentials = result.scalars().all()
+
+        # Deduplicate by user_id (a user may have both Dexcom and Tandem)
+        seen_user_ids = set()
+        unique_credentials = []
+        for cred in credentials:
+            if cred.user_id not in seen_user_ids:
+                seen_user_ids.add(cred.user_id)
+                unique_credentials.append(cred)
+        credentials = unique_credentials
+
+        if not credentials:
+            logger.info("No users with active integrations for alert check")
+            return
+
+        alert_count = 0
+        error_count = 0
+
+        for credential in credentials:
+            try:
+                async with get_session_maker()() as user_db:
+                    new_alerts = await evaluate_alerts_for_user(
+                        user_db, credential.user_id
+                    )
+                    alert_count += len(new_alerts)
+            except Exception as e:
+                logger.error(
+                    "Alert check failed for user",
+                    user_id=str(credential.user_id),
+                    error=str(e),
+                )
+                error_count += 1
+
+            await asyncio.sleep(0.5)
+
+    logger.info(
+        "Scheduled alert check completed",
+        alerts_created=alert_count,
+        errors=error_count,
+    )
+
+
 def start_scheduler() -> AsyncIOScheduler:
     """Start the background job scheduler.
 
@@ -218,6 +278,20 @@ def start_scheduler() -> AsyncIOScheduler:
         logger.info(
             "Scheduled Tandem sync job",
             interval_minutes=settings.tandem_sync_interval_minutes,
+        )
+
+    # Add predictive alert check job if enabled (Story 6.2)
+    if settings.alert_check_enabled:
+        scheduler.add_job(
+            check_alerts_all_users,
+            trigger=IntervalTrigger(minutes=settings.alert_check_interval_minutes),
+            id="alert_check",
+            name="Predictive Alert Check",
+            replace_existing=True,
+        )
+        logger.info(
+            "Scheduled alert check job",
+            interval_minutes=settings.alert_check_interval_minutes,
         )
 
     scheduler.start()
