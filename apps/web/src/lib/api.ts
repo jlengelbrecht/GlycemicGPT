@@ -295,3 +295,76 @@ export async function updateAlertThresholds(
 
   return response.json();
 }
+
+/**
+ * Predictive Alert API types (Story 6.2)
+ */
+export interface PredictiveAlert {
+  id: string;
+  alert_type: string;
+  severity: string;
+  current_value: number;
+  predicted_value: number | null;
+  prediction_minutes: number | null;
+  iob_value: number | null;
+  message: string;
+  trend_rate: number | null;
+  source: string;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ActiveAlertsResponse {
+  alerts: PredictiveAlert[];
+  count: number;
+}
+
+export interface AlertAcknowledgeResponse {
+  id: string;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+}
+
+/**
+ * Fetch active (unacknowledged, non-expired) alerts
+ */
+export async function getActiveAlerts(): Promise<ActiveAlertsResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/alerts/active`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch alerts: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Acknowledge an alert by ID
+ */
+export async function acknowledgeAlert(
+  alertId: string
+): Promise<AlertAcknowledgeResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+    {
+      method: "PATCH",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to acknowledge alert: ${response.status}`
+    );
+  }
+
+  return response.json();
+}

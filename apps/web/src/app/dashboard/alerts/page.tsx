@@ -4,8 +4,10 @@
  * Alerts & Thresholds Page
  *
  * Story 6.1: Alert Threshold Configuration
- * Allows users to configure glucose and IoB alert thresholds.
- * Settings take effect immediately upon save.
+ * Story 6.2: Predictive Alert Engine - Active alerts display
+ *
+ * Allows users to configure glucose and IoB alert thresholds,
+ * and view active predictive alerts with acknowledgment.
  *
  * Accessibility: labeled inputs, error alerts, keyboard navigation.
  */
@@ -18,12 +20,20 @@ import {
   Loader2,
   AlertTriangle,
   Check,
+  CheckCircle,
+  Clock,
+  TrendingDown,
+  TrendingUp,
+  Syringe,
 } from "lucide-react";
 import clsx from "clsx";
 import {
   getAlertThresholds,
   updateAlertThresholds,
+  getActiveAlerts,
+  acknowledgeAlert,
   type AlertThresholdUpdate,
+  type PredictiveAlert,
 } from "@/lib/api";
 
 const DEFAULTS = {
@@ -98,6 +108,52 @@ const THRESHOLD_FIELDS: ThresholdFieldConfig[] = [
   },
 ];
 
+const SEVERITY_CONFIG: Record<
+  string,
+  { bg: string; border: string; text: string; icon: string }
+> = {
+  emergency: {
+    bg: "bg-red-500/15",
+    border: "border-red-500/30",
+    text: "text-red-400",
+    icon: "text-red-400",
+  },
+  urgent: {
+    bg: "bg-red-500/10",
+    border: "border-red-500/20",
+    text: "text-red-400",
+    icon: "text-red-400",
+  },
+  warning: {
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    text: "text-amber-400",
+    icon: "text-amber-400",
+  },
+  info: {
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/20",
+    text: "text-blue-400",
+    icon: "text-blue-400",
+  },
+};
+
+function getAlertIcon(alertType: string) {
+  if (alertType.includes("low")) return TrendingDown;
+  if (alertType.includes("high")) return TrendingUp;
+  if (alertType === "iob_warning") return Syringe;
+  return AlertTriangle;
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
+}
+
 export default function AlertsPage() {
   const [formValues, setFormValues] = useState<AlertThresholdUpdate>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -105,6 +161,34 @@ export default function AlertsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [activeAlerts, setActiveAlerts] = useState<PredictiveAlert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const data = await getActiveAlerts();
+      setActiveAlerts(data.alerts);
+    } catch {
+      // Silently fail for alerts - user may not be authenticated yet
+      setActiveAlerts([]);
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, []);
+
+  const handleAcknowledge = async (alertId: string) => {
+    setAcknowledgingId(alertId);
+    try {
+      await acknowledgeAlert(alertId);
+      setActiveAlerts((prev) => prev.filter((a) => a.id !== alertId));
+    } catch {
+      // Refresh alerts from server to get current state
+      await fetchAlerts();
+    } finally {
+      setAcknowledgingId(null);
+    }
+  };
 
   const fetchThresholds = useCallback(async () => {
     try {
@@ -133,7 +217,12 @@ export default function AlertsPage() {
 
   useEffect(() => {
     fetchThresholds();
-  }, [fetchThresholds]);
+    fetchAlerts();
+
+    // Poll for new alerts every 60 seconds
+    const interval = setInterval(fetchAlerts, 60000);
+    return () => clearInterval(interval);
+  }, [fetchThresholds, fetchAlerts]);
 
   const handleChange = (key: keyof AlertThresholdUpdate, value: string) => {
     const numValue = parseFloat(value);
@@ -409,12 +498,124 @@ export default function AlertsPage() {
         </div>
       )}
 
-      {/* Active alerts placeholder */}
-      <div className="bg-slate-900/50 rounded-xl p-6 border border-slate-800">
-        <div className="flex items-center gap-3">
-          <div className="h-3 w-3 rounded-full bg-green-500" />
-          <span className="text-slate-300">No active alerts</span>
+      {/* Active alerts section */}
+      <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-red-500/10 rounded-lg">
+            <AlertTriangle className="h-5 w-5 text-red-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Active Alerts</h2>
+            <p className="text-xs text-slate-500">
+              Predictive and threshold-based alerts
+            </p>
+          </div>
+          {activeAlerts.length > 0 && (
+            <span className="ml-auto text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-full">
+              {activeAlerts.length} active
+            </span>
+          )}
         </div>
+
+        {alertsLoading && (
+          <div
+            className="text-center py-4"
+            role="status"
+            aria-label="Loading alerts"
+          >
+            <Loader2 className="h-5 w-5 text-slate-400 animate-spin mx-auto" />
+          </div>
+        )}
+
+        {!alertsLoading && activeAlerts.length === 0 && (
+          <div className="flex items-center gap-3 py-4">
+            <div className="h-3 w-3 rounded-full bg-green-500" />
+            <span className="text-slate-300">No active alerts</span>
+          </div>
+        )}
+
+        {!alertsLoading && activeAlerts.length > 0 && (
+          <div className="space-y-3" role="list" aria-label="Active alerts">
+            {activeAlerts.map((alert) => {
+              const config = SEVERITY_CONFIG[alert.severity] ?? SEVERITY_CONFIG.info;
+              const Icon = getAlertIcon(alert.alert_type);
+              return (
+                <div
+                  key={alert.id}
+                  className={clsx(
+                    "rounded-lg p-4 border",
+                    config.bg,
+                    config.border
+                  )}
+                  role="listitem"
+                >
+                  <div className="flex items-start gap-3">
+                    <Icon
+                      className={clsx("h-5 w-5 mt-0.5 shrink-0", config.icon)}
+                      aria-hidden="true"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className={clsx(
+                            "text-xs font-medium uppercase tracking-wider",
+                            config.text
+                          )}
+                        >
+                          {alert.severity}
+                        </span>
+                        {alert.source === "predictive" && (
+                          <span className="text-xs text-slate-500">
+                            Predicted
+                          </span>
+                        )}
+                      </div>
+                      <p className={clsx("text-sm", config.text)}>
+                        {alert.message}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" aria-hidden="true" />
+                          {formatTimeAgo(alert.created_at)}
+                        </span>
+                        {alert.iob_value != null && (
+                          <span>IoB: {alert.iob_value.toFixed(1)}u</span>
+                        )}
+                        {alert.prediction_minutes != null && (
+                          <span>
+                            {alert.prediction_minutes}min prediction
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleAcknowledge(alert.id)}
+                      disabled={acknowledgingId === alert.id}
+                      className={clsx(
+                        "flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium",
+                        "bg-slate-800/50 text-slate-300 hover:bg-slate-700",
+                        "transition-colors shrink-0",
+                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
+                        "disabled:opacity-50 disabled:cursor-not-allowed"
+                      )}
+                      aria-label={`Acknowledge ${alert.alert_type.replace("_", " ")} alert`}
+                    >
+                      {acknowledgingId === alert.id ? (
+                        <Loader2
+                          className="h-3 w-3 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <CheckCircle className="h-3 w-3" aria-hidden="true" />
+                      )}
+                      Acknowledge
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

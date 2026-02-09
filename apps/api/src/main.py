@@ -12,6 +12,7 @@ from src.logging_config import get_logger, setup_logging
 from src.middleware import CorrelationIdMiddleware
 from src.routers import (
     ai,
+    alerts,
     auth,
     briefs,
     correction_analysis,
@@ -93,6 +94,7 @@ app.include_router(correction_analysis.router)
 app.include_router(safety.router)
 app.include_router(insights.router)
 app.include_router(settings_router.router)
+app.include_router(alerts.router)
 
 
 @app.get("/")
