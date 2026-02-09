@@ -51,3 +51,5 @@ export {
   type AIInsightCardProps,
   type InsightData,
 } from "./ai-insight-card";
+
+export { AlertCard, type AlertCardProps } from "./alert-card";

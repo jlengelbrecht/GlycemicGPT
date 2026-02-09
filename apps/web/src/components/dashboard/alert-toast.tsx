@@ -11,9 +11,10 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { X, TrendingDown, TrendingUp, Syringe, AlertTriangle } from "lucide-react";
+import { X } from "lucide-react";
 import clsx from "clsx";
 import type { AlertEventData } from "@/hooks/use-glucose-stream";
+import { getAlertIcon } from "@/lib/alert-utils";
 
 const TOAST_CONFIG: Record<
   string,
@@ -54,13 +55,6 @@ const TOAST_CONFIG: Record<
     animation: "",
   },
 };
-
-function getAlertIcon(alertType: string) {
-  if (alertType.includes("low")) return TrendingDown;
-  if (alertType.includes("high")) return TrendingUp;
-  if (alertType === "iob_warning") return Syringe;
-  return AlertTriangle;
-}
 
 export interface AlertToastProps {
   alert: AlertEventData;
