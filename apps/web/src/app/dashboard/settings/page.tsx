@@ -6,7 +6,7 @@
  */
 
 import Link from "next/link";
-import { Settings, User, Bell, Database, Link2, Users, MessageCircle } from "lucide-react";
+import { Settings, User, Bell, Database, Link2, Users, MessageCircle, UserPlus } from "lucide-react";
 
 const settingsSections = [
   {
@@ -32,6 +32,12 @@ const settingsSections = [
     description: "Manage contacts for alert escalation via Telegram",
     icon: Users,
     href: "/dashboard/settings/emergency-contacts",
+  },
+  {
+    title: "Caregivers",
+    description: "Invite caregivers to monitor your glucose data",
+    icon: UserPlus,
+    href: "/dashboard/settings/caregivers",
   },
   {
     title: "Telegram",

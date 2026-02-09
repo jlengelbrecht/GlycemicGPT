@@ -15,6 +15,7 @@ from src.routers import (
     alerts,
     auth,
     briefs,
+    caregivers,
     correction_analysis,
     disclaimer,
     emergency_contacts,
@@ -101,6 +102,7 @@ app.include_router(alerts.router)
 app.include_router(emergency_contacts.router)
 app.include_router(escalation.router)
 app.include_router(telegram.router)
+app.include_router(caregivers.router)
 
 
 @app.get("/")
