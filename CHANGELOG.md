@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.24](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.23...v0.1.24) (2026-02-09)
+
+
+### ✨ Features
+
+* add emergency contact configuration (Story 6.5) ([#56](https://github.com/jlengelbrecht/GlycemicGPT/issues/56)) ([c8f50c6](https://github.com/jlengelbrecht/GlycemicGPT/commit/c8f50c6c553a548c952acc2acddf89b5789a88df))
+
 ## [0.1.23](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.22...v0.1.23) (2026-02-09)
 
 
