@@ -7,6 +7,19 @@
 
 import { render, screen } from "@testing-library/react";
 
+// Mock next/navigation (needed for caregiver redirect logic)
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    replace: jest.fn(),
+    push: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    refresh: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => "/dashboard",
+}));
+
 // Mock the providers
 jest.mock("@/providers", () => ({
   useGlucoseStreamContext: () => ({
@@ -15,6 +28,11 @@ jest.mock("@/providers", () => ({
     isReconnecting: false,
     error: null,
     reconnect: jest.fn(),
+  }),
+  useUserContext: () => ({
+    user: { id: "test-user", email: "test@example.com", role: "diabetic" },
+    isLoading: false,
+    error: null,
   }),
 }));
 
