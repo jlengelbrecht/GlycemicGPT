@@ -1,11 +1,13 @@
-"""Story 4.5: Real-Time Glucose Streaming via Server-Sent Events (SSE).
+"""Story 4.5 & 6.3: Real-Time Glucose & Alert Streaming via SSE.
 
-This router provides a real-time data stream for glucose readings,
-allowing the frontend dashboard to receive updates as they occur.
+This router provides a real-time data stream for glucose readings
+and predictive alerts, allowing the frontend dashboard to receive
+updates as they occur.
 """
 
 import asyncio
 import json
+import uuid as uuid_mod
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
@@ -16,6 +18,7 @@ from src.database import get_db_session
 from src.logging_config import get_logger
 from src.services.dexcom_sync import get_latest_glucose_reading
 from src.services.iob_projection import get_iob_projection
+from src.services.predictive_alerts import get_active_alerts
 
 logger = get_logger(__name__)
 
@@ -67,6 +70,7 @@ async def generate_glucose_stream(
     glucose_interval = 60  # seconds
     last_glucose_check = 0
     event_counter = 0
+    delivered_alert_ids: set[str] = set()  # Track alerts sent this connection
 
     logger.info("SSE stream started", user_id=user_id)
 
@@ -161,6 +165,43 @@ async def generate_glucose_stream(
                         event_id=str(event_counter),
                     )
 
+                # Story 6.3: Check for new active alerts to deliver
+                try:
+                    async with get_db_session() as alert_db:
+                        user_uuid = uuid_mod.UUID(user_id)
+                        active_alerts = await get_active_alerts(
+                            alert_db, user_uuid, limit=10
+                        )
+                        for alert in active_alerts:
+                            alert_id_str = str(alert.id)
+                            if alert_id_str not in delivered_alert_ids:
+                                delivered_alert_ids.add(alert_id_str)
+                                event_counter += 1
+                                yield await format_sse_event(
+                                    event_type="alert",
+                                    data={
+                                        "id": alert_id_str,
+                                        "alert_type": alert.alert_type.value,
+                                        "severity": alert.severity.value,
+                                        "current_value": alert.current_value,
+                                        "predicted_value": alert.predicted_value,
+                                        "prediction_minutes": alert.prediction_minutes,
+                                        "iob_value": alert.iob_value,
+                                        "message": alert.message,
+                                        "trend_rate": alert.trend_rate,
+                                        "source": alert.source,
+                                        "created_at": alert.created_at.isoformat(),
+                                        "expires_at": alert.expires_at.isoformat(),
+                                    },
+                                    event_id=str(event_counter),
+                                )
+                except Exception as e:
+                    logger.warning(
+                        "Error checking alerts for SSE",
+                        user_id=user_id,
+                        error=str(e),
+                    )
+
             # Wait for heartbeat interval then send heartbeat
             await asyncio.sleep(heartbeat_interval)
 
@@ -202,8 +243,9 @@ async def stream_glucose(
 ) -> StreamingResponse:
     """Stream glucose updates via Server-Sent Events.
 
-    Provides real-time glucose data for the dashboard. Events include:
+    Provides real-time glucose data and alerts for the dashboard. Events include:
     - `glucose`: Current glucose reading with trend, IoB, and CoB data
+    - `alert`: New predictive or threshold-based alert (Story 6.3)
     - `heartbeat`: Keep-alive signal every 30 seconds
     - `no_data`: Sent when no glucose readings are available
     - `error`: Sent when there's an error fetching data
