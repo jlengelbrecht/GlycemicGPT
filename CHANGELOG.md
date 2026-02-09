@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.28](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.27...v0.1.28) (2026-02-09)
+
+
+### ✨ Features
+
+* **api:** add Telegram alert delivery for glucose alerts (Story 7.2) ([#64](https://github.com/jlengelbrecht/GlycemicGPT/issues/64)) ([426d736](https://github.com/jlengelbrecht/GlycemicGPT/commit/426d736608639f5728fb1d403e55b888c36ade49))
+
 ## [0.1.27](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.26...v0.1.27) (2026-02-09)
 
 
