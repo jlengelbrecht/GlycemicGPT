@@ -8,6 +8,7 @@
  * Story 4.4: Time in Range Bar Component
  * Story 4.5: Real-Time Updates via SSE
  * Story 4.6: Dashboard Accessibility
+ * Story 8.3: Role-based routing (caregivers redirect to /dashboard/caregiver)
  * Main dashboard view showing glucose data and metrics.
  *
  * Accessibility features:
@@ -16,6 +17,8 @@
  * - Logical tab order
  */
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Activity, Clock } from "lucide-react";
 
 import {
@@ -23,10 +26,13 @@ import {
   TimeInRangeBar,
   ConnectionStatusBanner,
 } from "@/components/dashboard";
-import { useGlucoseStreamContext } from "@/providers";
+import { useGlucoseStreamContext, useUserContext } from "@/providers";
 
 export default function DashboardPage() {
-  // Real-time glucose data from SSE stream (Story 4.5)
+  const router = useRouter();
+  const { user, isLoading: isUserLoading } = useUserContext();
+
+  // All hooks must be called before any early return
   const {
     glucose,
     isLive,
@@ -34,6 +40,18 @@ export default function DashboardPage() {
     error,
     reconnect,
   } = useGlucoseStreamContext();
+
+  // Redirect caregivers to the caregiver-specific dashboard (Story 8.3)
+  useEffect(() => {
+    if (user?.role === "caregiver") {
+      router.replace("/dashboard/caregiver");
+    }
+  }, [user, router]);
+
+  // Prevent flash of diabetic dashboard while caregiver redirect is pending
+  if (isUserLoading || user?.role === "caregiver") {
+    return null;
+  }
 
   // Fallback data for when no real-time data is available
   const mockTimeInRangeData = {

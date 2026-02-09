@@ -1,20 +1,24 @@
-"""Stories 8.1 & 8.2: Caregiver invitation, linking, and permissions router.
+"""Stories 8.1–8.3: Caregiver invitation, linking, permissions, and dashboard router.
 
 Endpoints for creating/managing invitations (diabetic users),
-accepting invitations (unauthenticated caregivers), and
-configuring per-caregiver data access permissions.
+accepting invitations (unauthenticated caregivers),
+configuring per-caregiver data access permissions, and
+serving permission-filtered patient data to caregivers.
 """
 
 import os
 import uuid
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import CurrentUser, require_caregiver, require_diabetic
 from src.core.security import hash_password
 from src.database import get_db
+from src.logging_config import get_logger
+from src.models.caregiver_link import CaregiverLink
 from src.models.user import User
 from src.schemas.caregiver import (
     AcceptInvitationRequest,
@@ -25,6 +29,13 @@ from src.schemas.caregiver import (
     InvitationListResponse,
     LinkedPatientResponse,
     LinkedPatientsListResponse,
+)
+from src.schemas.caregiver_dashboard import (
+    CaregiverGlucoseData,
+    CaregiverGlucoseHistoryReading,
+    CaregiverGlucoseHistoryResponse,
+    CaregiverIoBData,
+    CaregiverPatientStatus,
 )
 from src.schemas.caregiver_permissions import (
     CaregiverPermissions,
@@ -46,6 +57,7 @@ from src.services.caregiver import (
 )
 
 router = APIRouter(prefix="/api/caregivers", tags=["caregivers"])
+logger = get_logger(__name__)
 
 # Frontend base URL for building invite links
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "")
@@ -372,4 +384,167 @@ async def update_caregiver_permissions_endpoint(
             can_view_ai_suggestions=link.can_view_ai_suggestions,
             can_receive_alerts=link.can_receive_alerts,
         ),
+    )
+
+
+# ── Story 8.3: Caregiver dashboard data endpoints ──
+
+# Staleness threshold: readings older than this are marked stale
+_STALE_MINUTES = 15
+
+
+def _build_permissions(link: CaregiverLink) -> CaregiverPermissions:
+    """Extract CaregiverPermissions from a CaregiverLink.
+
+    Defaults to False (deny) for any missing attributes as a fail-safe.
+    """
+    return CaregiverPermissions(
+        can_view_glucose=getattr(link, "can_view_glucose", False),
+        can_view_history=getattr(link, "can_view_history", False),
+        can_view_iob=getattr(link, "can_view_iob", False),
+        can_view_ai_suggestions=getattr(link, "can_view_ai_suggestions", False),
+        can_receive_alerts=getattr(link, "can_receive_alerts", False),
+    )
+
+
+async def _get_caregiver_link(
+    db: AsyncSession,
+    caregiver_id: uuid.UUID,
+    patient_id: uuid.UUID,
+) -> CaregiverLink:
+    """Look up a CaregiverLink between caregiver and patient.
+
+    Raises HTTPException(404) if no link exists.
+    """
+    from sqlalchemy import and_
+
+    result = await db.execute(
+        select(CaregiverLink).where(
+            and_(
+                CaregiverLink.caregiver_id == caregiver_id,
+                CaregiverLink.patient_id == patient_id,
+            )
+        )
+    )
+    link = result.scalar_one_or_none()
+    if link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Patient not linked to your account",
+        )
+    return link
+
+
+@router.get(
+    "/patients/{patient_id}/status",
+    response_model=CaregiverPatientStatus,
+    dependencies=[Depends(require_caregiver)],
+)
+async def get_caregiver_patient_status(
+    patient_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> CaregiverPatientStatus:
+    """Get permission-filtered patient status for caregiver dashboard.
+
+    Returns current glucose and/or IoB data based on the caregiver's
+    permission flags. The `permissions` field always shows which
+    categories are enabled.
+    """
+    link = await _get_caregiver_link(db, current_user.id, patient_id)
+    permissions = _build_permissions(link)
+
+    # Resolve patient email
+    result = await db.execute(select(User.email).where(User.id == patient_id))
+    patient_email = result.scalar_one_or_none() or "Unknown"
+
+    glucose_data: CaregiverGlucoseData | None = None
+    iob_data: CaregiverIoBData | None = None
+
+    # Glucose data (if permitted)
+    if permissions.can_view_glucose:
+        from src.services.dexcom_sync import get_latest_glucose_reading
+
+        reading = await get_latest_glucose_reading(db, patient_id)
+        if reading is not None:
+            now = datetime.now(UTC)
+            delta = now - reading.reading_timestamp
+            minutes_ago = int(delta.total_seconds() / 60)
+            glucose_data = CaregiverGlucoseData(
+                value=reading.value,
+                trend=reading.trend.value
+                if hasattr(reading.trend, "value")
+                else str(reading.trend),
+                trend_rate=reading.trend_rate,
+                reading_timestamp=reading.reading_timestamp,
+                minutes_ago=minutes_ago,
+                is_stale=minutes_ago >= _STALE_MINUTES,
+            )
+
+    # IoB data (if permitted)
+    # Note: current_iob is the decay-adjusted projected IoB, not the raw pump value
+    if permissions.can_view_iob:
+        from src.services.iob_projection import get_iob_projection
+
+        projection = await get_iob_projection(db, patient_id)
+        if projection is not None:
+            now = datetime.now(UTC)
+            delta = now - projection.confirmed_at
+            minutes_since = int(delta.total_seconds() / 60)
+            iob_data = CaregiverIoBData(
+                current_iob=projection.projected_iob,
+                projected_30min=projection.projected_30min,
+                confirmed_at=projection.confirmed_at,
+                is_stale=minutes_since >= _STALE_MINUTES,
+            )
+
+    return CaregiverPatientStatus(
+        patient_id=patient_id,
+        patient_email=patient_email,
+        glucose=glucose_data,
+        iob=iob_data,
+        permissions=permissions,
+    )
+
+
+@router.get(
+    "/patients/{patient_id}/glucose/history",
+    response_model=CaregiverGlucoseHistoryResponse,
+    dependencies=[Depends(require_caregiver)],
+)
+async def get_caregiver_glucose_history(
+    patient_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    minutes: int = Query(default=180, ge=5, le=1440),
+    limit: int = Query(default=36, ge=1, le=288),
+) -> CaregiverGlucoseHistoryResponse:
+    """Get glucose history for a linked patient.
+
+    Requires the `can_view_history` permission. Returns 403 if denied.
+    """
+    link = await _get_caregiver_link(db, current_user.id, patient_id)
+
+    if not getattr(link, "can_view_history", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="History access not permitted",
+        )
+
+    from src.services.dexcom_sync import get_glucose_readings
+
+    readings = await get_glucose_readings(db, patient_id, minutes=minutes, limit=limit)
+
+    return CaregiverGlucoseHistoryResponse(
+        patient_id=patient_id,
+        readings=[
+            CaregiverGlucoseHistoryReading(
+                value=r.value,
+                trend=r.trend.value if hasattr(r.trend, "value") else str(r.trend),
+                trend_rate=r.trend_rate,
+                reading_timestamp=r.reading_timestamp,
+            )
+            for r in readings
+        ],
+        count=len(readings),
     )

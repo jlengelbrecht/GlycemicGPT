@@ -1,12 +1,14 @@
-"""Story 7.6: Caregiver Telegram access.
+"""Stories 7.6 & 8.3: Caregiver Telegram access with permission enforcement.
 
 Handles Telegram commands from CAREGIVER-role users,
 scoping all data access to their linked patients.
+Permission checks (Story 8.3) filter data based on per-caregiver
+flags set by the patient in the web app.
 
 Supported interactions:
-  /status      - Check linked patient's current glucose
+  /status      - Check linked patient's current glucose (requires can_view_glucose)
   /help        - List available caregiver commands
-  Plain text   - AI chat about patient's glucose data
+  Plain text   - AI chat about patient's glucose data (requires can_view_ai_suggestions)
 
 Blocked commands (read-only access):
   /acknowledge - Patient-only
@@ -54,26 +56,42 @@ async def get_linked_patients(
 
 async def _handle_caregiver_status(
     db: AsyncSession,
+    caregiver_id: uuid.UUID,
     links: list[CaregiverLink],
 ) -> str:
     """Build glucose status for the caregiver's linked patient(s).
 
-    If the caregiver has a single patient, shows that patient's
-    full glucose status. If multiple patients, shows a brief
-    summary for each.
+    Checks `can_view_glucose` permission for each patient. If denied,
+    shows a "permission not granted" message instead of glucose data.
+
+    If the caregiver has a single patient and permission is granted,
+    shows that patient's full glucose status. If multiple patients,
+    shows a brief summary for each.
     """
-    # Lazy import to avoid circular dependency
-    from src.services.telegram_commands import _handle_status
+    from src.services.caregiver import check_caregiver_permission
 
     if len(links) == 1:
         patient = links[0].patient
         patient_label = html.escape(patient.email)
+
+        can_view = await check_caregiver_permission(
+            db, caregiver_id, links[0].patient_id, "can_view_glucose"
+        )
+        if not can_view:
+            return (
+                f"\U0001f465 <b>Patient:</b> {patient_label}\n\n"
+                "\U0001f512 Glucose data not available (permission not granted)"
+            )
+
+        # Lazy import to avoid circular dependency
+        from src.services.telegram_commands import _handle_status
+
         status = await _handle_status(db, links[0].patient_id)
         return f"\U0001f465 <b>Patient:</b> {patient_label}\n\n{status}"
 
     # Multiple patients — brief status for each
-    from src.models.glucose import GlucoseReading
     from src.services.alert_notifier import trend_description
+    from src.services.dexcom_sync import get_latest_glucose_reading
 
     lines = ["\U0001f465 <b>Linked Patients</b>", ""]
 
@@ -81,13 +99,16 @@ async def _handle_caregiver_status(
         patient = link.patient
         patient_label = html.escape(patient.email)
 
-        result = await db.execute(
-            select(GlucoseReading)
-            .where(GlucoseReading.user_id == link.patient_id)
-            .order_by(GlucoseReading.reading_timestamp.desc())
-            .limit(1)
+        can_view = await check_caregiver_permission(
+            db, caregiver_id, link.patient_id, "can_view_glucose"
         )
-        reading = result.scalar_one_or_none()
+        if not can_view:
+            lines.append(
+                f"\u2022 <b>{patient_label}:</b> \U0001f512 Permission not granted"
+            )
+            continue
+
+        reading = await get_latest_glucose_reading(db, link.patient_id)
 
         if reading is None:
             lines.append(f"\u2022 <b>{patient_label}:</b> No data available")
@@ -169,6 +190,7 @@ async def _handle_caregiver_chat(
 ) -> str:
     """Route a caregiver's natural language message to AI chat.
 
+    Checks `can_view_ai_suggestions` permission before allowing AI chat.
     Resolves the target patient and delegates to handle_caregiver_chat
     in telegram_chat.py.
     """
@@ -184,6 +206,15 @@ async def _handle_caregiver_chat(
             "Please mention their name in your message.\n"
             f"Linked patients: {patient_list}"
         )
+
+    # Check AI suggestion permission (Story 8.3)
+    from src.services.caregiver import check_caregiver_permission
+
+    can_use_ai = await check_caregiver_permission(
+        db, caregiver_id, link.patient_id, "can_view_ai_suggestions"
+    )
+    if not can_use_ai:
+        return "\U0001f512 AI chat is not enabled for this patient."
 
     try:
         from src.services.telegram_chat import handle_caregiver_chat
@@ -248,7 +279,7 @@ async def _route_caregiver_command(
     if lower == "/status":
         if not links:
             return _handle_no_patients()
-        return await _handle_caregiver_status(db, links)
+        return await _handle_caregiver_status(db, caregiver_id, links)
 
     # Unknown /commands
     if stripped.startswith("/"):
