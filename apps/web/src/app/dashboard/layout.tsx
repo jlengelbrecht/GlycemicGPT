@@ -4,15 +4,17 @@
  * Story 4.1: Dashboard Layout & Navigation
  * Story 4.5: Real-Time Updates via SSE
  * Story 4.6: Dashboard Accessibility
- * Wraps all dashboard pages with the DashboardLayout component
- * and GlucoseStreamProvider for real-time glucose data.
+ * Story 6.3: Tiered Alert Delivery
+ * Wraps all dashboard pages with the DashboardLayout component,
+ * AlertNotificationProvider (which includes GlucoseStreamProvider)
+ * for real-time glucose data and alert notifications.
  *
  * Accessibility features:
  * - Skip link for keyboard navigation
  */
 
 import { DashboardLayout } from "@/components/layout";
-import { GlucoseStreamProvider } from "@/providers";
+import { AlertNotificationProvider } from "@/providers";
 
 /**
  * Skip link component for keyboard navigation.
@@ -33,9 +35,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <SkipLink />
-      <GlucoseStreamProvider>
+      <AlertNotificationProvider>
         <DashboardLayout>{children}</DashboardLayout>
-      </GlucoseStreamProvider>
+      </AlertNotificationProvider>
     </>
   );
 }

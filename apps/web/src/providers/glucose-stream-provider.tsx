@@ -4,6 +4,7 @@
  * GlucoseStreamProvider
  *
  * Story 4.5: Real-Time Updates via SSE
+ * Story 6.3: Alert event forwarding
  * React context provider for sharing glucose stream data across components.
  */
 
@@ -13,6 +14,7 @@ import {
   useGlucoseStream,
   type GlucoseData,
   type ConnectionState,
+  type AlertEventData,
 } from "@/hooks/use-glucose-stream";
 
 /** Context value for glucose stream */
@@ -42,6 +44,8 @@ export interface GlucoseStreamProviderProps {
   children: ReactNode;
   /** Whether the SSE connection should be active (default: true) */
   enabled?: boolean;
+  /** Story 6.3: Callback fired when a new alert event is received via SSE */
+  onAlertReceived?: (alert: AlertEventData) => void;
 }
 
 /**
@@ -51,8 +55,9 @@ export interface GlucoseStreamProviderProps {
 export function GlucoseStreamProvider({
   children,
   enabled = true,
+  onAlertReceived,
 }: GlucoseStreamProviderProps) {
-  const stream = useGlucoseStream(enabled);
+  const stream = useGlucoseStream(enabled, { onAlertReceived });
 
   // Issue 5 fix: Use individual dependencies instead of the whole stream object
   // This prevents unnecessary re-renders when memoizing

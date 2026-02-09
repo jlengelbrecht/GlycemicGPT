@@ -78,6 +78,28 @@ interface RawGlucoseData {
   timestamp: string;
 }
 
+/** Alert event data received from SSE (Story 6.3) */
+export interface AlertEventData {
+  id: string;
+  alert_type: string;
+  severity: "info" | "warning" | "urgent" | "emergency";
+  current_value: number;
+  predicted_value: number | null;
+  prediction_minutes: number | null;
+  iob_value: number | null;
+  message: string;
+  trend_rate: number | null;
+  source: string;
+  created_at: string;
+  expires_at: string;
+}
+
+/** Options for the useGlucoseStream hook */
+export interface GlucoseStreamOptions {
+  /** Callback fired when a new alert event is received via SSE */
+  onAlertReceived?: (alert: AlertEventData) => void;
+}
+
 /** Glucose data with frontend-friendly trend (used by components) */
 export interface GlucoseData {
   /** Current glucose value in mg/dL */
@@ -160,7 +182,10 @@ function transformGlucoseData(raw: RawGlucoseData): GlucoseData {
  * @param enabled - Whether the SSE connection should be active (default: true)
  * @returns GlucoseStreamState with data, connection state, and control functions
  */
-export function useGlucoseStream(enabled: boolean = true): GlucoseStreamState {
+export function useGlucoseStream(
+  enabled: boolean = true,
+  options?: GlucoseStreamOptions,
+): GlucoseStreamState {
   const [data, setData] = useState<GlucoseData | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("closed");
   const [error, setError] = useState<Error | null>(null);
@@ -171,6 +196,12 @@ export function useGlucoseStream(enabled: boolean = true): GlucoseStreamState {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptRef = useRef(0);
   const isMountedRef = useRef(true);
+
+  // Ref for alert callback to avoid reconnection on callback change
+  const onAlertReceivedRef = useRef(options?.onAlertReceived);
+  useEffect(() => {
+    onAlertReceivedRef.current = options?.onAlertReceived;
+  }, [options?.onAlertReceived]);
 
   /**
    * Calculate the delay for the next reconnect attempt using exponential backoff.
@@ -247,6 +278,17 @@ export function useGlucoseStream(enabled: boolean = true): GlucoseStreamState {
         if (!isMountedRef.current) return;
         // Issue 8 fix: Remove console.log for no_data events
         // No action needed - UI will show "no data" state
+      });
+
+      // Story 6.3: Listen for alert events
+      eventSource.addEventListener("alert", (event: MessageEvent) => {
+        if (!isMountedRef.current) return;
+        try {
+          const alertData: AlertEventData = JSON.parse(event.data);
+          onAlertReceivedRef.current?.(alertData);
+        } catch {
+          // Silently handle parse errors for alert events
+        }
       });
 
       eventSource.addEventListener("error", () => {
