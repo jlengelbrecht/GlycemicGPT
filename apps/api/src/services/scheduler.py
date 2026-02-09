@@ -238,6 +238,79 @@ async def check_alerts_all_users() -> None:
     )
 
 
+async def check_escalations_all_users() -> None:
+    """Run escalation checks for users with unacknowledged critical alerts.
+
+    This job runs frequently (every 1 minute) to ensure timely escalations.
+    Only queries users who actually have unacked URGENT/EMERGENCY alerts,
+    avoiding unnecessary work for users with no escalatable alerts.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import and_, distinct
+
+    from src.models.alert import Alert, AlertSeverity
+    from src.models.user import User
+    from src.services.escalation_engine import process_escalations_for_user
+
+    logger.info("Starting scheduled escalation check")
+
+    now = datetime.now(UTC)
+
+    async with get_session_maker()() as db:
+        # Only find users who have unacknowledged critical alerts
+        user_ids_result = await db.execute(
+            select(distinct(Alert.user_id)).where(
+                and_(
+                    Alert.acknowledged.is_(False),
+                    Alert.expires_at > now,
+                    Alert.severity.in_([AlertSeverity.URGENT, AlertSeverity.EMERGENCY]),
+                )
+            )
+        )
+        user_ids = [row[0] for row in user_ids_result.all()]
+
+        if not user_ids:
+            logger.info("No users with unacknowledged critical alerts")
+            return
+
+        # Fetch user details for those with critical alerts
+        result = await db.execute(
+            select(User).where(User.id.in_(user_ids), User.is_active.is_(True))
+        )
+        users = result.scalars().all()
+
+        if not users:
+            logger.info("No active users for escalation check")
+            return
+
+        escalation_count = 0
+        error_count = 0
+
+        for user in users:
+            try:
+                async with get_session_maker()() as user_db:
+                    count = await process_escalations_for_user(
+                        user_db, user.id, user.email
+                    )
+                    escalation_count += count
+            except Exception as e:
+                logger.error(
+                    "Escalation check failed for user",
+                    user_id=str(user.id),
+                    error=str(e),
+                )
+                error_count += 1
+
+            await asyncio.sleep(0.1)
+
+    logger.info(
+        "Scheduled escalation check completed",
+        escalations_triggered=escalation_count,
+        errors=error_count,
+    )
+
+
 def start_scheduler() -> AsyncIOScheduler:
     """Start the background job scheduler.
 
@@ -292,6 +365,21 @@ def start_scheduler() -> AsyncIOScheduler:
         logger.info(
             "Scheduled alert check job",
             interval_minutes=settings.alert_check_interval_minutes,
+        )
+
+    # Add escalation check job if enabled (Story 6.7)
+    if settings.escalation_check_enabled:
+        scheduler.add_job(
+            check_escalations_all_users,
+            trigger=IntervalTrigger(minutes=settings.escalation_check_interval_minutes),
+            id="escalation_check",
+            name="Alert Escalation Check",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info(
+            "Scheduled escalation check job",
+            interval_minutes=settings.escalation_check_interval_minutes,
         )
 
     scheduler.start()

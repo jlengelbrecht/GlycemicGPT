@@ -8,6 +8,11 @@ from src.models.daily_brief import DailyBrief
 from src.models.disclaimer import DisclaimerAcknowledgment
 from src.models.emergency_contact import ContactPriority, EmergencyContact
 from src.models.escalation_config import EscalationConfig
+from src.models.escalation_event import (
+    EscalationEvent,
+    EscalationTier,
+    NotificationStatus,
+)
 from src.models.glucose import GlucoseReading, TrendDirection
 from src.models.integration import (
     IntegrationCredential,
@@ -36,6 +41,9 @@ __all__ = [
     "DisclaimerAcknowledgment",
     "EmergencyContact",
     "EscalationConfig",
+    "EscalationEvent",
+    "EscalationTier",
+    "NotificationStatus",
     "MealAnalysis",
     "GlucoseReading",
     "TrendDirection",

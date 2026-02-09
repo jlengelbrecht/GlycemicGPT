@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     alert_check_interval_minutes: int = 5  # Run alert engine every 5 minutes
     alert_check_enabled: bool = True  # Enable/disable automatic alert checking
 
+    # Alert Escalation (Story 6.7)
+    escalation_check_interval_minutes: int = 1  # Check every 1 minute
+    escalation_check_enabled: bool = True  # Enable/disable automatic escalation
+
     # Testing
     testing: bool = False  # Set to True during tests to disable connection pooling
 

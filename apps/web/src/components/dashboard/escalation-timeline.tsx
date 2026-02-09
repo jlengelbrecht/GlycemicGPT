@@ -1,0 +1,169 @@
+"use client";
+
+/**
+ * Story 6.7: Escalation Timeline Component.
+ *
+ * Displays the escalation history for an alert, showing progression
+ * through tiers (reminder, primary contact, all contacts).
+ */
+
+import { useEffect, useState } from "react";
+import { Clock, Loader2, User, Users } from "lucide-react";
+import clsx from "clsx";
+import { getAlertEscalationTimeline } from "@/lib/api";
+import type { EscalationEvent } from "@/lib/api";
+
+const TIER_CONFIG: Record<
+  string,
+  {
+    label: string;
+    icon: typeof Clock;
+    color: string;
+    bg: string;
+    border: string;
+  }
+> = {
+  reminder: {
+    label: "Reminder Sent",
+    icon: Clock,
+    color: "text-amber-400",
+    bg: "bg-amber-900/20",
+    border: "border-amber-700/30",
+  },
+  primary_contact: {
+    label: "Primary Contact Notified",
+    icon: User,
+    color: "text-orange-400",
+    bg: "bg-orange-900/20",
+    border: "border-orange-700/30",
+  },
+  all_contacts: {
+    label: "All Contacts Notified",
+    icon: Users,
+    color: "text-red-400",
+    bg: "bg-red-900/20",
+    border: "border-red-700/30",
+  },
+};
+
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    sent: "bg-green-900/30 text-green-400 border-green-700/30",
+    pending: "bg-yellow-900/30 text-yellow-400 border-yellow-700/30",
+    failed: "bg-red-900/30 text-red-400 border-red-700/30",
+  };
+
+  return (
+    <span
+      className={clsx(
+        "text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded border",
+        styles[status] || styles.pending
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+interface EscalationTimelineProps {
+  alertId: string;
+}
+
+export function EscalationTimeline({ alertId }: EscalationTimelineProps) {
+  const [events, setEvents] = useState<EscalationEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchTimeline() {
+      try {
+        setLoading(true);
+        const data = await getAlertEscalationTimeline(alertId);
+        if (!cancelled) {
+          setEvents(data.events);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Failed to load timeline"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchTimeline();
+    return () => {
+      cancelled = true;
+    };
+  }, [alertId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-slate-500 mt-3">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        <span>Loading escalation timeline...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-xs text-red-400 mt-3" role="alert">
+        Escalation timeline unavailable
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 space-y-2" aria-label="Escalation timeline">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+        Escalation History
+      </p>
+      {events.map((event) => {
+        const tier = TIER_CONFIG[event.tier] || TIER_CONFIG.reminder;
+        const TierIcon = tier.icon;
+
+        return (
+          <div
+            key={event.id}
+            className={clsx(
+              "flex items-center gap-2 rounded-lg border px-3 py-2",
+              tier.bg,
+              tier.border
+            )}
+          >
+            <TierIcon
+              className={clsx("h-3.5 w-3.5 shrink-0", tier.color)}
+              aria-hidden="true"
+            />
+            <span className={clsx("text-xs font-medium", tier.color)}>
+              {tier.label}
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <StatusBadge status={event.notification_status} />
+              <span className="text-[10px] text-slate-500">
+                {formatTimestamp(event.triggered_at)}
+              </span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
