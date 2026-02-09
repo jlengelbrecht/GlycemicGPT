@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.26](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.25...v0.1.26) (2026-02-09)
+
+
+### ✨ Features
+
+* add automatic escalation to caregivers (Story 6.7) ([#60](https://github.com/jlengelbrecht/GlycemicGPT/issues/60)) ([50dd1f9](https://github.com/jlengelbrecht/GlycemicGPT/commit/50dd1f9f8e5979f029d2bd64fd62ac2236292586))
+
 ## [0.1.25](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.24...v0.1.25) (2026-02-09)
 
 
