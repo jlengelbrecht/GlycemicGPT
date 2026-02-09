@@ -46,6 +46,13 @@ class CaregiverLink(Base, TimestampMixin):
         index=True,
     )
 
+    # Permission flags (Story 8.2)
+    can_view_glucose: Mapped[bool] = mapped_column(default=True)
+    can_view_history: Mapped[bool] = mapped_column(default=True)
+    can_view_iob: Mapped[bool] = mapped_column(default=True)
+    can_view_ai_suggestions: Mapped[bool] = mapped_column(default=False)
+    can_receive_alerts: Mapped[bool] = mapped_column(default=True)
+
     # Relationships
     caregiver = relationship("User", foreign_keys=[caregiver_id])
     patient = relationship("User", foreign_keys=[patient_id])
