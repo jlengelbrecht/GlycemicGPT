@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.44](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.43...v0.1.44) (2026-02-10)
+
+
+### ✨ Features
+
+* add profile settings page with display name and password change (Story 10.2) ([#105](https://github.com/jlengelbrecht/GlycemicGPT/issues/105)) ([5dccac1](https://github.com/jlengelbrecht/GlycemicGPT/commit/5dccac1a0533dfe72af3459b3d62ae2492eadd7d))
+
 ## [0.1.43](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.42...v0.1.43) (2026-02-10)
 
 
