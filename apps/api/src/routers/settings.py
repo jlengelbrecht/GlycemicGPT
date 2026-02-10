@@ -6,7 +6,7 @@ Provides endpoints for managing user alert thresholds and escalation timing.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user, require_diabetic_or_admin
 from src.database import get_db
 from src.models.user import User
 from src.schemas.alert_threshold import (
@@ -25,7 +25,11 @@ from src.services.escalation_config import get_or_create_config, update_config
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-@router.get("/alert-thresholds", response_model=AlertThresholdResponse)
+@router.get(
+    "/alert-thresholds",
+    response_model=AlertThresholdResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_alert_thresholds(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -38,7 +42,11 @@ async def get_alert_thresholds(
     return AlertThresholdResponse.model_validate(thresholds)
 
 
-@router.patch("/alert-thresholds", response_model=AlertThresholdResponse)
+@router.patch(
+    "/alert-thresholds",
+    response_model=AlertThresholdResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def patch_alert_thresholds(
     body: AlertThresholdUpdate,
     user: User = Depends(get_current_user),
@@ -73,7 +81,11 @@ async def get_alert_threshold_defaults() -> AlertThresholdDefaults:
 # ── Escalation timing endpoints ──
 
 
-@router.get("/escalation-config", response_model=EscalationConfigResponse)
+@router.get(
+    "/escalation-config",
+    response_model=EscalationConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_escalation_config(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -86,7 +98,11 @@ async def get_escalation_config(
     return EscalationConfigResponse.model_validate(config)
 
 
-@router.patch("/escalation-config", response_model=EscalationConfigResponse)
+@router.patch(
+    "/escalation-config",
+    response_model=EscalationConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def patch_escalation_config(
     body: EscalationConfigUpdate,
     user: User = Depends(get_current_user),

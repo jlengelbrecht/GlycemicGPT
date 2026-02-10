@@ -13,10 +13,10 @@
 | 5 | AI-Powered Analysis & Recommendations | 8/8 | **Complete** |
 | 6 | Intelligent Alerting & Escalation | 7/7 | **Complete** |
 | 7 | Telegram Bot Integration | 6/6 | **Complete** |
-| 8 | Caregiver Access & Support | 5/6 | In Progress |
+| 8 | Caregiver Access & Support | 6/6 | **Complete** |
 | 9 | Settings & Data Management | 0/5 | Not Started |
 
-**Overall Progress:** 46/54 stories complete (85%)
+**Overall Progress:** 47/54 stories complete (87%)
 
 ---
 
@@ -132,7 +132,7 @@
 
 ## Epic 8: Caregiver Access & Support
 
-**Status:** In Progress
+**Status:** Complete
 
 | Story | Title | Status | PR |
 |-------|-------|--------|----|
@@ -140,8 +140,8 @@
 | 8.2 | Caregiver Data Access Configuration | Done | #80 |
 | 8.3 | Caregiver Dashboard View | Done | #82 |
 | 8.4 | Caregiver AI Queries | Done | #84 |
-| 8.5 | Multi-Patient Dashboard | Done | PR pending |
-| 8.6 | Caregiver Read-Only Enforcement | Pending |
+| 8.5 | Multi-Patient Dashboard | Done | #86 |
+| 8.6 | Caregiver Read-Only Enforcement | Done | PR pending |
 
 ---
 
@@ -194,11 +194,12 @@ All 6 stories completed:
 - [x] Story 7.5: AI Chat via Telegram
 - [x] Story 7.6: Caregiver Telegram Access
 
-**Epic 8: Caregiver Access & Support** - IN PROGRESS
+**Epic 8: Caregiver Access & Support** - COMPLETE
 
+All 6 stories completed:
 - [x] Story 8.1: Caregiver Account Creation & Linking
 - [x] Story 8.2: Caregiver Data Access Configuration
 - [x] Story 8.3: Caregiver Dashboard View
 - [x] Story 8.4: Caregiver AI Queries
 - [x] Story 8.5: Multi-Patient Dashboard
-- [ ] Story 8.6: Caregiver Read-Only Enforcement
+- [x] Story 8.6: Caregiver Read-Only Enforcement
