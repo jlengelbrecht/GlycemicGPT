@@ -236,9 +236,7 @@ class TestRouterDependenciesIncludeRoleCheck:
         """GET /api/ai/insights has require_diabetic."""
         from src.routers.insights import router
 
-        deps = self._get_route_dependencies(
-            router, "/api/ai/insights", "GET"
-        )
+        deps = self._get_route_dependencies(router, "/api/ai/insights", "GET")
         dep_classes = [type(d.dependency) for d in deps]
         assert RoleChecker in dep_classes
 
