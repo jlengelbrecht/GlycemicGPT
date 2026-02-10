@@ -9,7 +9,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user, require_diabetic_or_admin
 from src.database import get_db
 from src.models.user import User
 from src.schemas.suggestion_response import (
@@ -30,7 +30,11 @@ router = APIRouter(prefix="/api/ai/insights", tags=["insights"])
 VALID_ANALYSIS_TYPES = {"daily_brief", "meal_analysis", "correction_analysis"}
 
 
-@router.get("", response_model=InsightsListResponse)
+@router.get(
+    "",
+    response_model=InsightsListResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_insights(
     limit: int = Query(default=10, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -45,7 +49,11 @@ async def get_insights(
     return InsightsListResponse(insights=insights, total=total)
 
 
-@router.get("/{analysis_type}/{analysis_id}", response_model=InsightDetail)
+@router.get(
+    "/{analysis_type}/{analysis_id}",
+    response_model=InsightDetail,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_insight(
     analysis_type: str,
     analysis_id: uuid.UUID,
@@ -71,6 +79,7 @@ async def get_insight(
     "/{analysis_type}/{analysis_id}/respond",
     response_model=SuggestionResponseResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_diabetic_or_admin)],
 )
 async def respond_to_insight(
     analysis_type: str,

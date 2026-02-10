@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user, require_diabetic_or_admin
 from src.database import get_db
 from src.models.user import User
 from src.schemas.emergency_contact import (
@@ -30,7 +30,11 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=EmergencyContactListResponse)
+@router.get(
+    "",
+    response_model=EmergencyContactListResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_contacts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -47,6 +51,7 @@ async def get_contacts(
     "",
     response_model=EmergencyContactResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_diabetic_or_admin)],
 )
 async def add_contact(
     data: EmergencyContactCreate,
@@ -69,7 +74,11 @@ async def add_contact(
     return EmergencyContactResponse.model_validate(contact)
 
 
-@router.patch("/{contact_id}", response_model=EmergencyContactResponse)
+@router.patch(
+    "/{contact_id}",
+    response_model=EmergencyContactResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def edit_contact(
     contact_id: uuid.UUID,
     data: EmergencyContactUpdate,
@@ -94,7 +103,11 @@ async def edit_contact(
     return EmergencyContactResponse.model_validate(contact)
 
 
-@router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{contact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def remove_contact(
     contact_id: uuid.UUID,
     user: User = Depends(get_current_user),

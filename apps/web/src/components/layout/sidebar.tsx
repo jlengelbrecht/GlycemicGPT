@@ -5,8 +5,9 @@
  *
  * Story 4.1: Dashboard Layout & Navigation
  * Story 8.3: Role-aware navigation for caregiver accounts
+ * Story 8.6: Caregivers see only the Caregiver Dashboard link
  * Provides navigation to Dashboard, Daily Briefs, Alerts, and Settings.
- * Caregivers see only Dashboard and Settings.
+ * Caregivers see only the Caregiver Dashboard (read-only enforcement).
  * Collapses to hamburger menu on mobile.
  */
 
@@ -40,7 +41,6 @@ const diabeticNavigation: NavItem[] = [
 
 const caregiverNavigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard/caregiver", icon: LayoutDashboard },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 interface SidebarProps {

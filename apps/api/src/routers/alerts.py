@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user, require_diabetic_or_admin
 from src.database import get_db
 from src.models.user import User
 from src.schemas.alert import (
@@ -21,7 +21,11 @@ from src.services.predictive_alerts import acknowledge_alert, get_active_alerts
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 
-@router.get("/active", response_model=ActiveAlertsResponse)
+@router.get(
+    "/active",
+    response_model=ActiveAlertsResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
 async def get_alerts(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -55,6 +59,7 @@ async def get_alerts(
 @router.patch(
     "/{alert_id}/acknowledge",
     response_model=AlertAcknowledgeResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
 )
 async def acknowledge(
     alert_id: uuid.UUID,
