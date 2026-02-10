@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Story 9.3: Data Retention Settings
+ * Stories 9.3 & 9.4: Data Retention Settings & Data Purge
  *
  * Allows users to configure retention periods for glucose data,
  * AI analysis results, and audit logs. Displays storage usage.
+ * Provides a "Danger Zone" section for permanently purging all data.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -15,6 +16,7 @@ import {
   Check,
   ArrowLeft,
   RotateCcw,
+  Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -22,6 +24,7 @@ import {
   getDataRetentionConfig,
   updateDataRetentionConfig,
   getStorageUsage,
+  purgeUserData,
   type DataRetentionConfigResponse,
   type StorageUsageResponse,
 } from "@/lib/api";
@@ -55,6 +58,11 @@ export default function DataRetentionPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Purge state (Story 9.4)
+  const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
+  const [purgeInput, setPurgeInput] = useState("");
+  const [isPurging, setIsPurging] = useState(false);
 
   // Form state
   const [glucoseDays, setGlucoseDays] = useState(365);
@@ -190,6 +198,36 @@ export default function DataRetentionPage() {
       );
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    if (purgeInput !== "DELETE") return;
+
+    setIsPurging(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await purgeUserData("DELETE");
+      setSuccess(
+        `${result.message}. All glucose data, AI analysis, and audit records have been permanently removed.`
+      );
+      setShowPurgeConfirm(false);
+      setPurgeInput("");
+      // Refresh storage usage to reflect the purge (failure here is non-critical)
+      try {
+        const usageData = await getStorageUsage();
+        setUsage(usageData);
+      } catch {
+        // Usage refresh failed but purge succeeded — don't overwrite success
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to purge data"
+      );
+    } finally {
+      setIsPurging(false);
     }
   };
 
@@ -500,6 +538,147 @@ export default function DataRetentionPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Danger Zone (Story 9.4) */}
+      {!isLoading && (
+        <div className="bg-slate-900 rounded-xl border border-red-500/30 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-red-500/10 rounded-lg">
+              <Trash2 className="h-5 w-5 text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-red-400">
+                Danger Zone
+              </h2>
+              <p className="text-xs text-slate-500">
+                Irreversible actions that permanently delete your data
+              </p>
+            </div>
+          </div>
+
+          {!showPurgeConfirm ? (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-300">Purge All Data</p>
+                <p className="text-xs text-slate-500">
+                  Permanently delete all glucose readings, pump events, AI
+                  analysis, and audit records. Account settings are preserved.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPurgeConfirm(true)}
+                disabled={isPurging || isSaving}
+                className={clsx(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                  "bg-red-600/10 text-red-400 border border-red-500/30",
+                  "hover:bg-red-600/20",
+                  "transition-colors",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Purge All Data
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div
+                className="bg-red-500/10 rounded-lg p-4 border border-red-500/20"
+                role="alert"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                  <div className="text-sm text-red-400">
+                    <p className="font-medium mb-1">
+                      This action is irreversible
+                    </p>
+                    <p>
+                      All glucose readings, pump events, daily briefs, meal
+                      analyses, correction analyses, safety logs, alerts, and
+                      escalation events will be permanently deleted.
+                    </p>
+                    <p className="mt-2">
+                      Your account, settings, integrations, emergency contacts,
+                      and caregiver links will be preserved.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="purge-confirm"
+                  className="block text-sm font-medium text-slate-300 mb-1"
+                >
+                  Type <span className="font-mono text-red-400">DELETE</span> to
+                  confirm
+                </label>
+                <input
+                  id="purge-confirm"
+                  type="text"
+                  value={purgeInput}
+                  onChange={(e) => setPurgeInput(e.target.value)}
+                  disabled={isPurging}
+                  placeholder="Type DELETE to confirm"
+                  autoComplete="off"
+                  className={clsx(
+                    "w-full rounded-lg border px-3 py-2 text-sm",
+                    "bg-slate-800 border-slate-700 text-slate-200",
+                    "placeholder:text-slate-600",
+                    "focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handlePurge}
+                  disabled={purgeInput !== "DELETE" || isPurging}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                    "bg-red-600 text-white hover:bg-red-500",
+                    "transition-colors",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                >
+                  {isPurging ? (
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {isPurging ? "Purging..." : "Permanently Delete All Data"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPurgeConfirm(false);
+                    setPurgeInput("");
+                  }}
+                  disabled={isPurging}
+                  className={clsx(
+                    "px-4 py-2 rounded-lg text-sm font-medium",
+                    "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                    "transition-colors",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
+                    "disabled:opacity-50 disabled:cursor-not-allowed"
+                  )}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

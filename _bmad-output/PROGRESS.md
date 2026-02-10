@@ -14,9 +14,9 @@
 | 6 | Intelligent Alerting & Escalation | 7/7 | **Complete** |
 | 7 | Telegram Bot Integration | 6/6 | **Complete** |
 | 8 | Caregiver Access & Support | 6/6 | **Complete** |
-| 9 | Settings & Data Management | 3/5 | In Progress |
+| 9 | Settings & Data Management | 4/5 | In Progress |
 
-**Overall Progress:** 50/54 stories complete (93%)
+**Overall Progress:** 51/54 stories complete (94%)
 
 ---
 
@@ -147,14 +147,14 @@
 
 ## Epic 9: Settings & Data Management
 
-**Status:** In Progress (3/5)
+**Status:** In Progress (4/5)
 
 | Story | Title | Status | PR |
 |-------|-------|--------|----|
 | 9.1 | Target Glucose Range Configuration | Done | #90 |
 | 9.2 | Daily Brief Delivery Configuration | Done | #92 |
-| 9.3 | Data Retention Settings | Done | PR pending |
-| 9.4 | Data Purge Capability | Pending | |
+| 9.3 | Data Retention Settings | Done | #94 |
+| 9.4 | Data Purge Capability | Done | PR pending |
 | 9.5 | Settings Export | Pending | |
 
 ---
@@ -209,5 +209,5 @@ All 6 stories completed:
 - [x] Story 9.1: Target Glucose Range Configuration
 - [x] Story 9.2: Daily Brief Delivery Configuration
 - [x] Story 9.3: Data Retention Settings
-- [ ] Story 9.4: Data Purge Capability
+- [x] Story 9.4: Data Purge Capability
 - [ ] Story 9.5: Settings Export
