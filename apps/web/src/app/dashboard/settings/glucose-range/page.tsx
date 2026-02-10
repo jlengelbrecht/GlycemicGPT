@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   RotateCcw,
 } from "lucide-react";
+import Link from "next/link";
 import clsx from "clsx";
 import {
   getTargetGlucoseRange,
@@ -52,6 +53,11 @@ export default function GlucoseRangePage() {
             : "Failed to load target glucose range"
         );
       }
+      // Use defaults as baseline so the form is still functional
+      setRange({
+        low_target: DEFAULTS.low_target,
+        high_target: DEFAULTS.high_target,
+      } as TargetGlucoseRangeResponse);
     } finally {
       setIsLoading(false);
     }
@@ -60,6 +66,13 @@ export default function GlucoseRangePage() {
   useEffect(() => {
     fetchRange();
   }, [fetchRange]);
+
+  // Auto-clear success message after 5 seconds
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(null), 5000);
+    return () => clearTimeout(timer);
+  }, [success]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,13 +153,13 @@ export default function GlucoseRangePage() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <a
+        <Link
           href="/dashboard/settings"
           className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-300 mb-2"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Settings
-        </a>
+        </Link>
         <h1 className="text-2xl font-bold">Target Glucose Range</h1>
         <p className="text-slate-400">
           Set your personal target range for dashboard display and AI analysis

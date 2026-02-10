@@ -103,6 +103,13 @@ export default function BriefDeliveryPage() {
             : "Failed to load brief delivery configuration"
         );
       }
+      // Use defaults as baseline so the form is still functional
+      setConfig({
+        enabled: DEFAULTS.enabled,
+        delivery_time: DEFAULTS.delivery_time,
+        timezone: DEFAULTS.timezone,
+        channel: DEFAULTS.channel,
+      } as BriefDeliveryConfigResponse);
     } finally {
       setIsLoading(false);
     }
