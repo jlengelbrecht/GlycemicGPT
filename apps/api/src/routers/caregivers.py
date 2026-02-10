@@ -31,6 +31,8 @@ from src.schemas.caregiver import (
     LinkedPatientsListResponse,
 )
 from src.schemas.caregiver_dashboard import (
+    CaregiverChatRequest,
+    CaregiverChatResponse,
     CaregiverGlucoseData,
     CaregiverGlucoseHistoryReading,
     CaregiverGlucoseHistoryResponse,
@@ -548,3 +550,39 @@ async def get_caregiver_glucose_history(
         ],
         count=len(readings),
     )
+
+
+# ── Story 8.4: Caregiver AI chat endpoint ──
+
+
+@router.post(
+    "/patients/{patient_id}/chat",
+    response_model=CaregiverChatResponse,
+    dependencies=[Depends(require_caregiver)],
+)
+async def caregiver_ai_chat(
+    patient_id: uuid.UUID,
+    data: CaregiverChatRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> CaregiverChatResponse:
+    """Ask an AI question about a linked patient's glucose data.
+
+    Requires ``can_view_ai_suggestions`` permission. Uses the patient's
+    AI provider configuration and glucose data to generate a response.
+    """
+    link = await _get_caregiver_link(db, current_user.id, patient_id)
+
+    if not getattr(link, "can_view_ai_suggestions", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI suggestions access not permitted",
+        )
+
+    from src.services.telegram_chat import handle_caregiver_chat_web
+
+    response_text = await handle_caregiver_chat_web(
+        db, current_user.id, patient_id, data.message
+    )
+
+    return CaregiverChatResponse(response=response_text)
