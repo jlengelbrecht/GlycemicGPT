@@ -469,3 +469,25 @@ class TestRouterDependenciesIncludeRoleCheck:
         )
         role_checker = deps[0].dependency
         assert UserRole.CAREGIVER not in role_checker.allowed_roles
+
+    # ── Story 9.4: Data Purge ──
+
+    def test_data_purge_has_require_diabetic(self):
+        """POST /api/settings/data-retention/purge has require_diabetic_or_admin."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/data-retention/purge", "POST"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_data_purge_role_blocks_caregiver(self):
+        """Data purge role check blocks CAREGIVER."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/data-retention/purge", "POST"
+        )
+        role_checker = deps[0].dependency
+        assert UserRole.CAREGIVER not in role_checker.allowed_roles

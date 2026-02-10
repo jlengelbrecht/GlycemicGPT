@@ -1,7 +1,8 @@
-"""Stories 6.1, 6.6, 9.1, 9.2, 9.3: Settings router.
+"""Stories 6.1, 6.6, 9.1, 9.2, 9.3, 9.4: Settings router.
 
 Provides endpoints for managing user alert thresholds, escalation timing,
-target glucose range, brief delivery configuration, and data retention settings.
+target glucose range, brief delivery configuration, data retention settings,
+and data purge capability.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +21,7 @@ from src.schemas.brief_delivery_config import (
     BriefDeliveryConfigResponse,
     BriefDeliveryConfigUpdate,
 )
+from src.schemas.data_purge import DataPurgeRequest, DataPurgeResponse
 from src.schemas.data_retention_config import (
     DataRetentionConfigDefaults,
     DataRetentionConfigResponse,
@@ -41,6 +43,7 @@ from src.services.brief_delivery_config import (
     get_or_create_config as get_or_create_brief_config,
 )
 from src.services.brief_delivery_config import update_config as update_brief_config
+from src.services.data_purge import purge_all_user_data
 from src.services.data_retention_config import (
     get_or_create_config as get_or_create_retention_config,
 )
@@ -347,3 +350,40 @@ async def get_data_retention_usage(
 ) -> StorageUsageResponse:
     """Get the current user's storage usage (record counts by category)."""
     return await get_storage_usage(user.id, db)
+
+
+# ── Data purge endpoint (Story 9.4) ──
+
+
+@router.post(
+    "/data-retention/purge",
+    response_model=DataPurgeResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def purge_data(
+    body: DataPurgeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DataPurgeResponse:
+    """Permanently delete all user data except account and settings.
+
+    Requires confirmation_text to be exactly "DELETE" (case-sensitive).
+    This action is irreversible. Glucose readings, pump events, AI analysis
+    results, and audit records are permanently removed. Account settings
+    and configuration preferences are preserved.
+    """
+    if body.confirmation_text != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='confirmation_text must be exactly "DELETE"',
+        )
+
+    deleted = await purge_all_user_data(user.id, db)
+    total = sum(deleted.values())
+
+    return DataPurgeResponse(
+        success=True,
+        deleted_records=deleted,
+        total_deleted=total,
+        message=f"Successfully purged {total} records",
+    )

@@ -1317,6 +1317,39 @@ export async function getStorageUsage(): Promise<StorageUsageResponse> {
 }
 
 /**
+ * Data purge (Story 9.4)
+ */
+export interface DataPurgeResponse {
+  success: boolean;
+  deleted_records: Record<string, number>;
+  total_deleted: number;
+  message: string;
+}
+
+export async function purgeUserData(
+  confirmationText: string
+): Promise<DataPurgeResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/data-retention/purge`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ confirmation_text: confirmationText }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to purge data: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Caregiver AI Chat (Story 8.4)
  */
 export interface CaregiverChatResponse {
