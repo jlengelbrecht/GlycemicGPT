@@ -17,9 +17,7 @@ async def register_and_login(
     client: AsyncClient, email: str, password: str = "SecurePass123"
 ) -> dict[str, str]:
     """Register a user and log in; return cookies dict for subsequent requests."""
-    await client.post(
-        "/api/auth/register", json={"email": email, "password": password}
-    )
+    await client.post("/api/auth/register", json={"email": email, "password": password})
     login_resp = await client.post(
         "/api/auth/login", json={"email": email, "password": password}
     )
