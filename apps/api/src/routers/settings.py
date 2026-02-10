@@ -1,7 +1,7 @@
-"""Stories 6.1, 6.6, 9.1: Settings router.
+"""Stories 6.1, 6.6, 9.1, 9.2: Settings router.
 
 Provides endpoints for managing user alert thresholds, escalation timing,
-and target glucose range configuration.
+target glucose range, and brief delivery configuration.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,6 +15,11 @@ from src.schemas.alert_threshold import (
     AlertThresholdResponse,
     AlertThresholdUpdate,
 )
+from src.schemas.brief_delivery_config import (
+    BriefDeliveryConfigDefaults,
+    BriefDeliveryConfigResponse,
+    BriefDeliveryConfigUpdate,
+)
 from src.schemas.escalation_config import (
     EscalationConfigDefaults,
     EscalationConfigResponse,
@@ -26,6 +31,10 @@ from src.schemas.target_glucose_range import (
     TargetGlucoseRangeUpdate,
 )
 from src.services.alert_threshold import get_or_create_thresholds, update_thresholds
+from src.services.brief_delivery_config import (
+    get_or_create_config as get_or_create_brief_config,
+)
+from src.services.brief_delivery_config import update_config as update_brief_config
 from src.services.escalation_config import get_or_create_config, update_config
 from src.services.target_glucose_range import get_or_create_range, update_range
 
@@ -196,3 +205,60 @@ async def get_target_glucose_range_defaults() -> TargetGlucoseRangeDefaults:
     This endpoint does not require authentication.
     """
     return TargetGlucoseRangeDefaults()
+
+
+# ── Brief delivery configuration endpoints (Story 9.2) ──
+
+
+@router.get(
+    "/brief-delivery",
+    response_model=BriefDeliveryConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_brief_delivery_config(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BriefDeliveryConfigResponse:
+    """Get the current user's brief delivery configuration.
+
+    Returns defaults (enabled, 07:00 UTC, both channels) if not configured yet.
+    """
+    config = await get_or_create_brief_config(user.id, db)
+    return BriefDeliveryConfigResponse.model_validate(config)
+
+
+@router.patch(
+    "/brief-delivery",
+    response_model=BriefDeliveryConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def patch_brief_delivery_config(
+    body: BriefDeliveryConfigUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BriefDeliveryConfigResponse:
+    """Update the current user's brief delivery configuration.
+
+    Only provided fields are updated. Validates timezone is a valid IANA zone.
+    """
+    try:
+        config = await update_brief_config(user.id, body, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
+
+    return BriefDeliveryConfigResponse.model_validate(config)
+
+
+@router.get(
+    "/brief-delivery/defaults",
+    response_model=BriefDeliveryConfigDefaults,
+)
+async def get_brief_delivery_defaults() -> BriefDeliveryConfigDefaults:
+    """Get the default brief delivery configuration values for reference.
+
+    This endpoint does not require authentication.
+    """
+    return BriefDeliveryConfigDefaults()
