@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.37](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.36...v0.1.37) (2026-02-10)
+
+
+### ✨ Features
+
+* enforce caregiver read-only access (Story 8.6) ([#88](https://github.com/jlengelbrecht/GlycemicGPT/issues/88)) ([85ef5b2](https://github.com/jlengelbrecht/GlycemicGPT/commit/85ef5b2688d24599dc13161a5ac4f55a9d27e5d5))
+
 ## [0.1.36](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.35...v0.1.36) (2026-02-10)
 
 
