@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.42](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.41...v0.1.42) (2026-02-10)
+
+
+### ✨ Features
+
+* add settings export capability (Story 9.5) ([#98](https://github.com/jlengelbrecht/GlycemicGPT/issues/98)) ([bdd656b](https://github.com/jlengelbrecht/GlycemicGPT/commit/bdd656bc4910f696b5f77af6070eb1cfdea91fc0))
+
 ## [0.1.41](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.40...v0.1.41) (2026-02-10)
 
 
