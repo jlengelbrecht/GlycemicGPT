@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.38](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.37...v0.1.38) (2026-02-10)
+
+
+### ✨ Features
+
+* add target glucose range configuration (Story 9.1) ([#90](https://github.com/jlengelbrecht/GlycemicGPT/issues/90)) ([07473e1](https://github.com/jlengelbrecht/GlycemicGPT/commit/07473e16bdf4e2fc48f3c23a3834896665771bfd))
+
 ## [0.1.37](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.36...v0.1.37) (2026-02-10)
 
 
