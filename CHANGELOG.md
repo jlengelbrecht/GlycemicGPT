@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.39](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.38...v0.1.39) (2026-02-10)
+
+
+### ✨ Features
+
+* add daily brief delivery configuration (Story 9.2) ([#92](https://github.com/jlengelbrecht/GlycemicGPT/issues/92)) ([5ab969c](https://github.com/jlengelbrecht/GlycemicGPT/commit/5ab969c2d11ef872798c48ce2f5ad141b987dc76))
+
 ## [0.1.38](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.37...v0.1.38) (2026-02-10)
 
 
