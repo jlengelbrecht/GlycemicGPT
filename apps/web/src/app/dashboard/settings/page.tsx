@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { Settings, User, Bell, Database, Link2, Users, MessageCircle, UserPlus } from "lucide-react";
+import { Settings, User, Bell, Database, Link2, Users, MessageCircle, UserPlus, Target } from "lucide-react";
 import { useUserContext } from "@/providers";
 
 interface SettingsSection {
@@ -32,6 +32,12 @@ const settingsSections: SettingsSection[] = [
     description: "Connect Dexcom, Tandem, and other data sources",
     icon: Link2,
     href: "/dashboard/settings/integrations",
+  },
+  {
+    title: "Glucose Range",
+    description: "Set your target glucose range for dashboard and AI analysis",
+    icon: Target,
+    href: "/dashboard/settings/glucose-range",
   },
   {
     title: "Alerts",

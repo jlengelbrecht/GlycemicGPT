@@ -14,9 +14,9 @@
 | 6 | Intelligent Alerting & Escalation | 7/7 | **Complete** |
 | 7 | Telegram Bot Integration | 6/6 | **Complete** |
 | 8 | Caregiver Access & Support | 6/6 | **Complete** |
-| 9 | Settings & Data Management | 0/5 | Not Started |
+| 9 | Settings & Data Management | 1/5 | In Progress |
 
-**Overall Progress:** 47/54 stories complete (87%)
+**Overall Progress:** 48/54 stories complete (89%)
 
 ---
 
@@ -141,21 +141,21 @@
 | 8.3 | Caregiver Dashboard View | Done | #82 |
 | 8.4 | Caregiver AI Queries | Done | #84 |
 | 8.5 | Multi-Patient Dashboard | Done | #86 |
-| 8.6 | Caregiver Read-Only Enforcement | Done | PR pending |
+| 8.6 | Caregiver Read-Only Enforcement | Done | #88 |
 
 ---
 
 ## Epic 9: Settings & Data Management
 
-**Status:** Not Started
+**Status:** In Progress (1/5)
 
-| Story | Title | Status |
-|-------|-------|--------|
-| 9.1 | Target Glucose Range Configuration | Pending |
-| 9.2 | Daily Brief Delivery Configuration | Pending |
-| 9.3 | Data Retention Settings | Pending |
-| 9.4 | Data Purge Capability | Pending |
-| 9.5 | Settings Export | Pending |
+| Story | Title | Status | PR |
+|-------|-------|--------|----|
+| 9.1 | Target Glucose Range Configuration | Done | PR pending |
+| 9.2 | Daily Brief Delivery Configuration | Pending | |
+| 9.3 | Data Retention Settings | Pending | |
+| 9.4 | Data Purge Capability | Pending | |
+| 9.5 | Settings Export | Pending | |
 
 ---
 
@@ -203,3 +203,11 @@ All 6 stories completed:
 - [x] Story 8.4: Caregiver AI Queries
 - [x] Story 8.5: Multi-Patient Dashboard
 - [x] Story 8.6: Caregiver Read-Only Enforcement
+
+**Epic 9: Settings & Data Management** - IN PROGRESS
+
+- [x] Story 9.1: Target Glucose Range Configuration
+- [ ] Story 9.2: Daily Brief Delivery Configuration
+- [ ] Story 9.3: Data Retention Settings
+- [ ] Story 9.4: Data Purge Capability
+- [ ] Story 9.5: Settings Export
