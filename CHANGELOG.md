@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.34](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.33...v0.1.34) (2026-02-09)
+
+
+### ✨ Features
+
+* add caregiver dashboard view (Story 8.3) ([#82](https://github.com/jlengelbrecht/GlycemicGPT/issues/82)) ([e40bdae](https://github.com/jlengelbrecht/GlycemicGPT/commit/e40bdae3a4983bf5ea90bfac295fff11963aa1ca))
+
 ## [0.1.33](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.32...v0.1.33) (2026-02-09)
 
 
