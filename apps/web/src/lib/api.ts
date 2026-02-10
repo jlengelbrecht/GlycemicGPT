@@ -974,10 +974,12 @@ export async function updateCaregiverPermissions(
 export interface CurrentUserResponse {
   id: string;
   email: string;
+  display_name: string | null;
   role: "diabetic" | "caregiver" | "admin";
   is_active: boolean;
   email_verified: boolean;
   disclaimer_acknowledged: boolean;
+  created_at: string;
 }
 
 /**
@@ -993,6 +995,49 @@ export async function getCurrentUser(): Promise<CurrentUserResponse> {
     throw new Error(
       error.detail || `Failed to fetch current user: ${response.status}`
     );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update user profile (Story 10.2)
+ */
+export async function updateProfile(data: {
+  display_name?: string | null;
+}): Promise<CurrentUserResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to update profile: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Change password (Story 10.2)
+ */
+export async function changePassword(data: {
+  current_password: string;
+  new_password: string;
+}): Promise<{ message: string }> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Failed to change password: ${response.status}`);
   }
 
   return response.json();
