@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     escalation_check_interval_minutes: int = 1  # Check every 1 minute
     escalation_check_enabled: bool = True  # Enable/disable automatic escalation
 
+    # Data Retention (Story 9.3)
+    data_retention_enabled: bool = True
+    data_retention_check_interval_hours: int = 24  # Run daily
+
     # Telegram Bot (Story 7.1)
     telegram_bot_token: str = ""
     telegram_polling_enabled: bool = True

@@ -311,6 +311,64 @@ async def check_escalations_all_users() -> None:
     )
 
 
+async def enforce_data_retention_all_users() -> None:
+    """Enforce data retention policies for all users with configured retention settings.
+
+    This job runs daily and deletes records older than each user's
+    configured retention period.
+    """
+    from src.models.data_retention_config import DataRetentionConfig
+    from src.services.data_retention_config import enforce_retention_for_user
+
+    logger.info("Starting scheduled data retention enforcement")
+
+    # Collect user IDs with retention configs, then close the session
+    # before iterating to avoid DetachedInstanceError
+    async with get_session_maker()() as db:
+        result = await db.execute(select(DataRetentionConfig.user_id))
+        user_ids = [row[0] for row in result.all()]
+
+    if not user_ids:
+        logger.info("No users with data retention config to enforce")
+        return
+
+    success_count = 0
+    error_count = 0
+    total_deleted = 0
+
+    for user_id in user_ids:
+        try:
+            async with get_session_maker()() as user_db:
+                # Fetch config fresh in this session
+                config_result = await user_db.execute(
+                    select(DataRetentionConfig).where(
+                        DataRetentionConfig.user_id == user_id
+                    )
+                )
+                user_config = config_result.scalar_one_or_none()
+                if user_config is None:
+                    continue
+                deleted = await enforce_retention_for_user(
+                    user_id, user_config, user_db
+                )
+                total_deleted += sum(deleted.values())
+                success_count += 1
+        except Exception as e:
+            logger.error(
+                "Data retention enforcement failed for user",
+                user_id=str(user_id),
+                error=str(e),
+            )
+            error_count += 1
+
+    logger.info(
+        "Scheduled data retention enforcement completed",
+        users_processed=success_count,
+        errors=error_count,
+        total_records_deleted=total_deleted,
+    )
+
+
 async def poll_telegram_updates() -> None:
     """Poll Telegram for verification /start messages.
 
@@ -402,6 +460,21 @@ def start_scheduler() -> AsyncIOScheduler:
         logger.info(
             "Scheduled escalation check job",
             interval_minutes=settings.escalation_check_interval_minutes,
+        )
+
+    # Add data retention enforcement job if enabled (Story 9.3)
+    if settings.data_retention_enabled:
+        scheduler.add_job(
+            enforce_data_retention_all_users,
+            trigger=IntervalTrigger(hours=settings.data_retention_check_interval_hours),
+            id="data_retention",
+            name="Data Retention Enforcement",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info(
+            "Scheduled data retention enforcement job",
+            interval_hours=settings.data_retention_check_interval_hours,
         )
 
     # Add Telegram polling job if enabled and token configured (Story 7.1)

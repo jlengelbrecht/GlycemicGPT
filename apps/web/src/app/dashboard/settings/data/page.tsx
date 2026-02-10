@@ -1,0 +1,517 @@
+"use client";
+
+/**
+ * Story 9.3: Data Retention Settings
+ *
+ * Allows users to configure retention periods for glucose data,
+ * AI analysis results, and audit logs. Displays storage usage.
+ */
+
+import { useState, useEffect, useCallback } from "react";
+import {
+  Database,
+  Loader2,
+  AlertTriangle,
+  Check,
+  ArrowLeft,
+  RotateCcw,
+} from "lucide-react";
+import Link from "next/link";
+import clsx from "clsx";
+import {
+  getDataRetentionConfig,
+  updateDataRetentionConfig,
+  getStorageUsage,
+  type DataRetentionConfigResponse,
+  type StorageUsageResponse,
+} from "@/lib/api";
+
+const DEFAULTS = {
+  glucose_retention_days: 365,
+  analysis_retention_days: 365,
+  audit_retention_days: 730,
+};
+
+const RETENTION_OPTIONS = [
+  { value: 30, label: "30 days" },
+  { value: 90, label: "90 days" },
+  { value: 180, label: "6 months" },
+  { value: 365, label: "1 year" },
+  { value: 730, label: "2 years" },
+  { value: 1825, label: "5 years" },
+  { value: 3650, label: "10 years" },
+];
+
+function formatNumber(n: number): string {
+  return n.toLocaleString();
+}
+
+export default function DataRetentionPage() {
+  const [config, setConfig] = useState<DataRetentionConfigResponse | null>(
+    null
+  );
+  const [usage, setUsage] = useState<StorageUsageResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Form state
+  const [glucoseDays, setGlucoseDays] = useState(365);
+  const [analysisDays, setAnalysisDays] = useState(365);
+  const [auditDays, setAuditDays] = useState(730);
+
+  // Auto-clear success message after 5 seconds
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(null), 5000);
+    return () => clearTimeout(timer);
+  }, [success]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setError(null);
+      const [configData, usageData] = await Promise.all([
+        getDataRetentionConfig(),
+        getStorageUsage(),
+      ]);
+      setConfig(configData);
+      setUsage(usageData);
+      setGlucoseDays(configData.glucose_retention_days);
+      setAnalysisDays(configData.analysis_retention_days);
+      setAuditDays(configData.audit_retention_days);
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes("401"))) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load data retention configuration"
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Check if any retention period is being reduced (destructive operation)
+  const isReducingRetention =
+    config &&
+    (glucoseDays < config.glucose_retention_days ||
+      analysisDays < config.analysis_retention_days ||
+      auditDays < config.audit_retention_days);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Warn the user if they are reducing any retention period
+    if (isReducingRetention) {
+      const confirmed = window.confirm(
+        "You are reducing one or more retention periods. " +
+          "Data older than the new retention period will be permanently " +
+          "deleted during the next enforcement cycle. This cannot be undone.\n\n" +
+          "Are you sure you want to continue?"
+      );
+      if (!confirmed) return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      // Only send fields that actually changed
+      const payload: Record<string, unknown> = {};
+      if (config && glucoseDays !== config.glucose_retention_days)
+        payload.glucose_retention_days = glucoseDays;
+      if (config && analysisDays !== config.analysis_retention_days)
+        payload.analysis_retention_days = analysisDays;
+      if (config && auditDays !== config.audit_retention_days)
+        payload.audit_retention_days = auditDays;
+
+      const updated = await updateDataRetentionConfig(
+        payload as Parameters<typeof updateDataRetentionConfig>[0]
+      );
+      setConfig(updated);
+      setSuccess("Data retention configuration updated successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to update data retention configuration"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleReset = async () => {
+    // Resetting to defaults may reduce retention periods — confirm with user
+    if (config) {
+      const wouldReduce =
+        DEFAULTS.glucose_retention_days < config.glucose_retention_days ||
+        DEFAULTS.analysis_retention_days < config.analysis_retention_days ||
+        DEFAULTS.audit_retention_days < config.audit_retention_days;
+
+      if (wouldReduce) {
+        const confirmed = window.confirm(
+          "Resetting to defaults will reduce one or more retention periods. " +
+            "Data older than the default retention period will be permanently " +
+            "deleted during the next enforcement cycle. This cannot be undone.\n\n" +
+            "Are you sure you want to reset to defaults?"
+        );
+        if (!confirmed) return;
+      }
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const updated = await updateDataRetentionConfig({
+        glucose_retention_days: DEFAULTS.glucose_retention_days,
+        analysis_retention_days: DEFAULTS.analysis_retention_days,
+        audit_retention_days: DEFAULTS.audit_retention_days,
+      });
+      setConfig(updated);
+      setGlucoseDays(DEFAULTS.glucose_retention_days);
+      setAnalysisDays(DEFAULTS.analysis_retention_days);
+      setAuditDays(DEFAULTS.audit_retention_days);
+      setSuccess("Data retention configuration reset to defaults");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to reset data retention configuration"
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const hasChanges =
+    config &&
+    (glucoseDays !== config.glucose_retention_days ||
+      analysisDays !== config.analysis_retention_days ||
+      auditDays !== config.audit_retention_days);
+
+  return (
+    <div className="space-y-6">
+      {/* Page header */}
+      <div>
+        <Link
+          href="/dashboard/settings"
+          className="flex items-center gap-1 text-sm text-slate-400 hover:text-slate-300 mb-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Settings
+        </Link>
+        <h1 className="text-2xl font-bold">Data Retention</h1>
+        <p className="text-slate-400">
+          Configure how long your data is retained before automatic cleanup
+        </p>
+      </div>
+
+      {/* Error state */}
+      {error && (
+        <div
+          className="bg-red-500/10 rounded-xl p-4 border border-red-500/20"
+          role="alert"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success state */}
+      {success && (
+        <div
+          className="bg-green-500/10 rounded-xl p-4 border border-green-500/20"
+          role="status"
+        >
+          <div className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-400 shrink-0" />
+            <p className="text-sm text-green-400">{success}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading && (
+        <div
+          className="bg-slate-900 rounded-xl p-12 border border-slate-800 text-center"
+          role="status"
+          aria-label="Loading data retention configuration"
+        >
+          <Loader2 className="h-8 w-8 text-blue-400 animate-spin mx-auto mb-3" />
+          <p className="text-slate-400">
+            Loading data retention configuration...
+          </p>
+        </div>
+      )}
+
+      {/* Storage usage */}
+      {!isLoading && usage && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-purple-500/10 rounded-lg">
+              <Database className="h-5 w-5 text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Storage Usage</h2>
+              <p className="text-xs text-slate-500">
+                Current record counts by category
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+              <p className="text-xs text-slate-500 mb-1">Glucose Data</p>
+              <p className="text-lg font-semibold text-blue-400">
+                {formatNumber(usage.glucose_records + usage.pump_records)}
+              </p>
+              <p className="text-xs text-slate-600">
+                {formatNumber(usage.glucose_records)} CGM +{" "}
+                {formatNumber(usage.pump_records)} pump
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+              <p className="text-xs text-slate-500 mb-1">AI Analysis</p>
+              <p className="text-lg font-semibold text-green-400">
+                {formatNumber(usage.analysis_records)}
+              </p>
+              <p className="text-xs text-slate-600">
+                briefs, meals, corrections
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+              <p className="text-xs text-slate-500 mb-1">Audit Logs</p>
+              <p className="text-lg font-semibold text-amber-400">
+                {formatNumber(usage.audit_records)}
+              </p>
+              <p className="text-xs text-slate-600">
+                safety, alerts, escalations
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+              <p className="text-xs text-slate-500 mb-1">Total Records</p>
+              <p className="text-lg font-semibold text-white">
+                {formatNumber(usage.total_records)}
+              </p>
+              <p className="text-xs text-slate-600">across all categories</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Configuration form */}
+      {!isLoading && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-blue-500/10 rounded-lg">
+              <Database className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Retention Periods</h2>
+              <p className="text-xs text-slate-500">
+                Set how long each category of data is kept
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Glucose retention */}
+            <div>
+              <label
+                htmlFor="glucose-retention"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                Glucose Data Retention
+              </label>
+              <select
+                id="glucose-retention"
+                value={glucoseDays}
+                onChange={(e) => setGlucoseDays(Number(e.target.value))}
+                disabled={isSaving}
+                className={clsx(
+                  "w-full rounded-lg border px-3 py-2 text-sm",
+                  "bg-slate-800 border-slate-700 text-slate-200",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+                aria-describedby="glucose-retention-hint"
+              >
+                {RETENTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p
+                id="glucose-retention-hint"
+                className="text-xs text-slate-500 mt-1"
+              >
+                CGM readings and pump events. Default: 1 year
+              </p>
+            </div>
+
+            {/* Analysis retention */}
+            <div>
+              <label
+                htmlFor="analysis-retention"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                AI Analysis Retention
+              </label>
+              <select
+                id="analysis-retention"
+                value={analysisDays}
+                onChange={(e) => setAnalysisDays(Number(e.target.value))}
+                disabled={isSaving}
+                className={clsx(
+                  "w-full rounded-lg border px-3 py-2 text-sm",
+                  "bg-slate-800 border-slate-700 text-slate-200",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+                aria-describedby="analysis-retention-hint"
+              >
+                {RETENTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p
+                id="analysis-retention-hint"
+                className="text-xs text-slate-500 mt-1"
+              >
+                Daily briefs, meal analyses, correction analyses. Default: 1 year
+              </p>
+            </div>
+
+            {/* Audit retention */}
+            <div>
+              <label
+                htmlFor="audit-retention"
+                className="block text-sm font-medium text-slate-300 mb-1"
+              >
+                Audit Log Retention
+              </label>
+              <select
+                id="audit-retention"
+                value={auditDays}
+                onChange={(e) => setAuditDays(Number(e.target.value))}
+                disabled={isSaving}
+                className={clsx(
+                  "w-full rounded-lg border px-3 py-2 text-sm",
+                  "bg-slate-800 border-slate-700 text-slate-200",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+                aria-describedby="audit-retention-hint"
+              >
+                {RETENTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p
+                id="audit-retention-hint"
+                className="text-xs text-slate-500 mt-1"
+              >
+                Safety logs, alerts, escalation events. Default: 2 years
+              </p>
+            </div>
+
+            {/* Preview */}
+            {!isLoading && (
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                <p className="text-xs text-slate-500 mb-2">Preview</p>
+                <p className="text-lg font-semibold text-blue-400">
+                  Glucose:{" "}
+                  {RETENTION_OPTIONS.find((o) => o.value === glucoseDays)
+                    ?.label ?? `${glucoseDays} days`}{" "}
+                  &middot; Analysis:{" "}
+                  {RETENTION_OPTIONS.find((o) => o.value === analysisDays)
+                    ?.label ?? `${analysisDays} days`}{" "}
+                  &middot; Audit:{" "}
+                  {RETENTION_OPTIONS.find((o) => o.value === auditDays)
+                    ?.label ?? `${auditDays} days`}
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={isSaving || !hasChanges}
+                className={clsx(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                  "bg-blue-600 text-white hover:bg-blue-500",
+                  "transition-colors",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                {isSaving ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                )}
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={
+                  isSaving ||
+                  !config ||
+                  (config.glucose_retention_days ===
+                    DEFAULTS.glucose_retention_days &&
+                    config.analysis_retention_days ===
+                      DEFAULTS.analysis_retention_days &&
+                    config.audit_retention_days ===
+                      DEFAULTS.audit_retention_days)
+                }
+                className={clsx(
+                  "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                  "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                  "transition-colors",
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
+                  "disabled:opacity-50 disabled:cursor-not-allowed"
+                )}
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Reset to Defaults
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Info card */}
+      <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+        <p className="text-xs text-slate-500">
+          Data retention policies are enforced automatically on a daily schedule.
+          Records older than the configured retention period will be permanently
+          deleted. Reducing retention periods will cause older data to be removed
+          during the next enforcement cycle. Minimum retention is 30 days.
+        </p>
+      </div>
+    </div>
+  );
+}

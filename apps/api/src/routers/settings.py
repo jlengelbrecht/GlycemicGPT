@@ -1,7 +1,7 @@
-"""Stories 6.1, 6.6, 9.1, 9.2: Settings router.
+"""Stories 6.1, 6.6, 9.1, 9.2, 9.3: Settings router.
 
 Provides endpoints for managing user alert thresholds, escalation timing,
-target glucose range, and brief delivery configuration.
+target glucose range, brief delivery configuration, and data retention settings.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,6 +20,12 @@ from src.schemas.brief_delivery_config import (
     BriefDeliveryConfigResponse,
     BriefDeliveryConfigUpdate,
 )
+from src.schemas.data_retention_config import (
+    DataRetentionConfigDefaults,
+    DataRetentionConfigResponse,
+    DataRetentionConfigUpdate,
+    StorageUsageResponse,
+)
 from src.schemas.escalation_config import (
     EscalationConfigDefaults,
     EscalationConfigResponse,
@@ -35,6 +41,15 @@ from src.services.brief_delivery_config import (
     get_or_create_config as get_or_create_brief_config,
 )
 from src.services.brief_delivery_config import update_config as update_brief_config
+from src.services.data_retention_config import (
+    get_or_create_config as get_or_create_retention_config,
+)
+from src.services.data_retention_config import (
+    get_storage_usage,
+)
+from src.services.data_retention_config import (
+    update_config as update_retention_config,
+)
 from src.services.escalation_config import get_or_create_config, update_config
 from src.services.target_glucose_range import get_or_create_range, update_range
 
@@ -262,3 +277,73 @@ async def get_brief_delivery_defaults() -> BriefDeliveryConfigDefaults:
     This endpoint does not require authentication.
     """
     return BriefDeliveryConfigDefaults()
+
+
+# ── Data retention configuration endpoints (Story 9.3) ──
+
+
+@router.get(
+    "/data-retention",
+    response_model=DataRetentionConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_data_retention_config(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DataRetentionConfigResponse:
+    """Get the current user's data retention configuration.
+
+    Returns defaults (365d glucose, 365d analysis, 730d audit) if not configured.
+    """
+    config = await get_or_create_retention_config(user.id, db)
+    return DataRetentionConfigResponse.model_validate(config)
+
+
+@router.patch(
+    "/data-retention",
+    response_model=DataRetentionConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def patch_data_retention_config(
+    body: DataRetentionConfigUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DataRetentionConfigResponse:
+    """Update the current user's data retention configuration.
+
+    Only provided fields are updated. All values must be 30-3650 days.
+    """
+    try:
+        config = await update_retention_config(user.id, body, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
+
+    return DataRetentionConfigResponse.model_validate(config)
+
+
+@router.get(
+    "/data-retention/defaults",
+    response_model=DataRetentionConfigDefaults,
+)
+async def get_data_retention_defaults() -> DataRetentionConfigDefaults:
+    """Get the default data retention configuration values for reference.
+
+    This endpoint does not require authentication.
+    """
+    return DataRetentionConfigDefaults()
+
+
+@router.get(
+    "/data-retention/usage",
+    response_model=StorageUsageResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_data_retention_usage(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StorageUsageResponse:
+    """Get the current user's storage usage (record counts by category)."""
+    return await get_storage_usage(user.id, db)
