@@ -21,6 +21,8 @@ from src.schemas.auth import (
     LoginRequest,
     LoginResponse,
     LogoutResponse,
+    PasswordChangeRequest,
+    ProfileUpdateRequest,
     UserRegistrationRequest,
     UserRegistrationResponse,
     UserResponse,
@@ -291,3 +293,96 @@ async def logout(
     )
 
     return LogoutResponse(message="Logout successful")
+
+
+# ============================================================================
+# Story 10.2: Profile Update Endpoints
+# ============================================================================
+
+
+@router.patch(
+    "/profile",
+    response_model=UserResponse,
+    responses={
+        200: {"description": "Profile updated successfully"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def update_profile(
+    request: ProfileUpdateRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """Update the current user's profile.
+
+    Allows updating the display name.
+
+    Args:
+        request: Profile update fields
+        current_user: The authenticated user
+        db: Database session
+
+    Returns:
+        Updated UserResponse
+    """
+    if not request.model_fields_set:
+        return UserResponse.model_validate(current_user)
+
+    if "display_name" in request.model_fields_set:
+        current_user.display_name = request.display_name
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    logger.info(
+        "User profile updated",
+        user_id=str(current_user.id),
+    )
+
+    return UserResponse.model_validate(current_user)
+
+
+@router.post(
+    "/change-password",
+    response_model=LogoutResponse,
+    responses={
+        200: {"description": "Password changed successfully"},
+        400: {"model": ErrorResponse, "description": "Invalid request"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def change_password(
+    request: PasswordChangeRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> LogoutResponse:
+    """Change the current user's password.
+
+    Verifies the current password before allowing the change.
+
+    Args:
+        request: Current and new password
+        current_user: The authenticated user
+        db: Database session
+
+    Returns:
+        Success message
+
+    Raises:
+        HTTPException 400: If current password is incorrect
+    """
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.hashed_password = hash_password(request.new_password)
+    await db.commit()
+
+    logger.info(
+        "User password changed",
+        user_id=str(current_user.id),
+    )
+
+    return LogoutResponse(message="Password changed successfully")

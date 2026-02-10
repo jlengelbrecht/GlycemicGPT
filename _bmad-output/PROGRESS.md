@@ -15,8 +15,14 @@
 | 7 | Telegram Bot Integration | 6/6 | **Complete** |
 | 8 | Caregiver Access & Support | 6/6 | **Complete** |
 | 9 | Settings & Data Management | 5/5 | **Complete** |
+| 10 | Settings Infrastructure Fixes | 2/3 | **In Progress** |
+| 11 | AI Configuration & Chat Interface | 0/3 | **Pending** |
+| 12 | Integration & Communication Config | 0/4 | **Pending** |
+| 13 | E2E Testing & Real Data Verification | 0/3 | **Pending** |
 
-**Overall Progress:** 52/54 stories complete (96%)
+**MVP Stories:** 54/54 complete (100%)
+**Post-MVP Fix Stories:** 2/13 complete (15%)
+**Overall Progress:** 56/67 stories complete (84%)
 
 ---
 
@@ -173,6 +179,21 @@
 
 ## Current Sprint Focus
 
+**Post-MVP Fixes** - IN PROGRESS
+
+Next up (recommended order):
+1. Story 10.1: Fix Save Changes button (unblocks all settings work)
+2. Stories 10.2, 10.3, 12.1, 12.4 in parallel (missing pages + offline UX)
+3. Stories 11.1, 12.2, 12.3 (AI config + communications hub)
+4. Stories 11.2, 11.3 (AI chat + brief delivery)
+5. Stories 13.1, 13.2, 13.3 (testing + real data)
+
+Full epic details: [mvp-fix-epics.md](planning-artifacts/mvp-fix-epics.md)
+
+---
+
+## Previous Sprint History
+
 **Epic 6: Intelligent Alerting & Escalation** - COMPLETE
 
 All 7 stories completed:
@@ -212,3 +233,32 @@ All 5 stories completed:
 - [x] Story 9.3: Data Retention Settings
 - [x] Story 9.4: Data Purge Capability
 - [x] Story 9.5: Settings Export
+
+---
+
+## Post-MVP Fix Epics (from manual testing feedback)
+
+**Epic 10: Settings Infrastructure Fixes** - PENDING
+
+- [x] Story 10.1: Fix Save Changes Button Across All Settings Pages
+- [x] Story 10.2: Create Settings > Profile Page
+- [ ] Story 10.3: Create Settings > Alerts Page
+
+**Epic 11: AI Configuration & Chat Interface** - PENDING
+
+- [ ] Story 11.1: Create AI Provider Configuration Page
+- [ ] Story 11.2: Create Web-Based AI Chat Interface
+- [ ] Story 11.3: Wire Daily Briefs Web Delivery
+
+**Epic 12: Integration & Communication Configuration** - PENDING
+
+- [ ] Story 12.1: Create Settings > Integrations Page
+- [ ] Story 12.2: Redesign Communications Settings Hub
+- [ ] Story 12.3: Add Telegram Bot Token Configuration
+- [ ] Story 12.4: Graceful Offline/Disconnected State for All Settings
+
+**Epic 13: End-to-End Testing & Real Data Verification** - PENDING
+
+- [ ] Story 13.1: Local Dev Server Testing Checklist
+- [ ] Story 13.2: Docker Container Integration Testing
+- [ ] Story 13.3: Real Data Pipeline Verification
