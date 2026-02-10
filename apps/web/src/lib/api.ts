@@ -1221,6 +1221,102 @@ export async function updateBriefDeliveryConfig(
 }
 
 /**
+ * Data Retention Config API types (Story 9.3)
+ */
+export interface DataRetentionConfigResponse {
+  id: string;
+  glucose_retention_days: number;
+  analysis_retention_days: number;
+  audit_retention_days: number;
+  updated_at: string;
+}
+
+export interface DataRetentionConfigUpdate {
+  glucose_retention_days?: number;
+  analysis_retention_days?: number;
+  audit_retention_days?: number;
+}
+
+export interface DataRetentionConfigDefaults {
+  glucose_retention_days: number;
+  analysis_retention_days: number;
+  audit_retention_days: number;
+}
+
+export interface StorageUsageResponse {
+  glucose_records: number;
+  pump_records: number;
+  analysis_records: number;
+  audit_records: number;
+  total_records: number;
+}
+
+/**
+ * Fetch current data retention configuration
+ */
+export async function getDataRetentionConfig(): Promise<DataRetentionConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/data-retention`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch data retention config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update data retention configuration
+ */
+export async function updateDataRetentionConfig(
+  updates: DataRetentionConfigUpdate
+): Promise<DataRetentionConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/data-retention`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to update data retention config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch storage usage (record counts)
+ */
+export async function getStorageUsage(): Promise<StorageUsageResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/data-retention/usage`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch storage usage: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Caregiver AI Chat (Story 8.4)
  */
 export interface CaregiverChatResponse {

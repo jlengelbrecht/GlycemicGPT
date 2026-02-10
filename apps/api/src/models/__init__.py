@@ -3,10 +3,12 @@ from src.models.ai_provider import AIProviderConfig, AIProviderStatus, AIProvide
 from src.models.alert import Alert, AlertSeverity, AlertType
 from src.models.alert_threshold import AlertThreshold
 from src.models.base import Base, TimestampMixin
+from src.models.brief_delivery_config import BriefDeliveryConfig
 from src.models.caregiver_invitation import CaregiverInvitation, InvitationStatus
 from src.models.caregiver_link import CaregiverLink
 from src.models.correction_analysis import CorrectionAnalysis
 from src.models.daily_brief import DailyBrief
+from src.models.data_retention_config import DataRetentionConfig
 from src.models.disclaimer import DisclaimerAcknowledgment
 from src.models.emergency_contact import ContactPriority, EmergencyContact
 from src.models.escalation_config import EscalationConfig
@@ -25,6 +27,7 @@ from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
 from src.models.safety_log import SafetyLog
 from src.models.suggestion_response import SuggestionResponse
+from src.models.target_glucose_range import TargetGlucoseRange
 from src.models.telegram_link import TelegramLink
 from src.models.telegram_verification import TelegramVerificationCode
 from src.models.user import User, UserRole
@@ -38,31 +41,34 @@ __all__ = [
     "AlertThreshold",
     "AlertType",
     "Base",
+    "BriefDeliveryConfig",
     "CaregiverInvitation",
     "CaregiverLink",
     "ContactPriority",
-    "InvitationStatus",
     "CorrectionAnalysis",
-    "TimestampMixin",
     "DailyBrief",
+    "DataRetentionConfig",
     "DisclaimerAcknowledgment",
     "EmergencyContact",
     "EscalationConfig",
     "EscalationEvent",
     "EscalationTier",
-    "NotificationStatus",
-    "MealAnalysis",
     "GlucoseReading",
-    "TrendDirection",
+    "InvitationStatus",
     "IntegrationCredential",
     "IntegrationStatus",
     "IntegrationType",
+    "MealAnalysis",
+    "NotificationStatus",
     "PumpEvent",
     "PumpEventType",
     "SafetyLog",
     "SuggestionResponse",
+    "TargetGlucoseRange",
     "TelegramLink",
     "TelegramVerificationCode",
+    "TimestampMixin",
+    "TrendDirection",
     "User",
     "UserRole",
 ]
