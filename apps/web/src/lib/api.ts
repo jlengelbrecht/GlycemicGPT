@@ -1149,6 +1149,78 @@ export async function updateTargetGlucoseRange(
 }
 
 /**
+ * Brief Delivery Config API types (Story 9.2)
+ */
+export interface BriefDeliveryConfigResponse {
+  id: string;
+  enabled: boolean;
+  delivery_time: string;
+  timezone: string;
+  channel: "web_only" | "telegram" | "both";
+  updated_at: string;
+}
+
+export interface BriefDeliveryConfigUpdate {
+  enabled?: boolean;
+  delivery_time?: string;
+  timezone?: string;
+  channel?: "web_only" | "telegram" | "both";
+}
+
+export interface BriefDeliveryConfigDefaults {
+  enabled: boolean;
+  delivery_time: string;
+  timezone: string;
+  channel: "web_only" | "telegram" | "both";
+}
+
+/**
+ * Fetch current brief delivery configuration
+ */
+export async function getBriefDeliveryConfig(): Promise<BriefDeliveryConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/brief-delivery`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch brief delivery config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update brief delivery configuration
+ */
+export async function updateBriefDeliveryConfig(
+  updates: BriefDeliveryConfigUpdate
+): Promise<BriefDeliveryConfigResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/brief-delivery`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to update brief delivery config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Caregiver AI Chat (Story 8.4)
  */
 export interface CaregiverChatResponse {
