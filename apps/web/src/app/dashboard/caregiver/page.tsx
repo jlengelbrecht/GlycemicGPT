@@ -18,15 +18,19 @@ import {
   AlertTriangle,
   Eye,
   Lock,
+  MessageSquare,
   RefreshCw,
+  Send,
   Users,
 } from "lucide-react";
 import clsx from "clsx";
 import {
   listLinkedPatients,
   getCaregiverPatientStatus,
+  sendCaregiverChat,
   type LinkedPatient,
   type CaregiverPatientStatus,
+  type CaregiverChatResponse,
 } from "@/lib/api";
 import { useUserContext } from "@/providers";
 
@@ -65,6 +69,13 @@ export default function CaregiverDashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  // Story 8.4: AI chat state
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatResponse, setChatResponse] =
+    useState<CaregiverChatResponse | null>(null);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Redirect non-caregivers away from this page
   useEffect(() => {
@@ -115,10 +126,39 @@ export default function CaregiverDashboardPage() {
     [selectedPatientId]
   );
 
-  // Fetch status when patient changes
+  // Story 8.4: AI chat handler
+  const handleChatSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedPatientId || !chatMessage.trim() || isChatLoading) return;
+
+      setIsChatLoading(true);
+      setChatError(null);
+      try {
+        const result = await sendCaregiverChat(
+          selectedPatientId,
+          chatMessage.trim()
+        );
+        setChatResponse(result);
+        setChatMessage("");
+      } catch (err) {
+        setChatError(
+          err instanceof Error ? err.message : "Failed to get AI response"
+        );
+      } finally {
+        setIsChatLoading(false);
+      }
+    },
+    [selectedPatientId, chatMessage, isChatLoading]
+  );
+
+  // Fetch status and reset chat when patient changes
   useEffect(() => {
     if (selectedPatientId) {
       fetchStatus();
+      setChatMessage("");
+      setChatResponse(null);
+      setChatError(null);
     }
   }, [selectedPatientId, fetchStatus]);
 
@@ -348,6 +388,89 @@ export default function CaregiverDashboardPage() {
               <div className="flex items-center gap-2 text-slate-500">
                 <Lock className="h-4 w-4" />
                 <p className="text-sm">IoB data not permitted</p>
+              </div>
+            )}
+          </div>
+
+          {/* AI Chat Card - Story 8.4 */}
+          <div className="bg-slate-900 rounded-xl p-6 border border-slate-800">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-cyan-500/10 rounded-lg">
+                <MessageSquare className="h-5 w-5 text-cyan-400" />
+              </div>
+              <h2 className="text-lg font-semibold">
+                Ask AI About Your Patient
+              </h2>
+            </div>
+
+            {status.permissions.can_view_ai_suggestions ? (
+              <div className="space-y-4">
+                <div aria-live="polite" aria-atomic="true">
+                  {chatResponse && (
+                    <div className="bg-slate-800/50 rounded-lg p-4 space-y-3">
+                      <p className="text-sm text-slate-200 whitespace-pre-wrap">
+                        {chatResponse.response}
+                      </p>
+                      <p className="text-xs text-amber-400/70 italic">
+                        {chatResponse.disclaimer}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {chatError && (
+                  <div className="flex items-center gap-2 text-sm text-red-400">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <p>{chatError}</p>
+                  </div>
+                )}
+
+                <form onSubmit={handleChatSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    placeholder='Ask about your patient, e.g. "How are they doing?"'
+                    maxLength={2000}
+                    disabled={isChatLoading}
+                    className="flex-1 bg-slate-800 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+                    aria-label="Ask AI about your patient"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isChatLoading || !chatMessage.trim()}
+                    className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-medium hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    aria-label="Send question"
+                  >
+                    {isChatLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </button>
+                </form>
+
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    "How is my patient doing?",
+                    "Should I be worried?",
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setChatMessage(q)}
+                      disabled={isChatLoading}
+                      className="text-xs px-3 py-1 rounded-full bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors disabled:opacity-50"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-slate-500">
+                <Lock className="h-4 w-4" />
+                <p className="text-sm">AI suggestions not permitted</p>
               </div>
             )}
           </div>

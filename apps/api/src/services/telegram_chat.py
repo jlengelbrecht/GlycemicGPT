@@ -403,3 +403,98 @@ async def handle_caregiver_chat(
     )
 
     return _truncate_response(safe_content)
+
+
+# ── Story 8.4: Web-optimized caregiver AI chat ──
+
+
+async def handle_caregiver_chat_web(
+    db: AsyncSession,
+    caregiver_id: uuid.UUID,
+    patient_id: uuid.UUID,
+    text: str,
+) -> str:
+    """Process a caregiver's AI query for the web interface.
+
+    Similar to handle_caregiver_chat() but returns plain text
+    without HTML escaping or Telegram-specific formatting.
+
+    Args:
+        db: Database session.
+        caregiver_id: Caregiver's user UUID.
+        patient_id: Patient's user UUID.
+        text: The caregiver's message text.
+
+    Returns:
+        Plain text AI response content.
+
+    Raises:
+        HTTPException: If patient not found (404) or AI provider error (502).
+    """
+    result = await db.execute(select(User).where(User.id == patient_id))
+    patient = result.scalar_one_or_none()
+
+    if patient is None:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    try:
+        ai_client = await get_ai_client(patient, db)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail="No AI provider configured for this patient",
+            ) from exc
+        raise
+
+    truncated_text = text[:MAX_USER_MESSAGE_LENGTH]
+
+    try:
+        glucose_context = await _build_glucose_context(db, patient_id)
+    except Exception:
+        logger.error(
+            "Failed to build glucose context for web caregiver chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+            exc_info=True,
+        )
+        glucose_context = "Recent glucose data: unavailable due to a temporary error."
+
+    system_prompt = _build_caregiver_system_prompt(patient.email, glucose_context)
+
+    try:
+        ai_response = await ai_client.generate(
+            messages=[AIMessage(role="user", content=truncated_text)],
+            system_prompt=system_prompt,
+            max_tokens=1200,
+        )
+    except Exception:
+        logger.error(
+            "AI provider error in web caregiver chat",
+            caregiver_id=str(caregiver_id),
+            patient_id=str(patient_id),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to get a response from the AI provider",
+        )
+
+    content = ai_response.content.strip()
+    if not content:
+        raise HTTPException(
+            status_code=502,
+            detail="The AI returned an empty response",
+        )
+
+    logger.info(
+        "Web caregiver AI chat response generated",
+        caregiver_id=str(caregiver_id),
+        patient_id=str(patient_id),
+        model=ai_response.model,
+        provider=ai_response.provider.value,
+        input_tokens=ai_response.usage.input_tokens,
+        output_tokens=ai_response.usage.output_tokens,
+    )
+
+    return content

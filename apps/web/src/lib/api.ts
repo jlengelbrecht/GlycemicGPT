@@ -1081,3 +1081,35 @@ export async function getCaregiverGlucoseHistory(
 
   return response.json();
 }
+
+/**
+ * Caregiver AI Chat (Story 8.4)
+ */
+export interface CaregiverChatResponse {
+  response: string;
+  disclaimer: string;
+}
+
+export async function sendCaregiverChat(
+  patientId: string,
+  message: string
+): Promise<CaregiverChatResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ message }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to send chat message: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
