@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.43](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.42...v0.1.43) (2026-02-10)
+
+
+### 🐛 Bug Fixes
+
+* enable Save Changes button when API is unavailable (Story 10.1) ([#100](https://github.com/jlengelbrecht/GlycemicGPT/issues/100)) ([854c9f4](https://github.com/jlengelbrecht/GlycemicGPT/commit/854c9f4dcdd51c7e6f4be7693200d92db3caa379))
+
 ## [0.1.42](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.41...v0.1.42) (2026-02-10)
 
 
