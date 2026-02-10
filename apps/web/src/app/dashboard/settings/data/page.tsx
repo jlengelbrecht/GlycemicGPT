@@ -105,6 +105,12 @@ export default function DataRetentionPage() {
             : "Failed to load data retention configuration"
         );
       }
+      // Use defaults as baseline so the form is still functional
+      setConfig({
+        glucose_retention_days: DEFAULTS.glucose_retention_days,
+        analysis_retention_days: DEFAULTS.analysis_retention_days,
+        audit_retention_days: DEFAULTS.audit_retention_days,
+      } as DataRetentionConfigResponse);
     } finally {
       setIsLoading(false);
     }
