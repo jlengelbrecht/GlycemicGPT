@@ -1083,6 +1083,72 @@ export async function getCaregiverGlucoseHistory(
 }
 
 /**
+ * Target Glucose Range API types (Story 9.1)
+ */
+export interface TargetGlucoseRangeResponse {
+  id: string;
+  low_target: number;
+  high_target: number;
+  updated_at: string;
+}
+
+export interface TargetGlucoseRangeUpdate {
+  low_target?: number;
+  high_target?: number;
+}
+
+export interface TargetGlucoseRangeDefaults {
+  low_target: number;
+  high_target: number;
+}
+
+/**
+ * Fetch current target glucose range
+ */
+export async function getTargetGlucoseRange(): Promise<TargetGlucoseRangeResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/target-glucose-range`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch target glucose range: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update target glucose range
+ */
+export async function updateTargetGlucoseRange(
+  updates: TargetGlucoseRangeUpdate
+): Promise<TargetGlucoseRangeResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/settings/target-glucose-range`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to update target glucose range: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Caregiver AI Chat (Story 8.4)
  */
 export interface CaregiverChatResponse {

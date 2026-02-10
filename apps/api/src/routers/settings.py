@@ -1,6 +1,7 @@
-"""Stories 6.1, 6.6: Settings router.
+"""Stories 6.1, 6.6, 9.1: Settings router.
 
-Provides endpoints for managing user alert thresholds and escalation timing.
+Provides endpoints for managing user alert thresholds, escalation timing,
+and target glucose range configuration.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,8 +20,14 @@ from src.schemas.escalation_config import (
     EscalationConfigResponse,
     EscalationConfigUpdate,
 )
+from src.schemas.target_glucose_range import (
+    TargetGlucoseRangeDefaults,
+    TargetGlucoseRangeResponse,
+    TargetGlucoseRangeUpdate,
+)
 from src.services.alert_threshold import get_or_create_thresholds, update_thresholds
 from src.services.escalation_config import get_or_create_config, update_config
+from src.services.target_glucose_range import get_or_create_range, update_range
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -131,3 +138,61 @@ async def get_escalation_config_defaults() -> EscalationConfigDefaults:
     This endpoint does not require authentication.
     """
     return EscalationConfigDefaults()
+
+
+# ── Target glucose range endpoints (Story 9.1) ──
+
+
+@router.get(
+    "/target-glucose-range",
+    response_model=TargetGlucoseRangeResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_target_glucose_range(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TargetGlucoseRangeResponse:
+    """Get the current user's target glucose range.
+
+    Returns defaults (70-180 mg/dL) if no range has been configured yet.
+    """
+    target_range = await get_or_create_range(user.id, db)
+    return TargetGlucoseRangeResponse.model_validate(target_range)
+
+
+@router.patch(
+    "/target-glucose-range",
+    response_model=TargetGlucoseRangeResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def patch_target_glucose_range(
+    body: TargetGlucoseRangeUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TargetGlucoseRangeResponse:
+    """Update the current user's target glucose range.
+
+    Only provided fields are updated. Validates that
+    low_target < high_target after merge with existing values.
+    """
+    try:
+        target_range = await update_range(user.id, body, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
+
+    return TargetGlucoseRangeResponse.model_validate(target_range)
+
+
+@router.get(
+    "/target-glucose-range/defaults",
+    response_model=TargetGlucoseRangeDefaults,
+)
+async def get_target_glucose_range_defaults() -> TargetGlucoseRangeDefaults:
+    """Get the default target glucose range values for reference.
+
+    This endpoint does not require authentication.
+    """
+    return TargetGlucoseRangeDefaults()

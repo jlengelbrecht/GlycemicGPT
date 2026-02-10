@@ -17,7 +17,7 @@
  * - Logical tab order
  */
 
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, Clock } from "lucide-react";
 
@@ -27,6 +27,7 @@ import {
   ConnectionStatusBanner,
 } from "@/components/dashboard";
 import { useGlucoseStreamContext, useUserContext } from "@/providers";
+import { getTargetGlucoseRange } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -40,6 +41,24 @@ export default function DashboardPage() {
     error,
     reconnect,
   } = useGlucoseStreamContext();
+
+  // Story 9.1: Fetch user's target glucose range
+  const [targetRange, setTargetRange] = useState("70-180 mg/dL");
+
+  const fetchTargetRange = useCallback(async () => {
+    try {
+      const data = await getTargetGlucoseRange();
+      setTargetRange(`${data.low_target}-${data.high_target} mg/dL`);
+    } catch {
+      // Keep default on error
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user && user.role !== "caregiver") {
+      fetchTargetRange();
+    }
+  }, [user, fetchTargetRange]);
 
   // Redirect caregivers to the caregiver-specific dashboard (Story 8.3)
   useEffect(() => {
@@ -122,7 +141,7 @@ export default function DashboardPage() {
               <h3 className="text-slate-400 text-sm">Time in Range (24h)</h3>
             </div>
             <p className="text-3xl font-bold text-green-400" aria-label="Time in range: 78 percent">78%</p>
-            <p className="text-slate-500 text-xs mt-1">Target: 70-180 mg/dL</p>
+            <p className="text-slate-500 text-xs mt-1">Target: {targetRange}</p>
           </article>
 
           {/* Last Updated Card */}
@@ -142,7 +161,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Time in Range bar - Story 4.4 */}
-      <TimeInRangeBar data={mockTimeInRangeData} period="24h" />
+      <TimeInRangeBar data={mockTimeInRangeData} period="24h" targetRange={targetRange} />
     </main>
   );
 }
