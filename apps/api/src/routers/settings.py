@@ -1,8 +1,8 @@
-"""Stories 6.1, 6.6, 9.1, 9.2, 9.3, 9.4: Settings router.
+"""Stories 6.1, 6.6, 9.1, 9.2, 9.3, 9.4, 9.5: Settings router.
 
 Provides endpoints for managing user alert thresholds, escalation timing,
 target glucose range, brief delivery configuration, data retention settings,
-and data purge capability.
+data purge capability, and settings export.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -33,6 +33,11 @@ from src.schemas.escalation_config import (
     EscalationConfigResponse,
     EscalationConfigUpdate,
 )
+from src.schemas.settings_export import (
+    ExportType,
+    SettingsExportRequest,
+    SettingsExportResponse,
+)
 from src.schemas.target_glucose_range import (
     TargetGlucoseRangeDefaults,
     TargetGlucoseRangeResponse,
@@ -54,6 +59,7 @@ from src.services.data_retention_config import (
     update_config as update_retention_config,
 )
 from src.services.escalation_config import get_or_create_config, update_config
+from src.services.settings_export import export_user_data
 from src.services.target_glucose_range import get_or_create_range, update_range
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -387,3 +393,30 @@ async def purge_data(
         total_deleted=total,
         message=f"Successfully purged {total} records",
     )
+
+
+# ── Settings export endpoint (Story 9.5) ──
+
+
+@router.post(
+    "/export",
+    response_model=SettingsExportResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def export_settings(
+    body: SettingsExportRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SettingsExportResponse:
+    """Export user settings and optionally all data as JSON.
+
+    Export types:
+    - settings_only: All configuration preferences (no historical data)
+    - all_data: Settings plus glucose readings, pump events, AI analysis,
+      and audit records
+
+    Integration credentials and API keys are never included in exports.
+    """
+    include_data = body.export_type == ExportType.ALL_DATA
+    export_data = await export_user_data(user.id, db, include_data=include_data)
+    return SettingsExportResponse(export_data=export_data)

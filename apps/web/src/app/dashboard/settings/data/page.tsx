@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Stories 9.3 & 9.4: Data Retention Settings & Data Purge
+ * Stories 9.3, 9.4, 9.5: Data Retention, Purge & Export
  *
  * Allows users to configure retention periods for glucose data,
  * AI analysis results, and audit logs. Displays storage usage.
  * Provides a "Danger Zone" section for permanently purging all data.
+ * Provides export of settings and/or all data as a JSON download.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -17,6 +18,7 @@ import {
   ArrowLeft,
   RotateCcw,
   Trash2,
+  Download,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -25,6 +27,7 @@ import {
   updateDataRetentionConfig,
   getStorageUsage,
   purgeUserData,
+  exportSettings,
   type DataRetentionConfigResponse,
   type StorageUsageResponse,
 } from "@/lib/api";
@@ -63,6 +66,12 @@ export default function DataRetentionPage() {
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
   const [purgeInput, setPurgeInput] = useState("");
   const [isPurging, setIsPurging] = useState(false);
+
+  // Export state (Story 9.5)
+  const [exportType, setExportType] = useState<"settings_only" | "all_data">(
+    "settings_only"
+  );
+  const [isExporting, setIsExporting] = useState(false);
 
   // Form state
   const [glucoseDays, setGlucoseDays] = useState(365);
@@ -228,6 +237,38 @@ export default function DataRetentionPage() {
       );
     } finally {
       setIsPurging(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await exportSettings(exportType);
+      const json = JSON.stringify(result.export_data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `glycemicgpt-${exportType === "all_data" ? "full-export" : "settings"}-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setSuccess(
+        exportType === "all_data"
+          ? "Full data export downloaded successfully"
+          : "Settings export downloaded successfully"
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to export data"
+      );
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -538,6 +579,95 @@ export default function DataRetentionPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Export Data (Story 9.5) */}
+      {!isLoading && (
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-green-500/10 rounded-lg">
+              <Download className="h-5 w-5 text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">Export Data</h2>
+              <p className="text-xs text-slate-500">
+                Download your settings and data as a JSON file
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <fieldset>
+              <legend className="text-sm font-medium text-slate-300 mb-2">
+                Export type
+              </legend>
+              <div className="space-y-2">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="export-type"
+                    value="settings_only"
+                    checked={exportType === "settings_only"}
+                    onChange={() => setExportType("settings_only")}
+                    disabled={isExporting}
+                    className="mt-1 accent-blue-500"
+                  />
+                  <div>
+                    <p className="text-sm text-slate-200">Settings only</p>
+                    <p className="text-xs text-slate-500">
+                      Alert thresholds, glucose range, escalation timing, brief
+                      delivery, data retention, AI provider, integrations
+                      (without credentials), and emergency contacts
+                    </p>
+                  </div>
+                </label>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="export-type"
+                    value="all_data"
+                    checked={exportType === "all_data"}
+                    onChange={() => setExportType("all_data")}
+                    disabled={isExporting}
+                    className="mt-1 accent-blue-500"
+                  />
+                  <div>
+                    <p className="text-sm text-slate-200">
+                      All data (JSON archive)
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Everything above plus glucose readings, pump events, daily
+                      briefs, AI analyses, safety logs, and alerts
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </fieldset>
+
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting || isSaving || isPurging}
+              className={clsx(
+                "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
+                "bg-green-600 text-white hover:bg-green-500",
+                "transition-colors",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
+            >
+              {isExporting ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Download className="h-4 w-4" aria-hidden="true" />
+              )}
+              {isExporting ? "Exporting..." : "Download Export"}
+            </button>
+          </div>
         </div>
       )}
 
