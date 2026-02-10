@@ -68,17 +68,13 @@ async def purge_all_user_data(
         )
         deleted["glucose_readings"] = result.rowcount
 
-        result = await db.execute(
-            delete(PumpEvent).where(PumpEvent.user_id == user_id)
-        )
+        result = await db.execute(delete(PumpEvent).where(PumpEvent.user_id == user_id))
         deleted["pump_events"] = result.rowcount
 
         # ── Analysis data ──
         # SuggestionResponse before analyses for forward-compatibility
         result = await db.execute(
-            delete(SuggestionResponse).where(
-                SuggestionResponse.user_id == user_id
-            )
+            delete(SuggestionResponse).where(SuggestionResponse.user_id == user_id)
         )
         deleted["suggestion_responses"] = result.rowcount
 
@@ -93,17 +89,13 @@ async def purge_all_user_data(
         deleted["meal_analyses"] = result.rowcount
 
         result = await db.execute(
-            delete(CorrectionAnalysis).where(
-                CorrectionAnalysis.user_id == user_id
-            )
+            delete(CorrectionAnalysis).where(CorrectionAnalysis.user_id == user_id)
         )
         deleted["correction_analyses"] = result.rowcount
 
         # ── Audit data ──
         # SafetyLog first (no FK dependencies)
-        result = await db.execute(
-            delete(SafetyLog).where(SafetyLog.user_id == user_id)
-        )
+        result = await db.execute(delete(SafetyLog).where(SafetyLog.user_id == user_id))
         deleted["safety_logs"] = result.rowcount
 
         # EscalationEvent must be deleted before Alert
@@ -113,9 +105,7 @@ async def purge_all_user_data(
         )
         deleted["escalation_events"] = result.rowcount
 
-        result = await db.execute(
-            delete(Alert).where(Alert.user_id == user_id)
-        )
+        result = await db.execute(delete(Alert).where(Alert.user_id == user_id))
         deleted["alerts"] = result.rowcount
 
         await db.commit()
