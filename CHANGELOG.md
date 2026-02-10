@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.40](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.39...v0.1.40) (2026-02-10)
+
+
+### ✨ Features
+
+* add data retention settings (Story 9.3) ([#94](https://github.com/jlengelbrecht/GlycemicGPT/issues/94)) ([86c9ce2](https://github.com/jlengelbrecht/GlycemicGPT/commit/86c9ce271a659a43b10407eb8cf09e99ab7fb4ec))
+
 ## [0.1.39](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.38...v0.1.39) (2026-02-10)
 
 
