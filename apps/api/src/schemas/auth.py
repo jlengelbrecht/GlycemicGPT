@@ -62,6 +62,7 @@ class UserResponse(BaseModel):
 
     id: uuid.UUID
     email: str
+    display_name: str | None = None
     role: UserRole
     is_active: bool
     email_verified: bool
@@ -115,3 +116,60 @@ class LogoutResponse(BaseModel):
     """Response schema for successful logout."""
 
     message: str = Field(default="Logout successful")
+
+
+# ============================================================================
+# Story 10.2: Profile Update Schemas
+# ============================================================================
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Request schema for updating user profile."""
+
+    display_name: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Display name (max 100 chars)",
+    )
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_display_name(cls, v: str | None) -> str | None:
+        """Strip whitespace and convert empty strings to None."""
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+        return v
+
+
+class PasswordChangeRequest(BaseModel):
+    """Request schema for changing password."""
+
+    current_password: str = Field(
+        ..., min_length=1, description="Current password for verification"
+    )
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="New password (min 8 chars, must include uppercase, lowercase, and number)",
+    )
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Validate new password meets strength requirements."""
+        if not re.search(r"[a-z]", v):
+            raise ValueError(
+                "Password must be at least 8 characters with uppercase, lowercase, and number"
+            )
+        if not re.search(r"[A-Z]", v):
+            raise ValueError(
+                "Password must be at least 8 characters with uppercase, lowercase, and number"
+            )
+        if not re.search(r"\d", v):
+            raise ValueError(
+                "Password must be at least 8 characters with uppercase, lowercase, and number"
+            )
+        return v
