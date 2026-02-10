@@ -491,3 +491,21 @@ class TestRouterDependenciesIncludeRoleCheck:
         )
         role_checker = deps[0].dependency
         assert UserRole.CAREGIVER not in role_checker.allowed_roles
+
+    # ── Story 9.5: Settings export ──
+
+    def test_settings_export_has_require_diabetic(self):
+        """POST /api/settings/export has require_diabetic_or_admin."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(router, "/api/settings/export", "POST")
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_settings_export_role_blocks_caregiver(self):
+        """Settings export role check blocks CAREGIVER."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(router, "/api/settings/export", "POST")
+        role_checker = deps[0].dependency
+        assert UserRole.CAREGIVER not in role_checker.allowed_roles

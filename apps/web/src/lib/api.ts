@@ -1350,6 +1350,33 @@ export async function purgeUserData(
 }
 
 /**
+ * Settings export (Story 9.5)
+ */
+export interface SettingsExportResponse {
+  export_data: Record<string, unknown>;
+}
+
+export async function exportSettings(
+  exportType: "settings_only" | "all_data"
+): Promise<SettingsExportResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/settings/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ export_type: exportType }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to export settings: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Caregiver AI Chat (Story 8.4)
  */
 export interface CaregiverChatResponse {
