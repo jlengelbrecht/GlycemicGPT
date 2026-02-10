@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.41](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.40...v0.1.41) (2026-02-10)
+
+
+### ✨ Features
+
+* add data purge capability (Story 9.4) ([#96](https://github.com/jlengelbrecht/GlycemicGPT/issues/96)) ([a1af404](https://github.com/jlengelbrecht/GlycemicGPT/commit/a1af404f14574e8e39a7aa1620f2b875a1193b0e))
+
 ## [0.1.40](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.39...v0.1.40) (2026-02-10)
 
 
