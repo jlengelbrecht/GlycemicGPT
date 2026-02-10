@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.36](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.35...v0.1.36) (2026-02-10)
+
+
+### ✨ Features
+
+* **web:** add multi-patient card grid for caregiver dashboard (Story 8.5) ([#86](https://github.com/jlengelbrecht/GlycemicGPT/issues/86)) ([33dd43d](https://github.com/jlengelbrecht/GlycemicGPT/commit/33dd43d9b068d379d23ba3cd47cb93c240ffa584))
+
 ## [0.1.35](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.34...v0.1.35) (2026-02-10)
 
 
