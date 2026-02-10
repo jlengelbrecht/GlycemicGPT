@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.35](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.34...v0.1.35) (2026-02-10)
+
+
+### ✨ Features
+
+* add caregiver AI chat for patient queries (Story 8.4) ([#84](https://github.com/jlengelbrecht/GlycemicGPT/issues/84)) ([23f66d5](https://github.com/jlengelbrecht/GlycemicGPT/commit/23f66d56ff4b1b33db2bbdfbc6b9e2e54ba4287f))
+
 ## [0.1.34](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.33...v0.1.34) (2026-02-09)
 
 
