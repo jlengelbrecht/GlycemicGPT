@@ -109,6 +109,12 @@ class User(Base, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    brief_delivery_config = relationship(
+        "BriefDeliveryConfig",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     meal_analyses = relationship(
         "MealAnalysis",
         back_populates="user",

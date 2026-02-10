@@ -176,6 +176,90 @@ class TestRouterDependenciesIncludeRoleCheck:
         dep_classes = [type(d.dependency) for d in deps]
         assert RoleChecker in dep_classes
 
+    # ── Target Glucose Range (Story 9.1) ──
+
+    def test_settings_get_target_glucose_range_has_require_diabetic(self):
+        """GET /api/settings/target-glucose-range has require_diabetic."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/target-glucose-range", "GET"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_settings_patch_target_glucose_range_has_require_diabetic(self):
+        """PATCH /api/settings/target-glucose-range has require_diabetic."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/target-glucose-range", "PATCH"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_target_glucose_range_defaults_no_role_check(self):
+        """GET /api/settings/target-glucose-range/defaults has no role check."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/target-glucose-range/defaults", "GET"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker not in dep_classes
+
+    def test_target_glucose_range_role_blocks_caregiver(self):
+        """Target glucose range role check blocks CAREGIVER."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/target-glucose-range", "GET"
+        )
+        role_checker = deps[0].dependency
+        assert UserRole.CAREGIVER not in role_checker.allowed_roles
+
+    # ── Brief Delivery (Story 9.2) ──
+
+    def test_settings_get_brief_delivery_has_require_diabetic(self):
+        """GET /api/settings/brief-delivery has require_diabetic."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/brief-delivery", "GET"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_settings_patch_brief_delivery_has_require_diabetic(self):
+        """PATCH /api/settings/brief-delivery has require_diabetic."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/brief-delivery", "PATCH"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker in dep_classes
+
+    def test_brief_delivery_defaults_no_role_check(self):
+        """GET /api/settings/brief-delivery/defaults has no role check."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/brief-delivery/defaults", "GET"
+        )
+        dep_classes = [type(d.dependency) for d in deps]
+        assert RoleChecker not in dep_classes
+
+    def test_brief_delivery_role_blocks_caregiver(self):
+        """Brief delivery role check blocks CAREGIVER."""
+        from src.routers.settings import router
+
+        deps = self._get_route_dependencies(
+            router, "/api/settings/brief-delivery", "GET"
+        )
+        role_checker = deps[0].dependency
+        assert UserRole.CAREGIVER not in role_checker.allowed_roles
+
     # ── Emergency Contacts ──
 
     def test_emergency_contacts_get_has_require_diabetic(self):
