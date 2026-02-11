@@ -56,3 +56,24 @@ class AIProviderDeleteResponse(BaseModel):
     """Response schema for deleting AI provider configuration."""
 
     message: str = Field(default="AI provider configuration removed successfully")
+
+
+class AIChatRequest(BaseModel):
+    """Request schema for AI chat messages."""
+
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="The user's question about their glucose data",
+    )
+
+
+class AIChatResponse(BaseModel):
+    """Response schema for AI chat messages."""
+
+    response: str = Field(..., description="AI-generated response text")
+    disclaimer: str = Field(
+        default="Not medical advice. Consult your healthcare provider.",
+        description="Safety disclaimer",
+    )
