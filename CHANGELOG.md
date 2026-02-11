@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.61](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.60...v0.1.61) (2026-02-11)
+
+
+### ✨ Features
+
+* polish landing page auth navigation and invite page links (Story 15.6) ([#140](https://github.com/jlengelbrecht/GlycemicGPT/issues/140)) ([fa6be0b](https://github.com/jlengelbrecht/GlycemicGPT/commit/fa6be0b86ef19ed078f6e8ef8fe72292304273e5))
+
 ## [0.1.60](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.59...v0.1.60) (2026-02-11)
 
 
