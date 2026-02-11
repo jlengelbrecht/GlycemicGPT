@@ -27,7 +27,7 @@ export COMPOSE_PROJECT_NAME=glycemicgpt-test
 COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.test.yml"
 API_URL="http://localhost:8001"
 WEB_URL="http://localhost:3001"
-TEST_EMAIL="dockertest_$(date +%s)@test.local"
+TEST_EMAIL="dockertest_$(date +%s)@example.com"
 TEST_PASSWORD="DockerTest123!"
 COOKIE_JAR=$(mktemp)
 MAX_WAIT=180  # seconds to wait for services to become healthy
@@ -73,6 +73,12 @@ api_put() {
   curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
     -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
     -X PUT -H "Content-Type: application/json" -d "$2" "$API_URL$1" 2>/dev/null || echo "000"
+}
+
+api_patch() {
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -X PATCH -H "Content-Type: application/json" -d "$2" "$API_URL$1" 2>/dev/null || echo "000"
 }
 
 cleanup() {
@@ -211,9 +217,10 @@ if [ "$STATUS" = "200" ]; then pass "User login"; else fail "Login (got $STATUS)
 STATUS=$(api_get "/api/auth/me")
 if [ "$STATUS" = "200" ]; then pass "Get current user (authenticated)"; else fail "Get current user (got $STATUS)"; fi
 
-# 2d. Accept disclaimer
-STATUS=$(api_post "/api/disclaimer/accept" "{}")
-if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then pass "Accept disclaimer"; else fail "Accept disclaimer (got $STATUS)"; fi
+# 2d. Acknowledge disclaimer
+DISCLAIMER_SESSION=$(python3 -c "import uuid; print(uuid.uuid4())" 2>/dev/null || echo "00000000-0000-0000-0000-000000000000")
+STATUS=$(api_post "/api/disclaimer/acknowledge" "{\"session_id\":\"$DISCLAIMER_SESSION\",\"checkbox_experimental\":true,\"checkbox_not_medical_advice\":true}")
+if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then pass "Acknowledge disclaimer"; else fail "Acknowledge disclaimer (got $STATUS)"; fi
 
 echo ""
 
@@ -227,40 +234,40 @@ echo "---"
 STATUS=$(api_get "/api/settings/target-glucose-range")
 if [ "$STATUS" = "200" ]; then pass "GET target glucose range"; else fail "GET target glucose range (got $STATUS)"; fi
 
-# 3b. Target glucose range - PUT
-STATUS=$(api_put "/api/settings/target-glucose-range" '{"low_threshold":65,"high_threshold":175}')
-if [ "$STATUS" = "200" ]; then pass "PUT target glucose range"; else fail "PUT target glucose range (got $STATUS)"; fi
+# 3b. Target glucose range - PATCH
+STATUS=$(api_patch "/api/settings/target-glucose-range" '{"low_target":65,"high_target":175}')
+if [ "$STATUS" = "200" ]; then pass "PATCH target glucose range"; else fail "PATCH target glucose range (got $STATUS)"; fi
 
 # 3c. Verify round-trip (GET should return saved values)
 BODY=$(api_get_body "/api/settings/target-glucose-range")
-if echo "$BODY" | grep -q '"low_threshold"'; then pass "Glucose range round-trip persisted"; else fail "Glucose range round-trip: $BODY"; fi
+if echo "$BODY" | grep -q '"low_target"'; then pass "Glucose range round-trip persisted"; else fail "Glucose range round-trip: $BODY"; fi
 
 # 3d. Brief delivery config - GET
 STATUS=$(api_get "/api/settings/brief-delivery")
 if [ "$STATUS" = "200" ]; then pass "GET brief delivery config"; else fail "GET brief delivery config (got $STATUS)"; fi
 
 # 3e. Alert thresholds - GET
-STATUS=$(api_get "/api/alerts/thresholds")
+STATUS=$(api_get "/api/settings/alert-thresholds")
 if [ "$STATUS" = "200" ]; then pass "GET alert thresholds"; else fail "GET alert thresholds (got $STATUS)"; fi
 
-# 3f. Alert thresholds - PUT
-STATUS=$(api_put "/api/alerts/thresholds" '{"low_warning":70,"urgent_low":55,"high_warning":180,"urgent_high":250}')
-if [ "$STATUS" = "200" ]; then pass "PUT alert thresholds"; else fail "PUT alert thresholds (got $STATUS)"; fi
+# 3f. Alert thresholds - PATCH
+STATUS=$(api_patch "/api/settings/alert-thresholds" '{"low_warning":70,"urgent_low":55,"high_warning":180,"urgent_high":250}')
+if [ "$STATUS" = "200" ]; then pass "PATCH alert thresholds"; else fail "PATCH alert thresholds (got $STATUS)"; fi
 
 # 3g. Data retention config - GET
 STATUS=$(api_get "/api/settings/data-retention")
 if [ "$STATUS" = "200" ]; then pass "GET data retention config"; else fail "GET data retention config (got $STATUS)"; fi
 
 # 3h. Emergency contacts - GET
-STATUS=$(api_get "/api/emergency-contacts")
+STATUS=$(api_get "/api/settings/emergency-contacts")
 if [ "$STATUS" = "200" ]; then pass "GET emergency contacts"; else fail "GET emergency contacts (got $STATUS)"; fi
 
 # 3i. Escalation config - GET
-STATUS=$(api_get "/api/alerts/escalation")
+STATUS=$(api_get "/api/settings/escalation-config")
 if [ "$STATUS" = "200" ]; then pass "GET escalation config"; else fail "GET escalation config (got $STATUS)"; fi
 
-# 3j. Profile - GET
-STATUS=$(api_get "/api/auth/profile")
+# 3j. Profile - GET (uses /me endpoint)
+STATUS=$(api_get "/api/auth/me")
 if [ "$STATUS" = "200" ]; then pass "GET user profile"; else fail "GET user profile (got $STATUS)"; fi
 
 echo ""
@@ -271,9 +278,9 @@ echo ""
 echo "4. AI & Insights"
 echo "---"
 
-# 4a. AI provider config - GET
+# 4a. AI provider config - GET (404 means no provider configured yet, which is valid)
 STATUS=$(api_get "/api/ai/provider")
-if [ "$STATUS" = "200" ]; then pass "GET AI provider config"; else fail "GET AI provider config (got $STATUS)"; fi
+if [ "$STATUS" = "200" ]; then pass "GET AI provider config (configured)"; elif [ "$STATUS" = "404" ]; then pass "GET AI provider config (none configured - expected)"; else fail "GET AI provider config (got $STATUS)"; fi
 
 # 4b. Insights list
 STATUS=$(api_get "/api/ai/insights?limit=10")
@@ -291,11 +298,12 @@ echo ""
 echo "5. Integrations"
 echo "---"
 
+# 404 means integration not configured yet, which is valid for a fresh install
 STATUS=$(api_get "/api/integrations/dexcom/status")
-if [ "$STATUS" = "200" ]; then pass "GET Dexcom integration status"; else fail "GET Dexcom status (got $STATUS)"; fi
+if [ "$STATUS" = "200" ]; then pass "GET Dexcom integration status (connected)"; elif [ "$STATUS" = "404" ]; then pass "GET Dexcom integration status (not configured - expected)"; else fail "GET Dexcom status (got $STATUS)"; fi
 
 STATUS=$(api_get "/api/integrations/tandem/status")
-if [ "$STATUS" = "200" ]; then pass "GET Tandem integration status"; else fail "GET Tandem status (got $STATUS)"; fi
+if [ "$STATUS" = "200" ]; then pass "GET Tandem integration status (connected)"; elif [ "$STATUS" = "404" ]; then pass "GET Tandem integration status (not configured - expected)"; else fail "GET Tandem status (got $STATUS)"; fi
 
 echo ""
 
@@ -305,7 +313,7 @@ echo ""
 echo "6. Caregiver Features"
 echo "---"
 
-STATUS=$(api_get "/api/caregivers")
+STATUS=$(api_get "/api/caregivers/linked")
 if [ "$STATUS" = "200" ]; then pass "GET caregivers list"; else fail "GET caregivers list (got $STATUS)"; fi
 
 STATUS=$(api_get "/api/caregivers/invitations")
@@ -322,7 +330,7 @@ echo "---"
 # Test SSE endpoint by checking that it returns the correct Content-Type header
 SSE_HEADERS=$(curl -s -D - -o /dev/null --connect-timeout 5 --max-time 3 \
   -H "Accept: text/event-stream" -b "$COOKIE_JAR" \
-  "$API_URL/api/glucose/stream" 2>/dev/null || echo "")
+  "$API_URL/api/v1/glucose/stream" 2>/dev/null || echo "")
 
 if echo "$SSE_HEADERS" | grep -qi "text/event-stream"; then
   pass "SSE endpoint returns text/event-stream Content-Type"

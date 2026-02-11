@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # Session
     session_expire_hours: int = 24
+    cookie_secure: bool = (
+        True  # Set to False for plain HTTP (e.g. Docker integration tests)
+    )
 
     # Backup Configuration (Story 1.5)
     backup_enabled: bool = True

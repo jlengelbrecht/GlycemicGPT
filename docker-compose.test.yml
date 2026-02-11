@@ -25,6 +25,7 @@ services:
     environment:
       SECRET_KEY: integration-test-secret-key-not-for-production
       LOG_FORMAT: text
+      COOKIE_SECURE: "false"
     depends_on:
       db:
         condition: service_healthy
