@@ -93,7 +93,7 @@ export default function InviteAcceptPage() {
       setSuccess(true);
       // Redirect to login after 3 seconds
       setTimeout(() => {
-        router.push("/");
+        router.push("/login");
       }, 3000);
     } catch (err) {
       setFormError(
@@ -231,7 +231,7 @@ export default function InviteAcceptPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" aria-label="Caregiver account registration">
           <div>
             <label
               htmlFor="email"
@@ -346,7 +346,7 @@ export default function InviteAcceptPage() {
 
         <p className="text-xs text-slate-500 text-center mt-4">
           Already have a caregiver account?{" "}
-          <Link href="/" className="text-blue-400 hover:text-blue-300">
+          <Link href="/login" className="text-blue-400 hover:text-blue-300">
             Log in
           </Link>{" "}
           first, then visit this link again.
