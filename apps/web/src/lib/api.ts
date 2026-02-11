@@ -1856,3 +1856,37 @@ export async function sendAIChat(message: string): Promise<AIChatResponse> {
   }
   return response.json();
 }
+
+// ============================================================================
+// Glucose History
+// ============================================================================
+
+export interface GlucoseHistoryReading {
+  value: number;
+  reading_timestamp: string;
+  trend: string;
+  trend_rate: number | null;
+  received_at: string;
+  source: string;
+}
+
+export interface GlucoseHistoryResponse {
+  readings: GlucoseHistoryReading[];
+  count: number;
+}
+
+export async function getGlucoseHistory(
+  minutes: number = 180,
+  limit: number = 288
+): Promise<GlucoseHistoryResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/glucose/history?minutes=${minutes}&limit=${limit}`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch glucose history: ${response.status}`
+    );
+  }
+  return response.json();
+}
