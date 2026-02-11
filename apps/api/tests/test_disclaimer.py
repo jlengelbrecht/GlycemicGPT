@@ -172,6 +172,81 @@ class TestDisclaimerAcknowledge:
             assert "successfully" in data["message"].lower()
 
 
+class TestDisclaimerAcknowledgeAuth:
+    """Tests for POST /api/disclaimer/acknowledge-auth endpoint.
+
+    Story 15.5: Authenticated disclaimer acknowledgment sets
+    user.disclaimer_acknowledged = True.
+    """
+
+    @pytest.mark.asyncio
+    async def test_requires_authentication(self, client):
+        """Returns 401 when no session cookie is provided."""
+        response = await client.post("/api/disclaimer/acknowledge-auth")
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_sets_disclaimer_acknowledged_on_user(self, client):
+        """Sets disclaimer_acknowledged=True, commits, and returns success."""
+        from src.core.auth import get_current_user
+        from src.database import get_db
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "test@example.com"
+        mock_user.disclaimer_acknowledged = False
+        mock_user.is_active = True
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.refresh = AsyncMock()
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        try:
+            response = await client.post("/api/disclaimer/acknowledge-auth")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "successfully" in data["message"].lower()
+            assert mock_user.disclaimer_acknowledged is True
+            mock_db.commit.assert_awaited_once()
+            mock_db.refresh.assert_awaited_once_with(mock_user)
+        finally:
+            app.dependency_overrides.clear()
+
+    @pytest.mark.asyncio
+    async def test_idempotent_when_already_acknowledged(self, client):
+        """Returns early without DB write if already acknowledged."""
+        from src.core.auth import get_current_user
+        from src.database import get_db
+
+        mock_user = MagicMock()
+        mock_user.id = uuid.uuid4()
+        mock_user.email = "test@example.com"
+        mock_user.disclaimer_acknowledged = True
+        mock_user.is_active = True
+
+        mock_db = AsyncMock()
+        mock_db.commit = AsyncMock()
+
+        app.dependency_overrides[get_current_user] = lambda: mock_user
+        app.dependency_overrides[get_db] = lambda: mock_db
+
+        try:
+            response = await client.post("/api/disclaimer/acknowledge-auth")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["success"] is True
+            assert "previously" in data["message"].lower()
+            mock_db.commit.assert_not_awaited()
+        finally:
+            app.dependency_overrides.clear()
+
+
 class TestDisclaimerContent:
     """Tests for GET /api/disclaimer/content endpoint."""
 
