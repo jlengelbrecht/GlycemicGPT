@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.45](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.44...v0.1.45) (2026-02-11)
+
+
+### ✨ Features
+
+* add alert settings page for thresholds and escalation (Story 10.3) ([#107](https://github.com/jlengelbrecht/GlycemicGPT/issues/107)) ([12bb319](https://github.com/jlengelbrecht/GlycemicGPT/commit/12bb3193f6fd3c0b617679f4fd3575bb02885993))
+
 ## [0.1.44](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.43...v0.1.44) (2026-02-10)
 
 
