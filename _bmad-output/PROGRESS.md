@@ -16,13 +16,13 @@
 | 8 | Caregiver Access & Support | 6/6 | **Complete** |
 | 9 | Settings & Data Management | 5/5 | **Complete** |
 | 10 | Settings Infrastructure Fixes | 3/3 | **Complete** |
-| 11 | AI Configuration & Chat Interface | 0/3 | **Pending** |
+| 11 | AI Configuration & Chat Interface | 1/3 | **In Progress** |
 | 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 0/3 | **Pending** |
 
 **MVP Stories:** 54/54 complete (100%)
-**Post-MVP Fix Stories:** 7/13 complete (54%)
-**Overall Progress:** 61/67 stories complete (91%)
+**Post-MVP Fix Stories:** 8/13 complete (62%)
+**Overall Progress:** 62/67 stories complete (93%)
 
 ---
 
@@ -244,9 +244,9 @@ All 5 stories completed:
 - [x] Story 10.2: Create Settings > Profile Page - [PR #105](https://github.com/jlengelbrecht/GlycemicGPT/pull/105)
 - [x] Story 10.3: Create Settings > Alerts Page - [PR #107](https://github.com/jlengelbrecht/GlycemicGPT/pull/107)
 
-**Epic 11: AI Configuration & Chat Interface** - PENDING
+**Epic 11: AI Configuration & Chat Interface** - IN PROGRESS
 
-- [ ] Story 11.1: Create AI Provider Configuration Page
+- [x] Story 11.1: Create AI Provider Configuration Page
 - [ ] Story 11.2: Create Web-Based AI Chat Interface
 - [ ] Story 11.3: Wire Daily Briefs Web Delivery
 
@@ -254,7 +254,7 @@ All 5 stories completed:
 
 - [x] Story 12.1: Create Settings > Integrations Page - [PR #109](https://github.com/jlengelbrecht/GlycemicGPT/pull/109)
 - [x] Story 12.2: Redesign Communications Settings Hub - [PR #113](https://github.com/jlengelbrecht/GlycemicGPT/pull/113)
-- [x] Story 12.3: Add Telegram Bot Token Configuration
+- [x] Story 12.3: Add Telegram Bot Token Configuration - [PR #115](https://github.com/jlengelbrecht/GlycemicGPT/pull/115)
 - [x] Story 12.4: Graceful Offline/Disconnected State for All Settings - [PR #111](https://github.com/jlengelbrecht/GlycemicGPT/pull/111)
 
 **Epic 13: End-to-End Testing & Real Data Verification** - PENDING

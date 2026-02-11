@@ -1647,3 +1647,99 @@ export async function disconnectTandem(): Promise<void> {
     );
   }
 }
+
+/**
+ * AI Provider Configuration API (Story 11.1)
+ */
+
+export type AIProviderType = "claude" | "openai";
+export type AIProviderStatus = "connected" | "error" | "pending";
+
+export interface AIProviderConfigResponse {
+  provider_type: AIProviderType;
+  status: AIProviderStatus;
+  model_name: string | null;
+  masked_api_key: string;
+  last_validated_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIProviderConfigRequest {
+  provider_type: AIProviderType;
+  api_key: string;
+  model_name?: string | null;
+}
+
+export interface AIProviderTestResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface AIProviderDeleteResponse {
+  message: string;
+}
+
+export async function getAIProvider(): Promise<AIProviderConfigResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch AI provider: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+export async function configureAIProvider(
+  request: AIProviderConfigRequest
+): Promise<AIProviderConfigResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to configure AI provider: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+export async function testAIProvider(): Promise<AIProviderTestResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/provider/test`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to test AI provider: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+export async function deleteAIProvider(): Promise<AIProviderDeleteResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to delete AI provider: ${response.status}`
+    );
+  }
+  return response.json();
+}
