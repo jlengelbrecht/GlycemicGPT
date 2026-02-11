@@ -15,14 +15,14 @@
 | 7 | Telegram Bot Integration | 6/6 | **Complete** |
 | 8 | Caregiver Access & Support | 6/6 | **Complete** |
 | 9 | Settings & Data Management | 5/5 | **Complete** |
-| 10 | Settings Infrastructure Fixes | 2/3 | **In Progress** |
+| 10 | Settings Infrastructure Fixes | 3/3 | **Complete** |
 | 11 | AI Configuration & Chat Interface | 0/3 | **Pending** |
-| 12 | Integration & Communication Config | 0/4 | **Pending** |
+| 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 0/3 | **Pending** |
 
 **MVP Stories:** 54/54 complete (100%)
-**Post-MVP Fix Stories:** 2/13 complete (15%)
-**Overall Progress:** 56/67 stories complete (84%)
+**Post-MVP Fix Stories:** 7/13 complete (54%)
+**Overall Progress:** 61/67 stories complete (91%)
 
 ---
 
@@ -238,11 +238,11 @@ All 5 stories completed:
 
 ## Post-MVP Fix Epics (from manual testing feedback)
 
-**Epic 10: Settings Infrastructure Fixes** - PENDING
+**Epic 10: Settings Infrastructure Fixes** - COMPLETE
 
 - [x] Story 10.1: Fix Save Changes Button Across All Settings Pages
-- [x] Story 10.2: Create Settings > Profile Page
-- [ ] Story 10.3: Create Settings > Alerts Page
+- [x] Story 10.2: Create Settings > Profile Page - [PR #105](https://github.com/jlengelbrecht/GlycemicGPT/pull/105)
+- [x] Story 10.3: Create Settings > Alerts Page - [PR #107](https://github.com/jlengelbrecht/GlycemicGPT/pull/107)
 
 **Epic 11: AI Configuration & Chat Interface** - PENDING
 
@@ -250,12 +250,12 @@ All 5 stories completed:
 - [ ] Story 11.2: Create Web-Based AI Chat Interface
 - [ ] Story 11.3: Wire Daily Briefs Web Delivery
 
-**Epic 12: Integration & Communication Configuration** - PENDING
+**Epic 12: Integration & Communication Configuration** - COMPLETE
 
-- [ ] Story 12.1: Create Settings > Integrations Page
-- [ ] Story 12.2: Redesign Communications Settings Hub
-- [ ] Story 12.3: Add Telegram Bot Token Configuration
-- [ ] Story 12.4: Graceful Offline/Disconnected State for All Settings
+- [x] Story 12.1: Create Settings > Integrations Page - [PR #109](https://github.com/jlengelbrecht/GlycemicGPT/pull/109)
+- [x] Story 12.2: Redesign Communications Settings Hub - [PR #113](https://github.com/jlengelbrecht/GlycemicGPT/pull/113)
+- [x] Story 12.3: Add Telegram Bot Token Configuration
+- [x] Story 12.4: Graceful Offline/Disconnected State for All Settings - [PR #111](https://github.com/jlengelbrecht/GlycemicGPT/pull/111)
 
 **Epic 13: End-to-End Testing & Real Data Verification** - PENDING
 
