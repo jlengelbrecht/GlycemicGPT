@@ -1783,7 +1783,7 @@ export async function getAIProvider(): Promise<AIProviderConfigResponse> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
-      error.detail || `Failed to fetch AI provider: ${response.status}`
+      `${response.status}: ${error.detail || "Failed to fetch AI provider"}`
     );
   }
   return response.json();

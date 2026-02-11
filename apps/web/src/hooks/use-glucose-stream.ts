@@ -14,17 +14,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const SSE_ENDPOINT = `${API_BASE_URL}/api/v1/glucose/stream`;
 
 /**
- * Backend trend direction (Dexcom API format).
- * These are the raw values received from the backend SSE stream.
+ * Backend trend direction values.
+ * These are the snake_case enum values from the backend TrendDirection model.
  */
 export type BackendTrendDirection =
-  | "DoubleUp"
-  | "SingleUp"
-  | "FortyFiveUp"
-  | "Flat"
-  | "FortyFiveDown"
-  | "SingleDown"
-  | "DoubleDown"
+  | "double_up"
+  | "single_up"
+  | "forty_five_up"
+  | "flat"
+  | "forty_five_down"
+  | "single_down"
+  | "double_down"
+  | "not_computable"
+  | "rate_out_of_range"
   | "Unknown";
 
 /**
@@ -46,17 +48,19 @@ export type FrontendTrendDirection =
 export function mapBackendTrendToFrontend(
   trend: BackendTrendDirection | string
 ): FrontendTrendDirection {
-  const mapping: Record<BackendTrendDirection, FrontendTrendDirection> = {
-    DoubleUp: "RisingFast",
-    SingleUp: "Rising",
-    FortyFiveUp: "Rising",
-    Flat: "Stable",
-    FortyFiveDown: "Falling",
-    SingleDown: "Falling",
-    DoubleDown: "FallingFast",
+  const mapping: Record<string, FrontendTrendDirection> = {
+    double_up: "RisingFast",
+    single_up: "Rising",
+    forty_five_up: "Rising",
+    flat: "Stable",
+    forty_five_down: "Falling",
+    single_down: "Falling",
+    double_down: "FallingFast",
+    not_computable: "Unknown",
+    rate_out_of_range: "Unknown",
     Unknown: "Unknown",
   };
-  return mapping[trend as BackendTrendDirection] ?? "Unknown";
+  return mapping[trend] ?? "Unknown";
 }
 
 /** Raw glucose data received from SSE (backend format) */
