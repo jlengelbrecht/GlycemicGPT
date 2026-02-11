@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.54](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.53...v0.1.54) (2026-02-11)
+
+
+### ✨ Features
+
+* add Docker container integration testing (Story 13.2) ([#124](https://github.com/jlengelbrecht/GlycemicGPT/issues/124)) ([923b750](https://github.com/jlengelbrecht/GlycemicGPT/commit/923b7501c25747692b0a9bf621ac1723b053c6a7))
+
 ## [0.1.53](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.52...v0.1.53) (2026-02-11)
 
 
