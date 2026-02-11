@@ -31,10 +31,13 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # Install dependencies using uv
-# setuptools is reinstalled explicitly because tconnectsync requires pkg_resources
-# at runtime, and uv may not preserve it after build-time resolution
-RUN uv pip install --system --no-cache . && \
-    uv pip install --system setuptools
+RUN uv pip install --system --no-cache .
+
+# tconnectsync requires pkg_resources (setuptools) at runtime.
+# uv may not preserve setuptools after build-time resolution, so install
+# it separately with pip and verify pkg_resources is importable.
+RUN pip install --no-cache-dir setuptools && \
+    python -c "import pkg_resources"
 
 # Copy remaining files
 COPY migrations/ ./migrations/
