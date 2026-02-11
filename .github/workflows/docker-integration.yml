@@ -1,0 +1,58 @@
+name: Docker Integration Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'scripts/docker-integration-test.sh'
+      - '.github/workflows/docker-integration.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'scripts/docker-integration-test.sh'
+      - '.github/workflows/docker-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-integration:
+    name: Docker Integration Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Docker integration test
+        run: ./scripts/docker-integration-test.sh
+        env:
+          DOCKER_BUILDKIT: 1
+
+      - name: Show container logs on failure
+        if: failure()
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: |
+          echo "=== API Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs api
+          echo ""
+          echo "=== Web Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs web
+          echo ""
+          echo "=== DB Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs db

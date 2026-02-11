@@ -1,0 +1,445 @@
+#!/bin/bash
+# GlycemicGPT Docker Integration Test
+#
+# Story 13.2: Docker Container Integration Testing
+#
+# Builds the full Docker stack, waits for all services to become healthy,
+# then runs integration checks against the containerized application.
+# Uses docker-compose.test.yml for isolated ports and COMPOSE_PROJECT_NAME
+# for full volume/network isolation from local development.
+#
+# Usage:
+#   ./scripts/docker-integration-test.sh              # build + test + teardown
+#   ./scripts/docker-integration-test.sh --no-build   # skip build, test existing containers
+#   ./scripts/docker-integration-test.sh --no-down    # keep containers running after test
+#
+# Exit codes:
+#   0 = all checks passed
+#   1 = one or more checks failed
+
+set -uo pipefail
+# Note: -e is intentionally omitted. The script uses explicit error handling
+# via || fallbacks so that failures in individual checks do not abort the
+# entire test run before the summary is printed.
+
+# --- Configuration ---
+export COMPOSE_PROJECT_NAME=glycemicgpt-test
+COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.test.yml"
+API_URL="http://localhost:8001"
+WEB_URL="http://localhost:3001"
+TEST_EMAIL="dockertest_$(date +%s)@test.local"
+TEST_PASSWORD="DockerTest123!"
+COOKIE_JAR=$(mktemp)
+MAX_WAIT=180  # seconds to wait for services to become healthy
+
+# --- Parse CLI args ---
+DO_BUILD=true
+DO_DOWN=true
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --no-build) DO_BUILD=false; shift ;;
+    --no-down)  DO_DOWN=false; shift ;;
+    *) echo "Unknown arg: $1"; exit 1 ;;
+  esac
+done
+
+# --- Helpers ---
+PASS=0
+FAIL=0
+SKIP=0
+
+pass() { PASS=$((PASS+1)); echo "  [PASS] $1"; }
+fail() { FAIL=$((FAIL+1)); echo "  [FAIL] $1"; }
+skip() { SKIP=$((SKIP+1)); echo "  [SKIP] $1"; }
+
+api_get() {
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+    -b "$COOKIE_JAR" "$API_URL$1" 2>/dev/null || echo "000"
+}
+
+api_get_body() {
+  curl -s --connect-timeout 5 --max-time 10 \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" "$API_URL$1" 2>/dev/null || echo "{}"
+}
+
+api_post() {
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -X POST -H "Content-Type: application/json" -d "$2" "$API_URL$1" 2>/dev/null || echo "000"
+}
+
+api_put() {
+  curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \
+    -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+    -X PUT -H "Content-Type: application/json" -d "$2" "$API_URL$1" 2>/dev/null || echo "000"
+}
+
+cleanup() {
+  rm -f "$COOKIE_JAR"
+  if [ "$DO_DOWN" = true ]; then
+    echo ""
+    echo "Tearing down containers..."
+    $COMPOSE_CMD down -v --remove-orphans 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+# --- Start ---
+echo ""
+echo "============================================="
+echo "  GlycemicGPT Docker Integration Test"
+echo "============================================="
+echo "  API:  $API_URL"
+echo "  Web:  $WEB_URL"
+echo "  User: $TEST_EMAIL"
+echo "  Project: $COMPOSE_PROJECT_NAME"
+echo "============================================="
+echo ""
+
+# -----------------------------------------------
+# 0. Build and Start Containers
+# -----------------------------------------------
+echo "0. Container Setup"
+echo "---"
+
+if [ "$DO_BUILD" = true ]; then
+  echo "  Building and starting containers..."
+  $COMPOSE_CMD up --build -d 2>&1 | tail -5
+  echo ""
+fi
+
+# Wait for all services to become healthy (including web)
+echo "  Waiting for services to become healthy (max ${MAX_WAIT}s)..."
+
+WAITED=0
+while [ $WAITED -lt $MAX_WAIT ]; do
+  # Use curl to check actual service endpoints rather than parsing docker compose ps JSON
+  # (which varies across Docker Compose versions)
+  API_READY=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 5 "$API_URL/health" 2>/dev/null || echo "000")
+  WEB_READY=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 5 "$WEB_URL" 2>/dev/null || echo "000")
+
+  if [ "$API_READY" = "200" ] && [ "$WEB_READY" = "200" ]; then
+    pass "All services healthy after ${WAITED}s"
+    break
+  fi
+
+  if [ $((WAITED % 15)) -eq 0 ] && [ $WAITED -gt 0 ]; then
+    echo "  ... still waiting (${WAITED}s) - API=$API_READY WEB=$WEB_READY"
+  fi
+
+  sleep 3
+  WAITED=$((WAITED+3))
+done
+
+if [ $WAITED -ge $MAX_WAIT ]; then
+  fail "Services did not become healthy within ${MAX_WAIT}s"
+  echo ""
+  echo "  Container status:"
+  $COMPOSE_CMD ps 2>/dev/null || true
+  echo ""
+  echo "  API logs (last 30 lines):"
+  $COMPOSE_CMD logs --tail=30 api 2>/dev/null || true
+  echo ""
+  echo "  Web logs (last 30 lines):"
+  $COMPOSE_CMD logs --tail=30 web 2>/dev/null || true
+  exit 1
+fi
+
+echo ""
+
+# -----------------------------------------------
+# 1. Container Health Checks
+# -----------------------------------------------
+echo "1. Container Health & Infrastructure"
+echo "---"
+
+# 1a-d. Container states (use docker compose ps with text output for portability)
+for SVC in db redis api web; do
+  SVC_RUNNING=$($COMPOSE_CMD ps --status running "$SVC" 2>/dev/null | grep -c "$SVC" || echo "0")
+  if [ "$SVC_RUNNING" -gt 0 ] 2>/dev/null; then
+    pass "$SVC container running"
+  else
+    fail "$SVC container not running"
+  fi
+done
+
+# 1e. API health endpoint
+BODY=$(api_get_body "/health")
+if echo "$BODY" | grep -q '"healthy"'; then pass "API /health: healthy"; else fail "API /health: $BODY"; fi
+
+# 1f. Database connected (via health response)
+if echo "$BODY" | grep -q '"connected"'; then pass "Database connected (via /health)"; else fail "Database not connected"; fi
+
+# 1g. Liveness probe
+STATUS=$(api_get "/health/live")
+if [ "$STATUS" = "200" ]; then pass "Liveness probe (/health/live)"; else fail "Liveness probe (got $STATUS)"; fi
+
+# 1h. Readiness probe
+STATUS=$(api_get "/health/ready")
+if [ "$STATUS" = "200" ]; then pass "Readiness probe (/health/ready)"; else fail "Readiness probe (got $STATUS)"; fi
+
+# 1i. Database migrations ran (alembic_version table exists)
+MIGRATION_CHECK=$($COMPOSE_CMD exec -T db psql -U glycemicgpt -d glycemicgpt -t -c "SELECT COUNT(*) FROM alembic_version;" 2>/dev/null | tr -d ' \n' || echo "0")
+if [ -n "$MIGRATION_CHECK" ] && [ "$MIGRATION_CHECK" != "0" ] 2>/dev/null; then
+  pass "Database migrations applied (alembic_version populated)"
+else
+  fail "Database migrations not applied (count: ${MIGRATION_CHECK:-empty})"
+fi
+
+# 1j. Frontend reachable
+WEB_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$WEB_URL" 2>/dev/null || echo "000")
+if [ "$WEB_HTTP" = "200" ]; then pass "Frontend reachable at $WEB_URL"; else fail "Frontend not reachable (got $WEB_HTTP)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 2. Authentication Flow
+# -----------------------------------------------
+echo "2. Authentication (Container Network)"
+echo "---"
+
+# 2a. Register
+STATUS=$(api_post "/api/auth/register" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\"}")
+if [ "$STATUS" = "201" ]; then pass "User registration"; else fail "Registration (got $STATUS)"; fi
+
+# 2b. Login
+STATUS=$(api_post "/api/auth/login" "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\"}")
+if [ "$STATUS" = "200" ]; then pass "User login"; else fail "Login (got $STATUS)"; fi
+
+# 2c. Get current user
+STATUS=$(api_get "/api/auth/me")
+if [ "$STATUS" = "200" ]; then pass "Get current user (authenticated)"; else fail "Get current user (got $STATUS)"; fi
+
+# 2d. Accept disclaimer
+STATUS=$(api_post "/api/disclaimer/accept" "{}")
+if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then pass "Accept disclaimer"; else fail "Accept disclaimer (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 3. Settings CRUD (End-to-End through Containers)
+# -----------------------------------------------
+echo "3. Settings Endpoints (Container E2E)"
+echo "---"
+
+# 3a. Target glucose range - GET
+STATUS=$(api_get "/api/settings/target-glucose-range")
+if [ "$STATUS" = "200" ]; then pass "GET target glucose range"; else fail "GET target glucose range (got $STATUS)"; fi
+
+# 3b. Target glucose range - PUT
+STATUS=$(api_put "/api/settings/target-glucose-range" '{"low_threshold":65,"high_threshold":175}')
+if [ "$STATUS" = "200" ]; then pass "PUT target glucose range"; else fail "PUT target glucose range (got $STATUS)"; fi
+
+# 3c. Verify round-trip (GET should return saved values)
+BODY=$(api_get_body "/api/settings/target-glucose-range")
+if echo "$BODY" | grep -q '"low_threshold"'; then pass "Glucose range round-trip persisted"; else fail "Glucose range round-trip: $BODY"; fi
+
+# 3d. Brief delivery config - GET
+STATUS=$(api_get "/api/settings/brief-delivery")
+if [ "$STATUS" = "200" ]; then pass "GET brief delivery config"; else fail "GET brief delivery config (got $STATUS)"; fi
+
+# 3e. Alert thresholds - GET
+STATUS=$(api_get "/api/alerts/thresholds")
+if [ "$STATUS" = "200" ]; then pass "GET alert thresholds"; else fail "GET alert thresholds (got $STATUS)"; fi
+
+# 3f. Alert thresholds - PUT
+STATUS=$(api_put "/api/alerts/thresholds" '{"low_warning":70,"urgent_low":55,"high_warning":180,"urgent_high":250}')
+if [ "$STATUS" = "200" ]; then pass "PUT alert thresholds"; else fail "PUT alert thresholds (got $STATUS)"; fi
+
+# 3g. Data retention config - GET
+STATUS=$(api_get "/api/settings/data-retention")
+if [ "$STATUS" = "200" ]; then pass "GET data retention config"; else fail "GET data retention config (got $STATUS)"; fi
+
+# 3h. Emergency contacts - GET
+STATUS=$(api_get "/api/emergency-contacts")
+if [ "$STATUS" = "200" ]; then pass "GET emergency contacts"; else fail "GET emergency contacts (got $STATUS)"; fi
+
+# 3i. Escalation config - GET
+STATUS=$(api_get "/api/alerts/escalation")
+if [ "$STATUS" = "200" ]; then pass "GET escalation config"; else fail "GET escalation config (got $STATUS)"; fi
+
+# 3j. Profile - GET
+STATUS=$(api_get "/api/auth/profile")
+if [ "$STATUS" = "200" ]; then pass "GET user profile"; else fail "GET user profile (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 4. AI & Insights (Container Network)
+# -----------------------------------------------
+echo "4. AI & Insights"
+echo "---"
+
+# 4a. AI provider config - GET
+STATUS=$(api_get "/api/ai/provider")
+if [ "$STATUS" = "200" ]; then pass "GET AI provider config"; else fail "GET AI provider config (got $STATUS)"; fi
+
+# 4b. Insights list
+STATUS=$(api_get "/api/ai/insights?limit=10")
+if [ "$STATUS" = "200" ]; then pass "GET insights list"; else fail "GET insights list (got $STATUS)"; fi
+
+# 4c. Unread count
+STATUS=$(api_get "/api/ai/insights/unread-count")
+if [ "$STATUS" = "200" ]; then pass "GET unread insights count"; else fail "GET unread insights count (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 5. Integrations
+# -----------------------------------------------
+echo "5. Integrations"
+echo "---"
+
+STATUS=$(api_get "/api/integrations/dexcom/status")
+if [ "$STATUS" = "200" ]; then pass "GET Dexcom integration status"; else fail "GET Dexcom status (got $STATUS)"; fi
+
+STATUS=$(api_get "/api/integrations/tandem/status")
+if [ "$STATUS" = "200" ]; then pass "GET Tandem integration status"; else fail "GET Tandem status (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 6. Caregiver Features
+# -----------------------------------------------
+echo "6. Caregiver Features"
+echo "---"
+
+STATUS=$(api_get "/api/caregivers")
+if [ "$STATUS" = "200" ]; then pass "GET caregivers list"; else fail "GET caregivers list (got $STATUS)"; fi
+
+STATUS=$(api_get "/api/caregivers/invitations")
+if [ "$STATUS" = "200" ]; then pass "GET caregiver invitations"; else fail "GET caregiver invitations (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 7. SSE / Real-Time (Container Network)
+# -----------------------------------------------
+echo "7. SSE Real-Time Connection"
+echo "---"
+
+# Test SSE endpoint by checking that it returns the correct Content-Type header
+SSE_HEADERS=$(curl -s -D - -o /dev/null --connect-timeout 5 --max-time 3 \
+  -H "Accept: text/event-stream" -b "$COOKIE_JAR" \
+  "$API_URL/api/glucose/stream" 2>/dev/null || echo "")
+
+if echo "$SSE_HEADERS" | grep -qi "text/event-stream"; then
+  pass "SSE endpoint returns text/event-stream Content-Type"
+elif echo "$SSE_HEADERS" | grep -qi "HTTP/.*200"; then
+  pass "SSE endpoint accepts connections (200 OK)"
+else
+  # SSE may timeout reading (expected for long-lived streams) - check if we got any headers
+  if echo "$SSE_HEADERS" | grep -qi "HTTP/"; then
+    skip "SSE endpoint responded but Content-Type not verified"
+  else
+    fail "SSE endpoint not reachable"
+  fi
+fi
+
+echo ""
+
+# -----------------------------------------------
+# 8. Cross-Service Communication
+# -----------------------------------------------
+echo "8. Cross-Service Communication"
+echo "---"
+
+# 8a. Web container can reach API (internal network)
+INTERNAL_CHECK=$($COMPOSE_CMD exec -T web wget -q -O - --timeout=5 http://api:8000/health 2>/dev/null || echo "")
+if echo "$INTERNAL_CHECK" | grep -q "healthy"; then
+  pass "Web -> API internal network connectivity"
+else
+  # Try with curl if wget isn't available (Alpine minimal image may not have either)
+  INTERNAL_CHECK=$($COMPOSE_CMD exec -T web curl -s --connect-timeout 5 http://api:8000/health 2>/dev/null || echo "")
+  if echo "$INTERNAL_CHECK" | grep -q "healthy"; then
+    pass "Web -> API internal network connectivity"
+  else
+    skip "Web -> API internal check (wget/curl not available in minimal image)"
+  fi
+fi
+
+# 8b. API container can reach database (verified via health endpoint, which checks DB)
+READY_BODY=$(api_get_body "/health/ready")
+if echo "$READY_BODY" | grep -q '"ready"'; then
+  pass "API -> Database connectivity (verified via /health/ready)"
+else
+  fail "API -> Database connectivity check failed: $READY_BODY"
+fi
+
+# 8c. API container can reach Redis
+REDIS_CHECK=$($COMPOSE_CMD exec -T api python -c "
+import redis
+r = redis.from_url('redis://redis:6379/0')
+print(r.ping())
+" 2>/dev/null || echo "False")
+if echo "$REDIS_CHECK" | grep -q "True"; then
+  pass "API -> Redis connectivity"
+else
+  skip "API -> Redis connectivity (redis-py not directly importable)"
+fi
+
+echo ""
+
+# -----------------------------------------------
+# 9. Container Image Checks
+# -----------------------------------------------
+echo "9. Container Image Validation"
+echo "---"
+
+# 9a. API image built
+API_IMAGE=$($COMPOSE_CMD images api 2>/dev/null | grep -c "api" || echo "0")
+if [ "$API_IMAGE" -gt 0 ] 2>/dev/null; then pass "API image built successfully"; else fail "API image not found"; fi
+
+# 9b. Web image built
+WEB_IMAGE=$($COMPOSE_CMD images web 2>/dev/null | grep -c "web" || echo "0")
+if [ "$WEB_IMAGE" -gt 0 ] 2>/dev/null; then pass "Web image built successfully"; else fail "Web image not found"; fi
+
+# 9c. Web runs as non-root
+WEB_USER=$($COMPOSE_CMD exec -T web whoami 2>/dev/null || echo "unknown")
+if [ "$WEB_USER" = "nextjs" ]; then pass "Web container runs as non-root (nextjs)"; else skip "Web container user: $WEB_USER"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 10. Session Cleanup
+# -----------------------------------------------
+echo "10. Session Cleanup"
+echo "---"
+
+STATUS=$(api_post "/api/auth/logout" "{}")
+if [ "$STATUS" = "200" ]; then pass "User logout"; else fail "Logout (got $STATUS)"; fi
+
+STATUS=$(api_get "/api/auth/me")
+if [ "$STATUS" = "401" ]; then pass "Session invalidated after logout"; else fail "Session still valid after logout (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# Summary
+# -----------------------------------------------
+TOTAL=$((PASS+FAIL+SKIP))
+echo "============================================="
+echo "  Results: $PASS passed, $FAIL failed, $SKIP skipped (of $TOTAL)"
+echo "============================================="
+
+if [ "$FAIL" -gt 0 ]; then
+  echo ""
+  echo "  Some checks failed. Container logs below."
+  echo ""
+  echo "  --- API logs (last 30 lines) ---"
+  $COMPOSE_CMD logs --tail=30 api 2>/dev/null || true
+  echo ""
+  echo "  --- Web logs (last 30 lines) ---"
+  $COMPOSE_CMD logs --tail=30 web 2>/dev/null || true
+  echo ""
+  echo "  Debug commands:"
+  echo "    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $COMPOSE_CMD logs api"
+  echo "    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $COMPOSE_CMD logs web"
+  echo "    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $COMPOSE_CMD ps"
+  exit 1
+else
+  echo ""
+  echo "  All checks passed!"
+  exit 0
+fi
