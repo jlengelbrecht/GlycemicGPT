@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { Settings, User, Bell, Database, Link2, Users, MessageCircle, UserPlus, Target, Clock } from "lucide-react";
+import { Settings, User, Bell, Database, Link2, Users, Radio, UserPlus, Target, Clock } from "lucide-react";
 import { useUserContext } from "@/providers";
 
 interface SettingsSection {
@@ -64,10 +64,10 @@ const settingsSections: SettingsSection[] = [
     href: "/dashboard/settings/caregivers",
   },
   {
-    title: "Telegram",
-    description: "Link your Telegram account for alert notifications",
-    icon: MessageCircle,
-    href: "/dashboard/settings/telegram",
+    title: "Communications",
+    description: "Configure Telegram and other notification channels",
+    icon: Radio,
+    href: "/dashboard/settings/communications",
     caregiverVisible: true,
   },
   {
