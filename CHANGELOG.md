@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.46](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.45...v0.1.46) (2026-02-11)
+
+
+### ✨ Features
+
+* add integrations settings page for Dexcom and Tandem (Story 12.1) ([#109](https://github.com/jlengelbrecht/GlycemicGPT/issues/109)) ([36fbfec](https://github.com/jlengelbrecht/GlycemicGPT/commit/36fbfec2fa9388b4da4c4541bff3e3e8ec6fa8c0))
+
 ## [0.1.45](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.44...v0.1.45) (2026-02-11)
 
 
