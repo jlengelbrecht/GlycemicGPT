@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.57](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.56...v0.1.57) (2026-02-11)
+
+
+### ✨ Features
+
+* add registration page with password strength indicators (Story 15.2) ([#132](https://github.com/jlengelbrecht/GlycemicGPT/issues/132)) ([0194d67](https://github.com/jlengelbrecht/GlycemicGPT/commit/0194d672f897e4da3b4d490618086509f447c208))
+
 ## [0.1.56](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.55...v0.1.56) (2026-02-11)
 
 
