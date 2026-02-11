@@ -200,11 +200,11 @@ export default function TelegramSettingsPage() {
     <div className="space-y-6 max-w-2xl">
       {/* Back link */}
       <Link
-        href="/dashboard/settings"
+        href="/dashboard/settings/communications"
         className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Settings
+        Back to Communications
       </Link>
 
       {/* Page header */}
