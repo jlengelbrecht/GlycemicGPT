@@ -34,10 +34,11 @@ services:
       context: ./apps/api
       dockerfile: Dockerfile
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glycemicgpt}:${POSTGRES_PASSWORD:-glycemicgpt}@localhost:5432/${POSTGRES_DB:-glycemicgpt}
-      REDIS_URL: redis://localhost:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glycemicgpt}:${POSTGRES_PASSWORD:-glycemicgpt}@db:5432/${POSTGRES_DB:-glycemicgpt}
+      REDIS_URL: redis://redis:6379/0
       LOG_FORMAT: ${LOG_FORMAT:-json}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
     depends_on:
@@ -61,7 +62,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_URL: http://localhost:8000
+      API_URL: http://api:8000
     depends_on:
       api:
         condition: service_healthy
