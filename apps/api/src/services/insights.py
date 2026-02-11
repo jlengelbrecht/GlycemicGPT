@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Callable
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.logging_config import get_logger
@@ -49,6 +49,45 @@ def _meal_title(analysis: MealAnalysis) -> str:
 def _correction_title(analysis: CorrectionAnalysis) -> str:
     """Generate a title for a correction analysis."""
     return f"Correction Factor Analysis — {analysis.total_corrections} correction{'s' if analysis.total_corrections != 1 else ''} analyzed"
+
+
+async def count_unread_insights(
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> int:
+    """Count insights that have no user response (status = pending).
+
+    Counts all daily briefs, meal analyses, and correction analyses
+    that the user has NOT acknowledged or dismissed.
+
+    Args:
+        user_id: User's UUID.
+        db: Database session.
+
+    Returns:
+        Number of unread (pending) insights.
+    """
+    total = 0
+
+    for analysis_type, model in ANALYSIS_MODELS.items():
+        # Count total analyses for this type
+        count_result = await db.execute(
+            select(func.count(model.id)).where(model.user_id == user_id)
+        )
+        type_total = count_result.scalar() or 0
+
+        # Count responses for this type
+        responded_result = await db.execute(
+            select(func.count(SuggestionResponse.id)).where(
+                SuggestionResponse.user_id == user_id,
+                SuggestionResponse.analysis_type == analysis_type,
+            )
+        )
+        type_responded = responded_result.scalar() or 0
+
+        total += type_total - type_responded
+
+    return max(total, 0)
 
 
 async def list_insights(

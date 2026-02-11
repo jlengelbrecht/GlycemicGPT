@@ -6,12 +6,13 @@
  * Story 4.1: Dashboard Layout & Navigation
  * Story 8.3: Role-aware navigation for caregiver accounts
  * Story 8.6: Caregivers see only the Caregiver Dashboard link
- * Provides navigation to Dashboard, Daily Briefs, Alerts, and Settings.
+ * Story 11.3: Unread badge on Daily Briefs nav item
+ * Provides navigation to Dashboard, Daily Briefs, Alerts, AI Chat, and Settings.
  * Caregivers see only the Caregiver Dashboard (read-only enforcement).
  * Collapses to hamburger menu on mobile.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -26,16 +27,18 @@ import {
   X,
 } from "lucide-react";
 import { useUserContext } from "@/providers";
+import { getUnreadInsightsCount } from "@/lib/api";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
+  badgeKey?: string;
 }
 
 const diabeticNavigation: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Daily Briefs", href: "/dashboard/briefs", icon: FileText },
+  { name: "Daily Briefs", href: "/dashboard/briefs", icon: FileText, badgeKey: "briefs" },
   { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
   { name: "AI Chat", href: "/dashboard/ai-chat", icon: MessageSquare },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
@@ -49,11 +52,49 @@ interface SidebarProps {
   className?: string;
 }
 
+function useUnreadCount(enabled: boolean) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchCount = useCallback(async () => {
+    if (!enabled) return;
+    try {
+      const count = await getUnreadInsightsCount();
+      setUnreadCount(count);
+    } catch {
+      // Silently fail - badge just won't show
+    }
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    fetchCount();
+    // Refresh count every 60 seconds
+    const interval = setInterval(fetchCount, 60_000);
+    return () => clearInterval(interval);
+  }, [fetchCount, enabled]);
+
+  return unreadCount;
+}
+
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  const display = count > 99 ? "99+" : String(count);
+  return (
+    <span
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold text-white bg-red-500 rounded-full"
+      aria-label={`${count} unread`}
+    >
+      {display}
+    </span>
+  );
+}
+
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useUserContext();
-  const navigation =
-    user?.role === "caregiver" ? caregiverNavigation : diabeticNavigation;
+  const isCaregiver = user?.role === "caregiver";
+  const navigation = isCaregiver ? caregiverNavigation : diabeticNavigation;
+  const unreadCount = useUnreadCount(!isCaregiver);
 
   return (
     <aside
@@ -97,6 +138,9 @@ export function Sidebar({ className }: SidebarProps) {
             >
               <item.icon className="h-5 w-5" />
               {item.name}
+              {item.badgeKey === "briefs" && (
+                <UnreadBadge count={unreadCount} />
+              )}
             </Link>
           );
         })}
@@ -116,8 +160,9 @@ export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const { user } = useUserContext();
-  const navigation =
-    user?.role === "caregiver" ? caregiverNavigation : diabeticNavigation;
+  const isCaregiver = user?.role === "caregiver";
+  const navigation = isCaregiver ? caregiverNavigation : diabeticNavigation;
+  const unreadCount = useUnreadCount(!isCaregiver);
 
   return (
     <>
@@ -187,6 +232,9 @@ export function MobileNav() {
                   >
                     <item.icon className="h-5 w-5" />
                     {item.name}
+                    {item.badgeKey === "briefs" && (
+                      <UnreadBadge count={unreadCount} />
+                    )}
                   </Link>
                 );
               })}

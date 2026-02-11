@@ -19,6 +19,7 @@ from src.schemas.suggestion_response import (
     SuggestionResponseResponse,
 )
 from src.services.insights import (
+    count_unread_insights,
     get_insight_detail,
     list_insights,
     record_suggestion_response,
@@ -28,6 +29,23 @@ from src.services.insights import (
 router = APIRouter(prefix="/api/ai/insights", tags=["insights"])
 
 VALID_ANALYSIS_TYPES = {"daily_brief", "meal_analysis", "correction_analysis"}
+
+
+@router.get(
+    "/unread-count",
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_unread_count(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Get the count of unread (pending) insights.
+
+    Returns the number of insights the user has not yet
+    acknowledged or dismissed.
+    """
+    count = await count_unread_insights(user.id, db)
+    return {"unread_count": count}
 
 
 @router.get(

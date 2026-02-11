@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * AI Insights Page (formerly Daily Briefs)
+ * Daily Briefs / AI Insights Page
  *
  * Story 5.7: AI Insight Card
+ * Story 11.3: Wire Daily Briefs Web Delivery
+ *
  * Displays a unified feed of AI-generated insights including
  * daily briefs, meal analyses, and correction analyses.
- *
- * Users can acknowledge or dismiss insights to track which
- * suggestions they've reviewed.
+ * Users can filter to show only daily briefs, and can
+ * acknowledge or dismiss insights to track review status.
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { FileText, Loader2, RefreshCw } from "lucide-react";
+import { FileText, Loader2, RefreshCw, Filter } from "lucide-react";
 import { AIInsightCard, type InsightData } from "@/components/dashboard";
 import { getInsightDetail, type InsightDetail } from "@/lib/api";
 
@@ -23,21 +24,23 @@ interface InsightsResponse {
   total: number;
 }
 
+type FilterMode = "all" | "daily_brief";
+
 export default function BriefsPage() {
   const [insights, setInsights] = useState<InsightData[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterMode>("all");
 
   const fetchInsights = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/ai/insights?limit=20`, {
+      const response = await fetch(`${API_BASE_URL}/api/ai/insights?limit=50`, {
         credentials: "include",
       });
 
       if (response.status === 401) {
-        // Not authenticated - show empty state
         setInsights([]);
         setTotal(0);
         setIsLoading(false);
@@ -91,14 +94,31 @@ export default function BriefsPage() {
     return getInsightDetail(analysisType, analysisId);
   };
 
+  const filteredInsights =
+    filter === "all"
+      ? insights
+      : insights.filter((i) => i.analysis_type === filter);
+
+  const briefCount = insights.filter(
+    (i) => i.analysis_type === "daily_brief"
+  ).length;
+
+  const pendingBriefCount = insights.filter(
+    (i) => i.analysis_type === "daily_brief" && i.status === "pending"
+  ).length;
+
   return (
     <div className="space-y-6">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">AI Insights</h1>
+          <h1 className="text-2xl font-bold">
+            {filter === "daily_brief" ? "Daily Briefs" : "AI Insights"}
+          </h1>
           <p className="text-slate-400">
-            AI-powered analysis of your glucose patterns
+            {filter === "daily_brief"
+              ? "AI-generated daily summaries of your glucose data"
+              : "AI-powered analysis of your glucose patterns"}
           </p>
         </div>
         {!isLoading && (
@@ -115,6 +135,60 @@ export default function BriefsPage() {
           </button>
         )}
       </div>
+
+      {/* Filter tabs */}
+      {!isLoading && !error && insights.length > 0 && (
+        <div
+          className="flex items-center gap-2"
+          role="tablist"
+          aria-label="Filter insights"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+              e.preventDefault();
+              setFilter(filter === "all" ? "daily_brief" : "all");
+            }
+          }}
+        >
+          <button
+            role="tab"
+            id="tab-all"
+            aria-selected={filter === "all"}
+            aria-controls="tabpanel-insights"
+            tabIndex={filter === "all" ? 0 : -1}
+            onClick={() => setFilter("all")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              filter === "all"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+            }`}
+          >
+            All Insights
+            <span className="text-xs opacity-70">({insights.length})</span>
+          </button>
+          <button
+            role="tab"
+            id="tab-daily-briefs"
+            aria-selected={filter === "daily_brief"}
+            aria-controls="tabpanel-insights"
+            tabIndex={filter === "daily_brief" ? 0 : -1}
+            onClick={() => setFilter("daily_brief")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              filter === "daily_brief"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Daily Briefs
+            <span className="text-xs opacity-70">({briefCount})</span>
+            {pendingBriefCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">
+                {pendingBriefCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (
@@ -163,14 +237,43 @@ export default function BriefsPage() {
         </div>
       )}
 
+      {/* Filtered empty state */}
+      {!isLoading &&
+        !error &&
+        insights.length > 0 &&
+        filteredInsights.length === 0 && (
+          <div
+            id="tabpanel-insights"
+            role="tabpanel"
+            aria-labelledby={filter === "all" ? "tab-all" : "tab-daily-briefs"}
+            className="bg-slate-900 rounded-xl p-12 border border-slate-800 text-center"
+          >
+            <div className="flex justify-center mb-4">
+              <div className="p-4 bg-blue-500/10 rounded-full">
+                <FileText className="h-12 w-12 text-blue-400" />
+              </div>
+            </div>
+            <h2 className="text-xl font-semibold mb-2">No Daily Briefs Yet</h2>
+            <p className="text-slate-400 max-w-md mx-auto">
+              Daily briefs will appear here once they are generated.
+              Check your brief delivery settings to configure when they are sent.
+            </p>
+          </div>
+        )}
+
       {/* Insights feed */}
-      {!isLoading && !error && insights.length > 0 && (
-        <>
-          <p className="text-sm text-slate-500">
-            Showing {insights.length} of {total} insights
+      {!isLoading && !error && filteredInsights.length > 0 && (
+        <div
+          id="tabpanel-insights"
+          role="tabpanel"
+          aria-labelledby={filter === "all" ? "tab-all" : "tab-daily-briefs"}
+        >
+          <p className="text-sm text-slate-500 mb-4">
+            Showing {filteredInsights.length}
+            {filter !== "all" ? " daily briefs" : ""} of {total} insights
           </p>
           <div className="grid gap-4">
-            {insights.map((insight) => (
+            {filteredInsights.map((insight) => (
               <AIInsightCard
                 key={insight.id}
                 insight={insight}
@@ -179,7 +282,7 @@ export default function BriefsPage() {
               />
             ))}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

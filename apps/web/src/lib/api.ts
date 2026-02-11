@@ -202,6 +202,25 @@ export async function getInsights(
 }
 
 /**
+ * Fetch unread (pending) insights count for sidebar badge
+ */
+export async function getUnreadInsightsCount(): Promise<number> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/ai/insights/unread-count`,
+    {
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch unread count: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.unread_count;
+}
+
+/**
  * Record a response to an AI insight
  */
 export async function respondToInsight(
