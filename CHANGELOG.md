@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.56](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.55...v0.1.56) (2026-02-11)
+
+
+### ✨ Features
+
+* add login page with email/password authentication (Story 15.1) ([#130](https://github.com/jlengelbrecht/GlycemicGPT/issues/130)) ([cc8a23b](https://github.com/jlengelbrecht/GlycemicGPT/commit/cc8a23b8f0beabe4101fa713607857fb0c3432dd))
+
 ## [0.1.55](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.54...v0.1.55) (2026-02-11)
 
 
