@@ -30,6 +30,7 @@ import {
   disconnectTandem,
   type IntegrationResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 type IntegrationStatus = IntegrationResponse["status"];
 
@@ -56,6 +57,7 @@ function IntegrationCard({
   onConnect,
   onDisconnect,
   isConnecting,
+  isOffline,
   fields,
 }: {
   title: string;
@@ -66,6 +68,7 @@ function IntegrationCard({
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
   isConnecting: boolean;
+  isOffline?: boolean;
   fields: React.ReactNode;
 }) {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -148,7 +151,8 @@ function IntegrationCard({
         <div className="flex items-center gap-3 mt-4">
           <button
             type="submit"
-            disabled={isConnecting || isDisconnecting}
+            disabled={isConnecting || isDisconnecting || isOffline}
+            title={isOffline ? "Cannot connect while disconnected" : undefined}
             className={clsx(
               "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
               "bg-blue-600 text-white hover:bg-blue-500",
@@ -173,7 +177,7 @@ function IntegrationCard({
             <button
               type="button"
               onClick={() => setConfirmDisconnect(true)}
-              disabled={isConnecting || isDisconnecting}
+              disabled={isConnecting || isDisconnecting || isOffline}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-red-600/20 text-red-400 hover:bg-red-600/30",
@@ -295,6 +299,7 @@ export default function IntegrationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Integration state
   const [dexcom, setDexcom] = useState<IntegrationResponse | null>(null);
@@ -332,13 +337,10 @@ export default function IntegrationsPage() {
 
       setDexcom(dexcomInt || null);
       setTandem(tandemInt || null);
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load integrations"
-        );
+        setIsOffline(true);
       }
     } finally {
       setIsLoading(false);
@@ -455,6 +457,15 @@ export default function IntegrationsPage() {
         </p>
       </div>
 
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner
+          onRetry={fetchIntegrations}
+          isRetrying={isLoading}
+          message="Unable to connect to server. Integration management is unavailable."
+        />
+      )}
+
       {/* Error state */}
       {error && (
         <div
@@ -504,6 +515,7 @@ export default function IntegrationsPage() {
           onConnect={handleConnectDexcom}
           onDisconnect={handleDisconnectDexcom}
           isConnecting={isDexcomConnecting}
+          isOffline={isOffline}
           fields={
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -553,6 +565,7 @@ export default function IntegrationsPage() {
           onConnect={handleConnectTandem}
           onDisconnect={handleDisconnectTandem}
           isConnecting={isTandemConnecting}
+          isOffline={isOffline}
           fields={
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

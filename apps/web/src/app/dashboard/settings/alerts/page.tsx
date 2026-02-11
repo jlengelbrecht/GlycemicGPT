@@ -28,6 +28,7 @@ import {
   type AlertThresholdResponse,
   type EscalationConfigResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const THRESHOLD_DEFAULTS = {
   low_warning: 70,
@@ -52,6 +53,7 @@ export default function AlertSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Threshold form state
   const [lowWarning, setLowWarning] = useState("70");
@@ -84,13 +86,10 @@ export default function AlertSettingsPage() {
       setReminderDelay(String(escalationData.reminder_delay_minutes));
       setPrimaryDelay(String(escalationData.primary_contact_delay_minutes));
       setAllContactsDelay(String(escalationData.all_contacts_delay_minutes));
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load alert settings"
-        );
+        setIsOffline(true);
       }
       // Use defaults as baseline so the form is still functional
       setThresholds({
@@ -317,6 +316,11 @@ export default function AlertSettingsPage() {
           Configure alert thresholds and escalation timing
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner onRetry={fetchData} isRetrying={isLoading} />
+      )}
 
       {/* Error state */}
       {error && (
@@ -762,7 +766,8 @@ export default function AlertSettingsPage() {
           <div className="flex items-center gap-3">
             <button
               type="submit"
-              disabled={isSaving || !hasChanges || !isValid}
+              disabled={isSaving || !hasChanges || !isValid || isOffline}
+              title={isOffline ? "Cannot save while disconnected" : undefined}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-blue-600 text-white hover:bg-blue-500",
@@ -785,7 +790,7 @@ export default function AlertSettingsPage() {
             <button
               type="button"
               onClick={handleReset}
-              disabled={isSaving || isAtDefaults}
+              disabled={isSaving || isAtDefaults || isOffline}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-slate-800 text-slate-300 hover:bg-slate-700",

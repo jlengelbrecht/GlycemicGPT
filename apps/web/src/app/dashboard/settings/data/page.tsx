@@ -31,6 +31,7 @@ import {
   type DataRetentionConfigResponse,
   type StorageUsageResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const DEFAULTS = {
   glucose_retention_days: 365,
@@ -61,6 +62,7 @@ export default function DataRetentionPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Purge state (Story 9.4)
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
@@ -97,13 +99,10 @@ export default function DataRetentionPage() {
       setGlucoseDays(configData.glucose_retention_days);
       setAnalysisDays(configData.analysis_retention_days);
       setAuditDays(configData.audit_retention_days);
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load data retention configuration"
-        );
+        setIsOffline(true);
       }
       // Use defaults as baseline so the form is still functional
       setConfig({
@@ -300,6 +299,11 @@ export default function DataRetentionPage() {
           Configure how long your data is retained before automatic cleanup
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner onRetry={fetchData} isRetrying={isLoading} />
+      )}
 
       {/* Error state */}
       {error && (
@@ -539,7 +543,8 @@ export default function DataRetentionPage() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
-                disabled={isSaving || !hasChanges}
+                disabled={isSaving || !hasChanges || isOffline}
+                title={isOffline ? "Cannot save while disconnected" : undefined}
                 className={clsx(
                   "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-blue-600 text-white hover:bg-blue-500",
@@ -564,6 +569,7 @@ export default function DataRetentionPage() {
                 onClick={handleReset}
                 disabled={
                   isSaving ||
+                  isOffline ||
                   !config ||
                   (config.glucose_retention_days ===
                     DEFAULTS.glucose_retention_days &&
@@ -654,7 +660,7 @@ export default function DataRetentionPage() {
             <button
               type="button"
               onClick={handleExport}
-              disabled={isExporting || isSaving || isPurging}
+              disabled={isExporting || isSaving || isPurging || isOffline}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-green-600 text-white hover:bg-green-500",
@@ -706,7 +712,7 @@ export default function DataRetentionPage() {
               <button
                 type="button"
                 onClick={() => setShowPurgeConfirm(true)}
-                disabled={isPurging || isSaving}
+                disabled={isPurging || isSaving || isOffline}
                 className={clsx(
                   "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-red-600/10 text-red-400 border border-red-500/30",
