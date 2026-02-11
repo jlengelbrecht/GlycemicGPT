@@ -20,11 +20,13 @@
 | 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 3/3 | **Complete** |
 | 14 | Expanded AI Provider Support | 0/4 | **In Progress** |
+| 15 | Frontend Auth UI & Route Protection | 0/6 | **Pending** |
 
 **MVP Stories:** 54/54 complete (100%)
 **Post-MVP Fix Stories:** 13/13 complete (100%)
 **Epic 14 (AI Provider Expansion):** 0/4 in progress
-**Overall Progress:** 67/71 stories complete (94%)
+**Epic 15 (Frontend Auth UI):** 0/6 pending
+**Overall Progress:** 67/77 stories complete (87%)
 
 ---
 
@@ -277,3 +279,18 @@ All 5 stories completed:
 - [ ] Story 14.2: Backend Support for 5 Provider Types
 - [ ] Story 14.3: Frontend AI Provider Page Redesign
 - [ ] Story 14.4: Tests for Expanded Provider System
+
+---
+
+## Epic 15: Frontend Authentication UI & Route Protection
+
+**Goal:** Build login/register pages, add Next.js middleware for route protection, fix logout, add global 401 handling, and enforce post-login disclaimer. Discovered during Docker deployment testing - the backend auth system (Epic 2) is complete but the frontend has no auth pages or route protection.
+
+**Epic Details:** [epic-15-frontend-auth-ui.md](planning-artifacts/epic-15-frontend-auth-ui.md)
+
+- [ ] Story 15.1: Login Page
+- [ ] Story 15.2: Registration Page
+- [ ] Story 15.3: Next.js Auth Middleware & Route Protection
+- [ ] Story 15.4: Logout, Auth State & Global 401 Handling
+- [ ] Story 15.5: Post-Login Disclaimer Enforcement
+- [ ] Story 15.6: Landing Page & Auth Navigation Polish
