@@ -3,9 +3,46 @@
  *
  * Story 1.3: First-Run Safety Disclaimer
  * Story 15.1: Authentication API functions
+ * Story 15.4: Global 401 handling via apiFetch wrapper
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// Auth endpoints that legitimately return 401 (should NOT trigger redirect)
+const AUTH_ENDPOINTS = [
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/me",
+  "/api/auth/logout",
+];
+
+/**
+ * Authenticated fetch wrapper with automatic 401 handling.
+ *
+ * Defaults credentials to "include" and redirects to /login?expired=true
+ * when a 401 response is received from non-auth endpoints. Returns a
+ * never-resolving promise after redirect to prevent callers from
+ * processing the stale response.
+ */
+export async function apiFetch(
+  url: string,
+  options?: RequestInit
+): Promise<Response> {
+  const response = await fetch(url, {
+    ...options,
+    credentials: "include",
+  });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    const urlPath = new URL(url).pathname;
+    if (!AUTH_ENDPOINTS.some((ep) => urlPath === ep)) {
+      window.location.href = "/login?expired=true";
+      return new Promise<Response>(() => {});
+    }
+  }
+
+  return response;
+}
 
 // ============================================================================
 // Story 15.1: Authentication
@@ -74,9 +111,8 @@ export async function registerUser(
  * Log out the current user. Clears session cookie.
  */
 export async function logoutUser(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/logout`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -126,7 +162,8 @@ export interface DisclaimerContent {
 }
 
 /**
- * Check if the disclaimer has been acknowledged for a session
+ * Check if the disclaimer has been acknowledged for a session.
+ * Public endpoint (session_id based, not cookie auth) - uses raw fetch intentionally.
  */
 export async function getDisclaimerStatus(
   sessionId: string
@@ -143,7 +180,8 @@ export async function getDisclaimerStatus(
 }
 
 /**
- * Acknowledge the disclaimer
+ * Acknowledge the disclaimer.
+ * Public endpoint (session_id based, not cookie auth) - uses raw fetch intentionally.
  */
 export async function acknowledgeDisclaimer(
   data: DisclaimerAcknowledgeRequest
@@ -165,7 +203,8 @@ export async function acknowledgeDisclaimer(
 }
 
 /**
- * Get the disclaimer content to display
+ * Get the disclaimer content to display.
+ * Public endpoint (no auth required) - uses raw fetch intentionally.
  */
 export async function getDisclaimerContent(): Promise<DisclaimerContent> {
   const response = await fetch(`${API_BASE_URL}/api/disclaimer/content`);
@@ -245,11 +284,8 @@ export async function getInsightDetail(
   analysisType: string,
   analysisId: string
 ): Promise<InsightDetail> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/ai/insights/${encodeURIComponent(analysisType)}/${encodeURIComponent(analysisId)}`,
-    {
-      credentials: "include",
-    }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/insights/${encodeURIComponent(analysisType)}/${encodeURIComponent(analysisId)}`
   );
 
   if (!response.ok) {
@@ -266,11 +302,8 @@ export async function getInsightDetail(
 export async function getInsights(
   limit: number = 10
 ): Promise<InsightsListResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/ai/insights?limit=${limit}`,
-    {
-      credentials: "include",
-    }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/insights?limit=${limit}`
   );
 
   if (!response.ok) {
@@ -284,11 +317,8 @@ export async function getInsights(
  * Fetch unread (pending) insights count for sidebar badge
  */
 export async function getUnreadInsightsCount(): Promise<number> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/ai/insights/unread-count`,
-    {
-      credentials: "include",
-    }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/insights/unread-count`
   );
 
   if (!response.ok) {
@@ -308,14 +338,11 @@ export async function respondToInsight(
   response: "acknowledged" | "dismissed",
   reason?: string
 ): Promise<SuggestionResponseResponse> {
-  const res = await fetch(
+  const res = await apiFetch(
     `${API_BASE_URL}/api/ai/insights/${analysisType}/${analysisId}/respond`,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ response, reason }),
     }
   );
@@ -353,11 +380,8 @@ export interface AlertThresholdUpdate {
  * Fetch current alert thresholds
  */
 export async function getAlertThresholds(): Promise<AlertThresholdResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/alert-thresholds`,
-    {
-      credentials: "include",
-    }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/alert-thresholds`
   );
 
   if (!response.ok) {
@@ -374,14 +398,11 @@ export async function getAlertThresholds(): Promise<AlertThresholdResponse> {
 export async function updateAlertThresholds(
   updates: AlertThresholdUpdate
 ): Promise<AlertThresholdResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/alert-thresholds`,
     {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     }
   );
@@ -429,9 +450,7 @@ export interface AlertAcknowledgeResponse {
  * Fetch active (unacknowledged, non-expired) alerts
  */
 export async function getActiveAlerts(): Promise<ActiveAlertsResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/alerts/active`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/alerts/active`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -449,12 +468,9 @@ export async function getActiveAlerts(): Promise<ActiveAlertsResponse> {
 export async function acknowledgeAlert(
   alertId: string
 ): Promise<AlertAcknowledgeResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/alerts/${encodeURIComponent(alertId)}/acknowledge`,
-    {
-      method: "PATCH",
-      credentials: "include",
-    }
+    { method: "PATCH" }
   );
 
   if (!response.ok) {
@@ -501,9 +517,8 @@ export interface EmergencyContactUpdate {
  * Fetch all emergency contacts
  */
 export async function getEmergencyContacts(): Promise<EmergencyContactListResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/emergency-contacts`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/emergency-contacts`
   );
 
   if (!response.ok) {
@@ -522,12 +537,11 @@ export async function getEmergencyContacts(): Promise<EmergencyContactListRespon
 export async function createEmergencyContact(
   data: EmergencyContactCreate
 ): Promise<EmergencyContact> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/emergency-contacts`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(data),
     }
   );
@@ -549,12 +563,11 @@ export async function updateEmergencyContact(
   contactId: string,
   data: EmergencyContactUpdate
 ): Promise<EmergencyContact> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/emergency-contacts/${encodeURIComponent(contactId)}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(data),
     }
   );
@@ -575,12 +588,9 @@ export async function updateEmergencyContact(
 export async function deleteEmergencyContact(
   contactId: string
 ): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/emergency-contacts/${encodeURIComponent(contactId)}`,
-    {
-      method: "DELETE",
-      credentials: "include",
-    }
+    { method: "DELETE" }
   );
 
   if (!response.ok) {
@@ -612,9 +622,8 @@ export interface EscalationConfigUpdate {
  * Fetch escalation timing configuration
  */
 export async function getEscalationConfig(): Promise<EscalationConfigResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/escalation-config`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/escalation-config`
   );
 
   if (!response.ok) {
@@ -634,12 +643,11 @@ export async function getEscalationConfig(): Promise<EscalationConfigResponse> {
 export async function updateEscalationConfig(
   data: EscalationConfigUpdate
 ): Promise<EscalationConfigResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/escalation-config`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(data),
     }
   );
@@ -726,9 +734,7 @@ export interface TelegramBotValidateResponse {
  * Get Telegram bot configuration status
  */
 export async function getTelegramBotConfig(): Promise<TelegramBotConfigResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/bot-config`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -746,10 +752,9 @@ export async function getTelegramBotConfig(): Promise<TelegramBotConfigResponse>
 export async function saveTelegramBotToken(
   token: string
 ): Promise<TelegramBotValidateResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/bot-config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ token }),
   });
 
@@ -767,9 +772,8 @@ export async function saveTelegramBotToken(
  * Remove the configured Telegram bot token
  */
 export async function removeTelegramBotToken(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/bot-config`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -784,9 +788,7 @@ export async function removeTelegramBotToken(): Promise<void> {
  * Get Telegram link status for the current user
  */
 export async function getTelegramStatus(): Promise<TelegramStatusResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/status`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/status`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -802,9 +804,8 @@ export async function getTelegramStatus(): Promise<TelegramStatusResponse> {
  * Generate a Telegram verification code for account linking
  */
 export async function generateTelegramCode(): Promise<TelegramVerificationCodeResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/link`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -821,9 +822,8 @@ export async function generateTelegramCode(): Promise<TelegramVerificationCodeRe
  * Unlink the user's Telegram account
  */
 export async function unlinkTelegram(): Promise<TelegramUnlinkResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/link`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/link`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -840,9 +840,8 @@ export async function unlinkTelegram(): Promise<TelegramUnlinkResponse> {
  * Send a test message to the user's linked Telegram account
  */
 export async function sendTelegramTestMessage(): Promise<TelegramTestMessageResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/telegram/test`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/telegram/test`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -861,11 +860,8 @@ export async function sendTelegramTestMessage(): Promise<TelegramTestMessageResp
 export async function getAlertEscalationTimeline(
   alertId: string
 ): Promise<EscalationTimelineResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/escalation/alerts/${encodeURIComponent(alertId)}/timeline`,
-    {
-      credentials: "include",
-    }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/escalation/alerts/${encodeURIComponent(alertId)}/timeline`
   );
 
   if (!response.ok) {
@@ -928,9 +924,8 @@ export interface LinkedPatientsListResponse {
  * Create a new caregiver invitation
  */
 export async function createCaregiverInvitation(): Promise<CaregiverInvitation> {
-  const response = await fetch(`${API_BASE_URL}/api/caregivers/invitations`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/caregivers/invitations`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -947,9 +942,7 @@ export async function createCaregiverInvitation(): Promise<CaregiverInvitation> 
  * List all caregiver invitations for the current patient
  */
 export async function listCaregiverInvitations(): Promise<CaregiverInvitationListResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/caregivers/invitations`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/caregivers/invitations`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -965,12 +958,9 @@ export async function listCaregiverInvitations(): Promise<CaregiverInvitationLis
  * Revoke a pending caregiver invitation
  */
 export async function revokeCaregiverInvitation(id: string): Promise<void> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/caregivers/invitations/${encodeURIComponent(id)}`,
-    {
-      method: "DELETE",
-      credentials: "include",
-    }
+    { method: "DELETE" }
   );
 
   if (!response.ok) {
@@ -982,7 +972,8 @@ export async function revokeCaregiverInvitation(id: string): Promise<void> {
 }
 
 /**
- * Get public invitation details (no auth required)
+ * Get public invitation details.
+ * Public endpoint (no auth required) - uses raw fetch intentionally.
  */
 export async function getInvitationDetails(
   token: string
@@ -1002,7 +993,8 @@ export async function getInvitationDetails(
 }
 
 /**
- * Accept a caregiver invitation (no auth required)
+ * Accept a caregiver invitation.
+ * Public endpoint (no auth required) - uses raw fetch intentionally.
  */
 export async function acceptCaregiverInvitation(
   token: string,
@@ -1029,9 +1021,7 @@ export async function acceptCaregiverInvitation(
  * List linked patients for the current caregiver
  */
 export async function listLinkedPatients(): Promise<LinkedPatientsListResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/caregivers/patients`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/caregivers/patients`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -1076,9 +1066,7 @@ export interface PermissionsUpdateResponse {
  * List all caregivers linked to the current patient, with permissions
  */
 export async function listLinkedCaregivers(): Promise<LinkedCaregiversResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/caregivers/linked`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/caregivers/linked`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -1096,9 +1084,8 @@ export async function listLinkedCaregivers(): Promise<LinkedCaregiversResponse> 
 export async function getCaregiverPermissions(
   linkId: string
 ): Promise<PermissionsUpdateResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/caregivers/linked/${encodeURIComponent(linkId)}/permissions`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/caregivers/linked/${encodeURIComponent(linkId)}/permissions`
   );
 
   if (!response.ok) {
@@ -1118,12 +1105,11 @@ export async function updateCaregiverPermissions(
   linkId: string,
   permissions: Partial<CaregiverPermissions>
 ): Promise<PermissionsUpdateResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/caregivers/linked/${encodeURIComponent(linkId)}/permissions`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(permissions),
     }
   );
@@ -1176,10 +1162,9 @@ export async function getCurrentUser(): Promise<CurrentUserResponse> {
 export async function updateProfile(data: {
   display_name?: string | null;
 }): Promise<CurrentUserResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/profile`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -1198,10 +1183,9 @@ export async function changePassword(data: {
   current_password: string;
   new_password: string;
 }): Promise<{ message: string }> {
-  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/auth/change-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify(data),
   });
 
@@ -1259,9 +1243,8 @@ export interface CaregiverGlucoseHistoryResponse {
 export async function getCaregiverPatientStatus(
   patientId: string
 ): Promise<CaregiverPatientStatus> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/status`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/status`
   );
 
   if (!response.ok) {
@@ -1282,9 +1265,8 @@ export async function getCaregiverGlucoseHistory(
   minutes: number = 180,
   limit: number = 36
 ): Promise<CaregiverGlucoseHistoryResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/glucose/history?minutes=${minutes}&limit=${limit}`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/glucose/history?minutes=${minutes}&limit=${limit}`
   );
 
   if (!response.ok) {
@@ -1321,9 +1303,8 @@ export interface TargetGlucoseRangeDefaults {
  * Fetch current target glucose range
  */
 export async function getTargetGlucoseRange(): Promise<TargetGlucoseRangeResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/target-glucose-range`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/target-glucose-range`
   );
 
   if (!response.ok) {
@@ -1342,12 +1323,11 @@ export async function getTargetGlucoseRange(): Promise<TargetGlucoseRangeRespons
 export async function updateTargetGlucoseRange(
   updates: TargetGlucoseRangeUpdate
 ): Promise<TargetGlucoseRangeResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/target-glucose-range`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(updates),
     }
   );
@@ -1393,9 +1373,8 @@ export interface BriefDeliveryConfigDefaults {
  * Fetch current brief delivery configuration
  */
 export async function getBriefDeliveryConfig(): Promise<BriefDeliveryConfigResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/brief-delivery`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/brief-delivery`
   );
 
   if (!response.ok) {
@@ -1414,12 +1393,11 @@ export async function getBriefDeliveryConfig(): Promise<BriefDeliveryConfigRespo
 export async function updateBriefDeliveryConfig(
   updates: BriefDeliveryConfigUpdate
 ): Promise<BriefDeliveryConfigResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/brief-delivery`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(updates),
     }
   );
@@ -1470,9 +1448,8 @@ export interface StorageUsageResponse {
  * Fetch current data retention configuration
  */
 export async function getDataRetentionConfig(): Promise<DataRetentionConfigResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/data-retention`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/data-retention`
   );
 
   if (!response.ok) {
@@ -1491,12 +1468,11 @@ export async function getDataRetentionConfig(): Promise<DataRetentionConfigRespo
 export async function updateDataRetentionConfig(
   updates: DataRetentionConfigUpdate
 ): Promise<DataRetentionConfigResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/data-retention`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(updates),
     }
   );
@@ -1516,9 +1492,8 @@ export async function updateDataRetentionConfig(
  * Fetch storage usage (record counts)
  */
 export async function getStorageUsage(): Promise<StorageUsageResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/settings/data-retention/usage`,
-    { credentials: "include" }
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/data-retention/usage`
   );
 
   if (!response.ok) {
@@ -1544,12 +1519,11 @@ export interface DataPurgeResponse {
 export async function purgeUserData(
   confirmationText: string
 ): Promise<DataPurgeResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/settings/data-retention/purge`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify({ confirmation_text: confirmationText }),
     }
   );
@@ -1574,10 +1548,9 @@ export interface SettingsExportResponse {
 export async function exportSettings(
   exportType: "settings_only" | "all_data"
 ): Promise<SettingsExportResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/settings/export`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/settings/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ export_type: exportType }),
   });
 
@@ -1603,12 +1576,11 @@ export async function sendCaregiverChat(
   patientId: string,
   message: string
 ): Promise<CaregiverChatResponse> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/api/caregivers/patients/${encodeURIComponent(patientId)}/chat`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify({ message }),
     }
   );
@@ -1649,9 +1621,7 @@ export interface IntegrationConnectResponse {
  * List all configured integrations for the current user.
  */
 export async function listIntegrations(): Promise<IntegrationListResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/integrations`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/integrations`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -1670,10 +1640,9 @@ export async function connectDexcom(credentials: {
   username: string;
   password: string;
 }): Promise<IntegrationConnectResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/integrations/dexcom`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/integrations/dexcom`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify(credentials),
   });
 
@@ -1691,9 +1660,8 @@ export async function connectDexcom(credentials: {
  * Disconnect Dexcom integration.
  */
 export async function disconnectDexcom(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/integrations/dexcom`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/integrations/dexcom`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -1712,10 +1680,9 @@ export async function connectTandem(credentials: {
   password: string;
   region: string;
 }): Promise<IntegrationConnectResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/integrations/tandem`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/integrations/tandem`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify(credentials),
   });
 
@@ -1733,9 +1700,8 @@ export async function connectTandem(credentials: {
  * Disconnect Tandem integration.
  */
 export async function disconnectTandem(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/integrations/tandem`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/integrations/tandem`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -1789,9 +1755,7 @@ export interface AIProviderDeleteResponse {
 }
 
 export async function getAIProvider(): Promise<AIProviderConfigResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
-    credentials: "include",
-  });
+  const response = await apiFetch(`${API_BASE_URL}/api/ai/provider`);
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
@@ -1805,10 +1769,9 @@ export async function getAIProvider(): Promise<AIProviderConfigResponse> {
 export async function configureAIProvider(
   request: AIProviderConfigRequest
 ): Promise<AIProviderConfigResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/ai/provider`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify(request),
   });
 
@@ -1822,9 +1785,8 @@ export async function configureAIProvider(
 }
 
 export async function testAIProvider(): Promise<AIProviderTestResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/provider/test`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/ai/provider/test`, {
     method: "POST",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -1837,9 +1799,8 @@ export async function testAIProvider(): Promise<AIProviderTestResponse> {
 }
 
 export async function deleteAIProvider(): Promise<AIProviderDeleteResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/provider`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/ai/provider`, {
     method: "DELETE",
-    credentials: "include",
   });
 
   if (!response.ok) {
@@ -1859,10 +1820,9 @@ export interface AIChatResponse {
 }
 
 export async function sendAIChat(message: string): Promise<AIChatResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+  const response = await apiFetch(`${API_BASE_URL}/api/ai/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    credentials: "include",
     body: JSON.stringify({ message }),
   });
   if (!response.ok) {
