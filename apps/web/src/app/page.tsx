@@ -4,13 +4,40 @@
  * GlycemicGPT Home Page.
  *
  * Story 1.3: First-Run Safety Disclaimer
+ * Story 15.6: Landing Page & Auth Navigation Polish
+ *
  * Shows the disclaimer modal on first visit.
+ * Detects auth state to show "Go to Dashboard" for authenticated users,
+ * or "Sign In" / "Create Account" buttons for visitors.
  */
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { DisclaimerModal } from "@/components/disclaimer-modal";
+import { getCurrentUser } from "@/lib/api";
 
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkAuth() {
+      try {
+        await getCurrentUser();
+        if (!cancelled) setIsAuthenticated(true);
+      } catch {
+        if (!cancelled) setIsAuthenticated(false);
+      }
+    }
+
+    checkAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <>
       <DisclaimerModal />
@@ -36,12 +63,29 @@ export default function Home() {
               pump data with actionable insights.
             </p>
             <div className="flex gap-4 justify-center">
-              <a
-                href="/login"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-              >
-                Get Started
-              </a>
+              {isAuthenticated ? (
+                <Link
+                  href="/dashboard"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/login"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="px-6 py-2 border border-slate-600 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors font-medium"
+                  >
+                    Create Account
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
