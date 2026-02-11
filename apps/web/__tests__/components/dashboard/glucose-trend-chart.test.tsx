@@ -5,11 +5,14 @@
  * and time period selector (3H, 6H, 12H, 24H).
  */
 
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import {
   GlucoseTrendChart,
   type GlucoseTrendChartProps,
+  getPointColor,
+  PERIOD_TO_MS,
 } from "../../../src/components/dashboard/glucose-trend-chart";
+import { GLUCOSE_THRESHOLDS } from "../../../src/components/dashboard/glucose-hero";
 
 // --- Mocks ---
 
@@ -96,6 +99,63 @@ beforeEach(() => {
   };
 });
 
+describe("getPointColor", () => {
+  it("returns red for urgent low values (< 55)", () => {
+    expect(getPointColor(54)).toBe("#dc2626");
+    expect(getPointColor(30)).toBe("#dc2626");
+    expect(getPointColor(0)).toBe("#dc2626");
+  });
+
+  it("returns amber for low values (55-69)", () => {
+    expect(getPointColor(55)).toBe("#f59e0b");
+    expect(getPointColor(60)).toBe("#f59e0b");
+    expect(getPointColor(69)).toBe("#f59e0b");
+  });
+
+  it("returns green for in-range values (70-180)", () => {
+    expect(getPointColor(70)).toBe("#22c55e");
+    expect(getPointColor(120)).toBe("#22c55e");
+    expect(getPointColor(180)).toBe("#22c55e");
+  });
+
+  it("returns amber for high values (181-250)", () => {
+    expect(getPointColor(181)).toBe("#f59e0b");
+    expect(getPointColor(200)).toBe("#f59e0b");
+    expect(getPointColor(250)).toBe("#f59e0b");
+  });
+
+  it("returns red for urgent high values (> 250)", () => {
+    expect(getPointColor(251)).toBe("#dc2626");
+    expect(getPointColor(300)).toBe("#dc2626");
+    expect(getPointColor(400)).toBe("#dc2626");
+  });
+
+  it("handles exact boundary values correctly", () => {
+    expect(getPointColor(GLUCOSE_THRESHOLDS.URGENT_LOW)).toBe("#f59e0b"); // 55 = low, not urgent
+    expect(getPointColor(GLUCOSE_THRESHOLDS.LOW)).toBe("#22c55e"); // 70 = in range
+    expect(getPointColor(GLUCOSE_THRESHOLDS.HIGH)).toBe("#22c55e"); // 180 = in range
+    expect(getPointColor(GLUCOSE_THRESHOLDS.URGENT_HIGH)).toBe("#f59e0b"); // 250 = high, not urgent
+  });
+});
+
+describe("PERIOD_TO_MS", () => {
+  it("maps 3h to 3 hours in milliseconds", () => {
+    expect(PERIOD_TO_MS["3h"]).toBe(3 * 60 * 60 * 1000);
+  });
+
+  it("maps 6h to 6 hours in milliseconds", () => {
+    expect(PERIOD_TO_MS["6h"]).toBe(6 * 60 * 60 * 1000);
+  });
+
+  it("maps 12h to 12 hours in milliseconds", () => {
+    expect(PERIOD_TO_MS["12h"]).toBe(12 * 60 * 60 * 1000);
+  });
+
+  it("maps 24h to 24 hours in milliseconds", () => {
+    expect(PERIOD_TO_MS["24h"]).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
 describe("GlucoseTrendChart", () => {
   describe("loading state", () => {
     it("renders loading skeleton when loading with no data", () => {
@@ -134,6 +194,20 @@ describe("GlucoseTrendChart", () => {
       expect(
         screen.getByRole("radiogroup", { name: /time period/i })
       ).toBeInTheDocument();
+    });
+
+    it("shows a retry button in error state", () => {
+      mockHookReturn.error = "Network error";
+      renderChart();
+      const retryButton = screen.getByRole("button", { name: /retry/i });
+      expect(retryButton).toBeInTheDocument();
+    });
+
+    it("calls refetch when retry button is clicked", () => {
+      mockHookReturn.error = "Network error";
+      renderChart();
+      fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+      expect(mockRefetch).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -181,20 +255,22 @@ describe("GlucoseTrendChart", () => {
       ).toBeInTheDocument();
     });
 
-    it("renders the range legend", () => {
+    it("renders the range legend derived from thresholds", () => {
       mockHookReturn.readings = [makeReading(120, 5)];
       renderChart();
-      expect(screen.getByText("70-180 Target")).toBeInTheDocument();
+      expect(
+        screen.getByText(`${GLUCOSE_THRESHOLDS.LOW}-${GLUCOSE_THRESHOLDS.HIGH} Target`)
+      ).toBeInTheDocument();
       expect(screen.getByText("High/Low")).toBeInTheDocument();
       expect(screen.getByText("Urgent")).toBeInTheDocument();
     });
 
-    it("renders target range band at 70-180", () => {
+    it("renders target range band at threshold values", () => {
       mockHookReturn.readings = [makeReading(120, 5)];
       renderChart();
       const band = screen.getByTestId("reference-area");
-      expect(band).toHaveAttribute("data-y1", "70");
-      expect(band).toHaveAttribute("data-y2", "180");
+      expect(band).toHaveAttribute("data-y1", String(GLUCOSE_THRESHOLDS.LOW));
+      expect(band).toHaveAttribute("data-y2", String(GLUCOSE_THRESHOLDS.HIGH));
     });
   });
 

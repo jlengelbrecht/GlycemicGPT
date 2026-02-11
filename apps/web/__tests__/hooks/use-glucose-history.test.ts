@@ -43,28 +43,28 @@ beforeEach(() => {
 });
 
 describe("useGlucoseHistory", () => {
-  it("fetches data on mount with default 3h period", async () => {
+  it("fetches data on mount with default 3h period and scaled limit", async () => {
     const { result } = renderHook(() => useGlucoseHistory("3h"));
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(mockGetGlucoseHistory).toHaveBeenCalledWith(180, 288);
+    expect(mockGetGlucoseHistory).toHaveBeenCalledWith(180, 36);
     expect(result.current.readings).toHaveLength(5);
     expect(result.current.error).toBeNull();
     expect(result.current.period).toBe("3h");
   });
 
-  it("uses correct minutes for each period", async () => {
-    const periods: [ChartTimePeriod, number][] = [
-      ["3h", 180],
-      ["6h", 360],
-      ["12h", 720],
-      ["24h", 1440],
+  it("uses correct minutes and limit for each period", async () => {
+    const periods: [ChartTimePeriod, number, number][] = [
+      ["3h", 180, 36],
+      ["6h", 360, 72],
+      ["12h", 720, 144],
+      ["24h", 1440, 288],
     ];
 
-    for (const [period, expectedMinutes] of periods) {
+    for (const [period, expectedMinutes, expectedLimit] of periods) {
       mockGetGlucoseHistory.mockClear();
       mockGetGlucoseHistory.mockResolvedValue({
         readings: makeReadings(3),
@@ -79,7 +79,7 @@ describe("useGlucoseHistory", () => {
 
       expect(mockGetGlucoseHistory).toHaveBeenCalledWith(
         expectedMinutes,
-        288
+        expectedLimit
       );
     }
   });
@@ -101,7 +101,7 @@ describe("useGlucoseHistory", () => {
       expect(mockGetGlucoseHistory).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockGetGlucoseHistory).toHaveBeenLastCalledWith(360, 288);
+    expect(mockGetGlucoseHistory).toHaveBeenLastCalledWith(360, 72);
   });
 
   it("handles API errors gracefully", async () => {
@@ -152,5 +152,41 @@ describe("useGlucoseHistory", () => {
   it("starts in loading state", () => {
     const { result } = renderHook(() => useGlucoseHistory("3h"));
     expect(result.current.isLoading).toBe(true);
+  });
+
+  it("discards stale fetch results when period changes rapidly", async () => {
+    // First call resolves slowly, second call resolves fast
+    let resolveFirst: (value: unknown) => void;
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    mockGetGlucoseHistory
+      .mockReturnValueOnce(firstPromise as never)
+      .mockResolvedValueOnce({
+        readings: makeReadings(2),
+        count: 2,
+      });
+
+    const { result } = renderHook(() => useGlucoseHistory("3h"));
+
+    // Immediately switch period before first fetch resolves
+    act(() => {
+      result.current.setPeriod("6h");
+    });
+
+    // Wait for the second (6h) fetch to complete
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    // Now resolve the first (stale) fetch
+    resolveFirst!({
+      readings: makeReadings(10),
+      count: 10,
+    });
+
+    // Should have 2 readings from the 6h fetch, not 10 from the stale 3h fetch
+    expect(result.current.readings).toHaveLength(2);
   });
 });

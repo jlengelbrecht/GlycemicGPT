@@ -59,4 +59,6 @@ export { EscalationTimeline } from "./escalation-timeline";
 export {
   GlucoseTrendChart,
   type GlucoseTrendChartProps,
+  getPointColor,
+  PERIOD_TO_MS,
 } from "./glucose-trend-chart";

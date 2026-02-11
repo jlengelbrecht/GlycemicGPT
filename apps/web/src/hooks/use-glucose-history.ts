@@ -22,6 +22,14 @@ const PERIOD_TO_MINUTES: Record<ChartTimePeriod, number> = {
   "24h": 1440,
 };
 
+// Scale limit to period: ~1 reading per 5 min
+const PERIOD_TO_LIMIT: Record<ChartTimePeriod, number> = {
+  "3h": 36,
+  "6h": 72,
+  "12h": 144,
+  "24h": 288,
+};
+
 export interface UseGlucoseHistoryReturn {
   readings: GlucoseHistoryReading[];
   isLoading: boolean;
@@ -38,36 +46,35 @@ export function useGlucoseHistory(
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<ChartTimePeriod>(initialPeriod);
-  const isMountedRef = useRef(true);
+  // Fetch generation counter — only the latest fetch writes state
+  const fetchGenRef = useRef(0);
 
   const fetchData = useCallback(async () => {
+    const gen = ++fetchGenRef.current;
     setIsLoading(true);
     setError(null);
     try {
       const minutes = PERIOD_TO_MINUTES[period];
-      const data = await getGlucoseHistory(minutes, 288);
-      if (isMountedRef.current) {
+      const limit = PERIOD_TO_LIMIT[period];
+      const data = await getGlucoseHistory(minutes, limit);
+      if (gen === fetchGenRef.current) {
         setReadings(data.readings);
       }
     } catch (err) {
-      if (isMountedRef.current) {
+      if (gen === fetchGenRef.current) {
         setError(
           err instanceof Error ? err.message : "Failed to load history"
         );
       }
     } finally {
-      if (isMountedRef.current) {
+      if (gen === fetchGenRef.current) {
         setIsLoading(false);
       }
     }
   }, [period]);
 
   useEffect(() => {
-    isMountedRef.current = true;
     fetchData();
-    return () => {
-      isMountedRef.current = false;
-    };
   }, [fetchData]);
 
   return { readings, isLoading, error, period, setPeriod, refetch: fetchData };

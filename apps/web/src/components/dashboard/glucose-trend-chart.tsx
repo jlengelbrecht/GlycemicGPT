@@ -29,7 +29,7 @@ import {
 
 // --- Color mapping by glucose classification ---
 
-function getPointColor(value: number): string {
+export function getPointColor(value: number): string {
   if (value < GLUCOSE_THRESHOLDS.URGENT_LOW) return "#dc2626"; // red-600
   if (value < GLUCOSE_THRESHOLDS.LOW) return "#f59e0b"; // amber-500
   if (value <= GLUCOSE_THRESHOLDS.HIGH) return "#22c55e"; // green-500
@@ -46,7 +46,7 @@ const PERIODS: { value: ChartTimePeriod; label: string }[] = [
   { value: "24h", label: "24H" },
 ];
 
-const PERIOD_TO_MS: Record<ChartTimePeriod, number> = {
+export const PERIOD_TO_MS: Record<ChartTimePeriod, number> = {
   "3h": 3 * 60 * 60 * 1000,
   "6h": 6 * 60 * 60 * 1000,
   "12h": 12 * 60 * 60 * 1000,
@@ -172,11 +172,13 @@ export function GlucoseTrendChart({
 
   const data = useMemo(() => transformReadings(readings), [readings]);
 
-  // X-axis domain: always show the full selected time window
+  // X-axis domain: always show the full selected time window.
+  // Depends on `data` so it recomputes with fresh Date.now() on refetch.
   const xDomain = useMemo(() => {
     const now = Date.now();
     return [now - PERIOD_TO_MS[period], now];
-  }, [period]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, data]);
 
   // Y-axis domain: show reasonable range, expand to fit data
   const yDomain = useMemo(() => {
@@ -227,8 +229,15 @@ export function GlucoseTrendChart({
           </h2>
           <PeriodSelector selected={period} onSelect={setPeriod} />
         </div>
-        <div className="h-64 flex items-center justify-center text-slate-500">
+        <div className="h-64 flex flex-col items-center justify-center text-slate-500 gap-3">
           <p>Unable to load glucose history</p>
+          <button
+            type="button"
+            onClick={refetch}
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -259,6 +268,8 @@ export function GlucoseTrendChart({
     );
   }
 
+  const targetLabel = `${GLUCOSE_THRESHOLDS.LOW}-${GLUCOSE_THRESHOLDS.HIGH} Target`;
+
   return (
     <div
       className={clsx(
@@ -287,7 +298,7 @@ export function GlucoseTrendChart({
               vertical={false}
             />
 
-            {/* Target range band (70-180) */}
+            {/* Target range band */}
             <ReferenceArea
               y1={GLUCOSE_THRESHOLDS.LOW}
               y2={GLUCOSE_THRESHOLDS.HIGH}
@@ -333,7 +344,7 @@ export function GlucoseTrendChart({
             className="w-2 h-2 rounded-full bg-green-500 inline-block"
             aria-hidden="true"
           />
-          70-180 Target
+          {targetLabel}
         </span>
         <span className="flex items-center gap-1">
           <span
