@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.50](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.49...v0.1.50) (2026-02-11)
+
+
+### ✨ Features
+
+* add AI provider configuration page (Story 11.1) ([#117](https://github.com/jlengelbrecht/GlycemicGPT/issues/117)) ([92d85fd](https://github.com/jlengelbrecht/GlycemicGPT/commit/92d85fd5e1dea4dc9300d780bc325512b8a51013))
+
 ## [0.1.49](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.48...v0.1.49) (2026-02-11)
 
 
