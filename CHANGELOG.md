@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.49](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.48...v0.1.49) (2026-02-11)
+
+
+### ✨ Features
+
+* add Telegram bot token configuration with validation flow (Story 12.3) ([#115](https://github.com/jlengelbrecht/GlycemicGPT/issues/115)) ([ddc6567](https://github.com/jlengelbrecht/GlycemicGPT/commit/ddc656752151e0b78f31d71e528a834a2c33d81d))
+
 ## [0.1.48](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.47...v0.1.48) (2026-02-11)
 
 
