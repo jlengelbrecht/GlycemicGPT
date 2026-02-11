@@ -91,13 +91,15 @@ class MockEventSource {
 
 describe("mapBackendTrendToFrontend", () => {
   const testCases: [BackendTrendDirection, FrontendTrendDirection][] = [
-    ["DoubleUp", "RisingFast"],
-    ["SingleUp", "Rising"],
-    ["FortyFiveUp", "Rising"],
-    ["Flat", "Stable"],
-    ["FortyFiveDown", "Falling"],
-    ["SingleDown", "Falling"],
-    ["DoubleDown", "FallingFast"],
+    ["double_up", "RisingFast"],
+    ["single_up", "Rising"],
+    ["forty_five_up", "Rising"],
+    ["flat", "Stable"],
+    ["forty_five_down", "Falling"],
+    ["single_down", "Falling"],
+    ["double_down", "FallingFast"],
+    ["not_computable", "Unknown"],
+    ["rate_out_of_range", "Unknown"],
     ["Unknown", "Unknown"],
   ];
 
@@ -188,7 +190,7 @@ describe("useGlucoseStream", () => {
   describe("Glucose Events", () => {
     const mockRawGlucoseData = {
       value: 142,
-      trend: "Flat" as BackendTrendDirection,
+      trend: "flat" as BackendTrendDirection,
       trend_rate: 0.5,
       reading_timestamp: "2024-01-01T12:00:00Z",
       minutes_ago: 2,
@@ -211,9 +213,9 @@ describe("useGlucoseStream", () => {
 
       expect(result.current.data).not.toBeNull();
       expect(result.current.data?.value).toBe(142);
-      // Trend should be mapped from "Flat" to "Stable"
+      // Trend should be mapped from "flat" to "Stable"
       expect(result.current.data?.trend).toBe("Stable");
-      expect(result.current.data?.rawTrend).toBe("Flat");
+      expect(result.current.data?.rawTrend).toBe("flat");
       expect(result.current.lastUpdated).toBeInstanceOf(Date);
     });
 
