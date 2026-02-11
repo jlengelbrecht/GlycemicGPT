@@ -23,6 +23,7 @@ import {
   updateBriefDeliveryConfig,
   type BriefDeliveryConfigResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const DEFAULTS = {
   enabled: true,
@@ -61,6 +62,7 @@ export default function BriefDeliveryPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form state
   const [enabled, setEnabled] = useState(true);
@@ -95,13 +97,10 @@ export default function BriefDeliveryPage() {
       setDeliveryTime(data.delivery_time.slice(0, 5));
       setTimezone(data.timezone);
       setChannel(data.channel);
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load brief delivery configuration"
-        );
+        setIsOffline(true);
       }
       // Use defaults as baseline so the form is still functional
       setConfig({
@@ -202,6 +201,11 @@ export default function BriefDeliveryPage() {
           Configure when and how you receive your daily glucose briefs
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner onRetry={fetchConfig} isRetrying={isLoading} />
+      )}
 
       {/* Error state */}
       {error && (
@@ -407,7 +411,8 @@ export default function BriefDeliveryPage() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
-                disabled={isSaving || !hasChanges}
+                disabled={isSaving || !hasChanges || isOffline}
+                title={isOffline ? "Cannot save while disconnected" : undefined}
                 className={clsx(
                   "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-blue-600 text-white hover:bg-blue-500",
@@ -432,6 +437,7 @@ export default function BriefDeliveryPage() {
                 onClick={handleReset}
                 disabled={
                   isSaving ||
+                  isOffline ||
                   !config ||
                   (config.enabled === DEFAULTS.enabled &&
                     config.delivery_time === DEFAULTS.delivery_time &&
