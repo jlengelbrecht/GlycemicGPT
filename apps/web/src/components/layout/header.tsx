@@ -10,8 +10,10 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { User, LogOut, Settings, ChevronDown, Activity } from "lucide-react";
+import { User, LogOut, Settings, ChevronDown, Activity, Loader2 } from "lucide-react";
 import { MobileNav } from "./sidebar";
+import { useUserContext } from "@/providers/user-provider";
+import { logoutUser } from "@/lib/api";
 
 interface HeaderProps {
   className?: string;
@@ -19,7 +21,9 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { user } = useUserContext();
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -68,7 +72,9 @@ export function Header({ className }: HeaderProps) {
           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600">
             <User className="h-4 w-4 text-white" />
           </div>
-          <span className="hidden sm:block text-sm font-medium">Account</span>
+          <span className="hidden sm:block text-sm font-medium max-w-[120px] truncate">
+            {user?.display_name || user?.email || "Account"}
+          </span>
           <ChevronDown
             className={clsx(
               "h-4 w-4 transition-transform",
@@ -78,7 +84,7 @@ export function Header({ className }: HeaderProps) {
         </button>
 
         {/* Dropdown menu */}
-        {isUserMenuOpen && (
+        {(isUserMenuOpen || isLoggingOut) && (
           <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1">
             <Link
               href="/dashboard/settings"
@@ -91,15 +97,28 @@ export function Header({ className }: HeaderProps) {
             <hr className="my-1 border-slate-700" />
             <button
               type="button"
-              onClick={() => {
-                setIsUserMenuOpen(false);
-                // TODO: Implement logout
-                window.location.href = "/";
+              disabled={isLoggingOut}
+              onClick={async () => {
+                setIsLoggingOut(true);
+                try {
+                  await logoutUser();
+                } catch {
+                  // Best-effort logout: redirect regardless of API failure
+                } finally {
+                  window.location.href = "/login";
+                }
               }}
-              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-slate-700"
+              className={clsx(
+                "flex items-center gap-2 w-full px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-slate-700",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
+              )}
             >
-              <LogOut className="h-4 w-4" />
-              Sign out
+              {isLoggingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              {isLoggingOut ? "Signing out..." : "Sign out"}
             </button>
           </div>
         )}
