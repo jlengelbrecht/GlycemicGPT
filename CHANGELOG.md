@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.59](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.58...v0.1.59) (2026-02-11)
+
+
+### ✨ Features
+
+* add logout, auth state display, and global 401 handling (Story 15.4) ([#136](https://github.com/jlengelbrecht/GlycemicGPT/issues/136)) ([92df866](https://github.com/jlengelbrecht/GlycemicGPT/commit/92df866f622c575d043c060d0f3d7f737c69fdb8))
+
 ## [0.1.58](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.57...v0.1.58) (2026-02-11)
 
 
