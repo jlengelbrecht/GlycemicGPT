@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.51](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.50...v0.1.51) (2026-02-11)
+
+
+### ✨ Features
+
+* add web-based AI chat interface with backend endpoint (Story 11.2) ([#119](https://github.com/jlengelbrecht/GlycemicGPT/issues/119)) ([f071aa4](https://github.com/jlengelbrecht/GlycemicGPT/commit/f071aa4f85e2076711b271dabfa1b680b59ed2ad))
+
 ## [0.1.50](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.49...v0.1.50) (2026-02-11)
 
 
