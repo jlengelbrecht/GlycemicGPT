@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.48](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.47...v0.1.48) (2026-02-11)
+
+
+### ✨ Features
+
+* add communications settings hub page (Story 12.2) ([#113](https://github.com/jlengelbrecht/GlycemicGPT/issues/113)) ([2b27ee5](https://github.com/jlengelbrecht/GlycemicGPT/commit/2b27ee551f82614826ccb1ec9783712095bdb0f4))
+
 ## [0.1.47](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.46...v0.1.47) (2026-02-11)
 
 
