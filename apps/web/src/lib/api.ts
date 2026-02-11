@@ -2,9 +2,88 @@
  * API client configuration and utilities.
  *
  * Story 1.3: First-Run Safety Disclaimer
+ * Story 15.1: Authentication API functions
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+// ============================================================================
+// Story 15.1: Authentication
+// ============================================================================
+
+export interface LoginResponse {
+  message: string;
+  user: CurrentUserResponse;
+  disclaimer_required: boolean;
+}
+
+export interface RegisterResponse {
+  id: string;
+  email: string;
+  role: string;
+  message: string;
+  disclaimer_required: boolean;
+}
+
+/**
+ * Log in with email and password. Sets httpOnly session cookie on success.
+ */
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<LoginResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Login failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Register a new user account.
+ */
+export async function registerUser(
+  email: string,
+  password: string
+): Promise<RegisterResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Registration failed: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Log out the current user. Clears session cookie.
+ */
+export async function logoutUser(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `Logout failed: ${response.status}`);
+  }
+}
 
 /**
  * Disclaimer API types
