@@ -1452,3 +1452,126 @@ export async function sendCaregiverChat(
 
   return response.json();
 }
+
+// ============================================================================
+// Story 12.1: Integration Management
+// ============================================================================
+
+export interface IntegrationResponse {
+  integration_type: "dexcom" | "tandem";
+  status: "pending" | "connected" | "error" | "disconnected";
+  last_sync_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationListResponse {
+  integrations: IntegrationResponse[];
+}
+
+export interface IntegrationConnectResponse {
+  message: string;
+  integration: IntegrationResponse;
+}
+
+/**
+ * List all configured integrations for the current user.
+ */
+export async function listIntegrations(): Promise<IntegrationListResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/integrations`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch integrations: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Connect Dexcom integration (validates credentials before storing).
+ */
+export async function connectDexcom(credentials: {
+  username: string;
+  password: string;
+}): Promise<IntegrationConnectResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/integrations/dexcom`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(credentials),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to connect Dexcom: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Disconnect Dexcom integration.
+ */
+export async function disconnectDexcom(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/integrations/dexcom`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to disconnect Dexcom: ${response.status}`
+    );
+  }
+}
+
+/**
+ * Connect Tandem integration (validates credentials before storing).
+ */
+export async function connectTandem(credentials: {
+  username: string;
+  password: string;
+  region: string;
+}): Promise<IntegrationConnectResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/integrations/tandem`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(credentials),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to connect Tandem: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Disconnect Tandem integration.
+ */
+export async function disconnectTandem(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/integrations/tandem`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to disconnect Tandem: ${response.status}`
+    );
+  }
+}
