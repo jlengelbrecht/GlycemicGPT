@@ -234,7 +234,9 @@ class TestOpenAIClient:
         mock_client = AsyncMock()
         mock_cls.return_value = mock_client
         mock_client.chat.completions.create.return_value = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="proxy response"))],
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content="proxy response"))
+            ],
             model="claude-sonnet-4-5-20250929",
             usage=SimpleNamespace(prompt_tokens=5, completion_tokens=3),
         )

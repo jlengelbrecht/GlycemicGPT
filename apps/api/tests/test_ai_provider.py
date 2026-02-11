@@ -364,7 +364,6 @@ class TestAIProviderConfiguration:
         assert data["success"] is False
         assert "Invalid Claude API key" in data["message"]
 
-
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_configure_claude_subscription(self, mock_validate):
         """Test configuring Claude subscription provider with base_url."""
@@ -500,7 +499,6 @@ class TestAIProviderConfiguration:
         data = response.json()
         assert data["base_url"] == "http://proxy:3456/v1"
         assert data["provider_type"] == "claude_subscription"
-
 
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_configure_chatgpt_subscription(self, mock_validate):
