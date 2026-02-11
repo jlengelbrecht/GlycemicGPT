@@ -8,11 +8,13 @@ FR51: User must acknowledge disclaimer before using system
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_session_maker
+from src.core.auth import CurrentUser
+from src.database import get_db, get_session_maker
 from src.models.disclaimer import DisclaimerAcknowledgment
 from src.schemas.disclaimer import (
     DisclaimerAcknowledgeRequest,
@@ -155,6 +157,39 @@ async def acknowledge_disclaimer(
                 acknowledged_at=existing.acknowledged_at,
                 message="Disclaimer was previously acknowledged",
             )
+
+
+@router.post("/acknowledge-auth")
+async def acknowledge_disclaimer_auth(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Record disclaimer acknowledgment for an authenticated user.
+
+    Story 15.5: Sets disclaimer_acknowledged=True on the user record.
+    This is separate from the session-based acknowledgment used on the
+    landing page (pre-auth).
+
+    Args:
+        current_user: The authenticated user from the session cookie
+        db: Database session
+
+    Returns:
+        Success response
+    """
+    if current_user.disclaimer_acknowledged:
+        return {"success": True, "message": "Disclaimer was previously acknowledged"}
+
+    current_user.disclaimer_acknowledged = True
+    await db.commit()
+    await db.refresh(current_user)
+
+    logger.info(
+        "Authenticated disclaimer acknowledged",
+        extra={"user_id": str(current_user.id), "email": current_user.email},
+    )
+
+    return {"success": True, "message": "Disclaimer acknowledged successfully"}
 
 
 @router.get("/content")

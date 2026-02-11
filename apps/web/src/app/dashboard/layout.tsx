@@ -5,6 +5,7 @@
  * Story 4.5: Real-Time Updates via SSE
  * Story 4.6: Dashboard Accessibility
  * Story 6.3: Tiered Alert Delivery
+ * Story 15.5: Post-Login Disclaimer Enforcement
  * Wraps all dashboard pages with the DashboardLayout component,
  * AlertNotificationProvider (which includes GlucoseStreamProvider)
  * for real-time glucose data and alert notifications.
@@ -14,6 +15,7 @@
  */
 
 import { DashboardLayout } from "@/components/layout";
+import { AuthDisclaimerGate } from "@/components/auth-disclaimer-gate";
 import { AlertNotificationProvider, UserProvider } from "@/providers";
 
 /**
@@ -36,9 +38,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <>
       <SkipLink />
       <UserProvider>
-        <AlertNotificationProvider>
-          <DashboardLayout>{children}</DashboardLayout>
-        </AlertNotificationProvider>
+        <AuthDisclaimerGate>
+          <AlertNotificationProvider>
+            <DashboardLayout>{children}</DashboardLayout>
+          </AlertNotificationProvider>
+        </AuthDisclaimerGate>
       </UserProvider>
     </>
   );

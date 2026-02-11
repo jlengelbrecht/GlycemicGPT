@@ -217,6 +217,29 @@ export async function getDisclaimerContent(): Promise<DisclaimerContent> {
 }
 
 /**
+ * Acknowledge the disclaimer for the authenticated user.
+ * Story 15.5: Sets disclaimer_acknowledged=true on the user record.
+ */
+export async function acknowledgeDisclaimerAuth(): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/disclaimer/acknowledge-auth`,
+    { method: "POST" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to acknowledge disclaimer: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * AI Insights API types (Story 5.7)
  */
 export interface InsightSummary {
