@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.58](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.57...v0.1.58) (2026-02-11)
+
+
+### ✨ Features
+
+* add auth middleware for route protection (Story 15.3) ([#134](https://github.com/jlengelbrecht/GlycemicGPT/issues/134)) ([bfb3a20](https://github.com/jlengelbrecht/GlycemicGPT/commit/bfb3a203ae3f43e9a803dd46bc3378c21dc63561))
+
 ## [0.1.57](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.56...v0.1.57) (2026-02-11)
 
 
