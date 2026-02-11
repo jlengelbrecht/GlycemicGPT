@@ -1,0 +1,42 @@
+# Docker Compose override for integration testing.
+# Uses isolated ports to avoid conflicts with local development.
+#
+# IMPORTANT: Always run with COMPOSE_PROJECT_NAME=glycemicgpt-test to fully
+# isolate volumes, networks, and containers from local dev. The integration
+# test script handles this automatically.
+#
+# Usage:
+#   COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f docker-compose.test.yml up --build -d
+#   ./scripts/docker-integration-test.sh
+#   COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
+
+services:
+  db:
+    ports:
+      - "5433:5432"
+
+  redis:
+    ports:
+      - "6380:6379"
+
+  api:
+    ports:
+      - "8001:8000"
+    environment:
+      SECRET_KEY: integration-test-secret-key-not-for-production
+      LOG_FORMAT: text
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    ports:
+      - "3001:3000"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
