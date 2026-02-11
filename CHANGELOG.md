@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.60](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.59...v0.1.60) (2026-02-11)
+
+
+### ✨ Features
+
+* add post-login disclaimer enforcement (Story 15.5) ([#138](https://github.com/jlengelbrecht/GlycemicGPT/issues/138)) ([f12889d](https://github.com/jlengelbrecht/GlycemicGPT/commit/f12889d07348a5e8bdc969cd85a676adc5f8da0c))
+
 ## [0.1.59](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.58...v0.1.59) (2026-02-11)
 
 
