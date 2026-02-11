@@ -38,7 +38,10 @@ class OpenAIClient(BaseAIClient):
         Returns:
             Normalized AIResponse.
         """
-        client = openai.AsyncOpenAI(api_key=self._api_key)
+        kwargs: dict[str, str] = {"api_key": self._api_key}
+        if self._base_url:
+            kwargs["base_url"] = self._base_url
+        client = openai.AsyncOpenAI(**kwargs)
 
         openai_messages: list[ChatCompletionMessageParam] = []
         if system_prompt:
@@ -93,6 +96,6 @@ class OpenAIClient(BaseAIClient):
         return AIResponse(
             content=content,
             model=response.model,
-            provider=AIProviderType.OPENAI,
+            provider=self._provider_type or AIProviderType.OPENAI_API,
             usage=usage,
         )

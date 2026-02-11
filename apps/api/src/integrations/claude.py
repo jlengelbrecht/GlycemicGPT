@@ -71,6 +71,6 @@ class ClaudeClient(BaseAIClient):
         return AIResponse(
             content=content,
             model=response.model,
-            provider=AIProviderType.CLAUDE,
+            provider=self._provider_type or AIProviderType.CLAUDE_API,
             usage=usage,
         )

@@ -1,4 +1,4 @@
-"""Story 5.1: Tests for AI provider configuration."""
+"""Story 5.1 / 14.4: Tests for AI provider configuration."""
 
 import uuid
 from unittest.mock import patch
@@ -53,7 +53,7 @@ class TestAIProviderConfiguration:
 
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_configure_claude_provider(self, mock_validate):
-        """Test configuring Claude as AI provider with valid key."""
+        """Test configuring Claude API as AI provider with valid key."""
         mock_validate.return_value = (True, None)
 
         async with AsyncClient(
@@ -65,7 +65,7 @@ class TestAIProviderConfiguration:
             response = await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-test-valid-key-1234",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -73,14 +73,14 @@ class TestAIProviderConfiguration:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["provider_type"] == "claude"
+        assert data["provider_type"] == "claude_api"
         assert data["status"] == "connected"
         assert "...1234" in data["masked_api_key"]
         assert data["last_validated_at"] is not None
 
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_configure_openai_provider(self, mock_validate):
-        """Test configuring OpenAI as AI provider with valid key."""
+        """Test configuring OpenAI API as AI provider with valid key."""
         mock_validate.return_value = (True, None)
 
         async with AsyncClient(
@@ -92,7 +92,7 @@ class TestAIProviderConfiguration:
             response = await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "openai",
+                    "provider_type": "openai_api",
                     "api_key": "sk-openai-test-valid-key-5678",
                     "model_name": "gpt-4o",
                 },
@@ -101,7 +101,7 @@ class TestAIProviderConfiguration:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["provider_type"] == "openai"
+        assert data["provider_type"] == "openai_api"
         assert data["status"] == "connected"
         assert data["model_name"] == "gpt-4o"
         assert "...5678" in data["masked_api_key"]
@@ -123,7 +123,7 @@ class TestAIProviderConfiguration:
             response = await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "invalid-key",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -148,7 +148,7 @@ class TestAIProviderConfiguration:
             await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-test-key-for-get-abcd",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -162,7 +162,7 @@ class TestAIProviderConfiguration:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["provider_type"] == "claude"
+        assert data["provider_type"] == "claude_api"
         assert data["status"] == "connected"
         # Key should be masked
         assert "abcd" in data["masked_api_key"]
@@ -199,7 +199,7 @@ class TestAIProviderConfiguration:
             await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-test-key-delete",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -240,21 +240,21 @@ class TestAIProviderConfiguration:
         ) as client:
             session_cookie = await register_and_login(client)
 
-            # Configure Claude first
+            # Configure Claude API first
             await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-original-key-1111",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
             )
 
-            # Update to OpenAI
+            # Update to OpenAI API
             response = await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "openai",
+                    "provider_type": "openai_api",
                     "api_key": "sk-openai-new-key-2222",
                     "model_name": "gpt-4o",
                 },
@@ -263,7 +263,7 @@ class TestAIProviderConfiguration:
 
         assert response.status_code == 201
         data = response.json()
-        assert data["provider_type"] == "openai"
+        assert data["provider_type"] == "openai_api"
         assert data["model_name"] == "gpt-4o"
         assert "...2222" in data["masked_api_key"]
 
@@ -277,7 +277,7 @@ class TestAIProviderConfiguration:
             response = await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-test",
                 },
             )
@@ -310,7 +310,7 @@ class TestAIProviderConfiguration:
             await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-test-success-9999",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -347,7 +347,7 @@ class TestAIProviderConfiguration:
             await client.post(
                 "/api/ai/provider",
                 json={
-                    "provider_type": "claude",
+                    "provider_type": "claude_api",
                     "api_key": "sk-ant-test-will-fail-0000",
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -363,6 +363,251 @@ class TestAIProviderConfiguration:
         data = response.json()
         assert data["success"] is False
         assert "Invalid Claude API key" in data["message"]
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_configure_claude_subscription(self, mock_validate):
+        """Test configuring Claude subscription provider with base_url."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                    "base_url": "http://localhost:3456/v1",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "claude_subscription"
+        assert data["status"] == "connected"
+        assert data["base_url"] == "http://localhost:3456/v1"
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_configure_openai_compatible(self, mock_validate):
+        """Test configuring self-hosted OpenAI-compatible provider."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "openai_compatible",
+                    "api_key": "not-needed",
+                    "base_url": "http://localhost:11434/v1",
+                    "model_name": "llama3.1:70b",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "openai_compatible"
+        assert data["status"] == "connected"
+        assert data["base_url"] == "http://localhost:11434/v1"
+        assert data["model_name"] == "llama3.1:70b"
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_subscription_requires_base_url(self, mock_validate):
+        """Test that subscription providers require base_url."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                    # Missing base_url
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_openai_compatible_requires_model_name(self, mock_validate):
+        """Test that openai_compatible provider requires model_name."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "openai_compatible",
+                    "api_key": "not-needed",
+                    "base_url": "http://localhost:11434/v1",
+                    # Missing model_name
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_get_provider_returns_base_url(self, mock_validate):
+        """Test that GET /provider returns base_url when configured."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure subscription provider with base_url
+            await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                    "base_url": "http://proxy:3456/v1",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Get the config
+            response = await client.get(
+                "/api/ai/provider",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["base_url"] == "http://proxy:3456/v1"
+        assert data["provider_type"] == "claude_subscription"
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_configure_chatgpt_subscription(self, mock_validate):
+        """Test configuring ChatGPT subscription provider."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "chatgpt_subscription",
+                    "api_key": "not-needed",
+                    "base_url": "http://localhost:8080/v1",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "chatgpt_subscription"
+        assert data["base_url"] == "http://localhost:8080/v1"
+
+    async def test_reject_legacy_claude_type(self):
+        """Test that legacy 'claude' provider type is rejected."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude",
+                    "api_key": "sk-ant-test-key",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    async def test_reject_legacy_openai_type(self):
+        """Test that legacy 'openai' provider type is rejected."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "openai",
+                    "api_key": "sk-test-key",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    async def test_reject_invalid_base_url_scheme(self):
+        """Test that base_url with non-http scheme is rejected."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                    "base_url": "file:///etc/passwd",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_base_url_stripped_for_direct_api_types(self, mock_validate):
+        """Test that base_url is stripped when configuring a direct API type."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_api",
+                    "api_key": "sk-ant-test-strip-base-url",
+                    "base_url": "http://should-be-stripped:1234/v1",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["base_url"] is None
 
 
 class TestAPIKeyEncryption:

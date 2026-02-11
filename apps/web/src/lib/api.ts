@@ -1671,13 +1671,21 @@ export async function disconnectTandem(): Promise<void> {
  * AI Provider Configuration API (Story 11.1)
  */
 
-export type AIProviderType = "claude" | "openai";
+export type AIProviderType =
+  | "claude_api"
+  | "openai_api"
+  | "claude_subscription"
+  | "chatgpt_subscription"
+  | "openai_compatible"
+  | "claude" // Legacy - may appear in existing DB rows
+  | "openai"; // Legacy - may appear in existing DB rows
 export type AIProviderStatus = "connected" | "error" | "pending";
 
 export interface AIProviderConfigResponse {
   provider_type: AIProviderType;
   status: AIProviderStatus;
   model_name: string | null;
+  base_url: string | null;
   masked_api_key: string;
   last_validated_at: string | null;
   last_error: string | null;
@@ -1689,6 +1697,7 @@ export interface AIProviderConfigRequest {
   provider_type: AIProviderType;
   api_key: string;
   model_name?: string | null;
+  base_url?: string | null;
 }
 
 export interface AIProviderTestResponse {

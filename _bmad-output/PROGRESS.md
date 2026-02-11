@@ -1,6 +1,6 @@
 # GlycemicGPT Implementation Progress
 
-> Last Updated: 2026-02-10
+> Last Updated: 2026-02-11
 
 ## Summary
 
@@ -19,10 +19,12 @@
 | 11 | AI Configuration & Chat Interface | 3/3 | **Complete** |
 | 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 3/3 | **Complete** |
+| 14 | Expanded AI Provider Support | 0/4 | **In Progress** |
 
 **MVP Stories:** 54/54 complete (100%)
 **Post-MVP Fix Stories:** 13/13 complete (100%)
-**Overall Progress:** 67/67 stories complete (100%)
+**Epic 14 (AI Provider Expansion):** 0/4 in progress
+**Overall Progress:** 67/71 stories complete (94%)
 
 ---
 
@@ -257,12 +259,21 @@ All 5 stories completed:
 - [x] Story 12.3: Add Telegram Bot Token Configuration - [PR #115](https://github.com/jlengelbrecht/GlycemicGPT/pull/115)
 - [x] Story 12.4: Graceful Offline/Disconnected State for All Settings - [PR #111](https://github.com/jlengelbrecht/GlycemicGPT/pull/111)
 
-<<<<<<< HEAD
-**Epic 13: End-to-End Testing & Real Data Verification** - IN PROGRESS
-=======
 **Epic 13: End-to-End Testing & Real Data Verification** - COMPLETE
->>>>>>> d7c217d (fix: align integration test script with actual API routes and behavior)
 
 - [x] Story 13.1: Local Dev Server Testing Checklist - [PR #123](https://github.com/jlengelbrecht/GlycemicGPT/pull/123)
 - [x] Story 13.2: Docker Container Integration Testing - [PR #124](https://github.com/jlengelbrecht/GlycemicGPT/pull/124)
 - [x] Story 13.3: Real Data Pipeline Verification - [PR #125](https://github.com/jlengelbrecht/GlycemicGPT/pull/125)
+
+---
+
+## Epic 14: Expanded AI Provider Support
+
+**Goal:** Expand AI provider system from 2 to 5 types: Claude Subscription, ChatGPT Subscription, Claude API, OpenAI API, Self-Hosted/BYOAI.
+
+**Epic Details:** [epic-14-expanded-ai-providers.md](planning-artifacts/epic-14-expanded-ai-providers.md)
+
+- [ ] Story 14.1: Database Migration for Expanded Provider Types
+- [ ] Story 14.2: Backend Support for 5 Provider Types
+- [ ] Story 14.3: Frontend AI Provider Page Redesign
+- [ ] Story 14.4: Tests for Expanded Provider System
