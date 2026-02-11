@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.47](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.46...v0.1.47) (2026-02-11)
+
+
+### ✨ Features
+
+* add graceful offline/disconnected state to all settings pages (Story 12.4) ([#111](https://github.com/jlengelbrecht/GlycemicGPT/issues/111)) ([ba90090](https://github.com/jlengelbrecht/GlycemicGPT/commit/ba9009063b47edab00fe86a5877c56a9eae269ee))
+
 ## [0.1.46](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.45...v0.1.46) (2026-02-11)
 
 
