@@ -26,6 +26,7 @@ import {
   TelegramVerificationCodeResponse,
   unlinkTelegram,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 type PageState = "loading" | "not_linked" | "code_generated" | "linked";
 
@@ -37,6 +38,8 @@ export default function TelegramSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [copied, setCopied] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -59,6 +62,7 @@ export default function TelegramSettingsPage() {
     try {
       const data = await getTelegramStatus();
       setStatus(data);
+      setIsOffline(false);
       if (data.linked) {
         setPageState("linked");
         clearTimers();
@@ -66,9 +70,11 @@ export default function TelegramSettingsPage() {
         setPageState("not_linked");
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load status";
+      const is401 = err instanceof Error && err.message.includes("401");
+      if (!is401) {
+        setIsOffline(true);
+      }
       if (pageState === "loading") {
-        setError(msg);
         setPageState("not_linked");
       }
     }
@@ -214,6 +220,19 @@ export default function TelegramSettingsPage() {
         </div>
       </div>
 
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner
+          onRetry={async () => {
+            setIsRetrying(true);
+            await fetchStatus();
+            setIsRetrying(false);
+          }}
+          isRetrying={isRetrying}
+          message="Unable to connect to server. Telegram settings are unavailable."
+        />
+      )}
+
       {/* Error banner */}
       {error && (
         <div
@@ -280,7 +299,8 @@ export default function TelegramSettingsPage() {
 
           <button
             onClick={handleGenerateCode}
-            disabled={actionLoading}
+            disabled={actionLoading || isOffline}
+            title={isOffline ? "Cannot generate code while disconnected" : undefined}
             className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
             aria-label="Generate verification code"
           >
@@ -393,7 +413,8 @@ export default function TelegramSettingsPage() {
 
             <button
               onClick={handleTestMessage}
-              disabled={actionLoading}
+              disabled={actionLoading || isOffline}
+              title={isOffline ? "Cannot send test message while disconnected" : undefined}
               className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
               aria-label="Send test message"
             >
@@ -408,7 +429,9 @@ export default function TelegramSettingsPage() {
             {!confirmDisconnect ? (
               <button
                 onClick={() => setConfirmDisconnect(true)}
-                className="w-full text-red-400 hover:text-red-300 text-sm transition-colors flex items-center justify-center gap-2 py-2"
+                disabled={isOffline}
+                title={isOffline ? "Cannot disconnect while disconnected from server" : undefined}
+                className="w-full text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm transition-colors flex items-center justify-center gap-2 py-2"
                 aria-label="Disconnect Telegram"
               >
                 <Unlink className="h-4 w-4" />

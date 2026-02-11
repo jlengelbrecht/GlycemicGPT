@@ -33,6 +33,7 @@ import {
   type CaregiverInvitationListItem,
   type LinkedCaregiverItem,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const STATUS_CONFIG: Record<
   string,
@@ -68,6 +69,7 @@ export default function CaregiversPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [newInviteUrl, setNewInviteUrl] = useState<string | null>(null);
@@ -78,13 +80,10 @@ export default function CaregiversPage() {
       setError(null);
       const data = await listCaregiverInvitations();
       setInvitations(data.invitations);
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load invitations"
-        );
+        setIsOffline(true);
       }
     } finally {
       setIsLoading(false);
@@ -190,6 +189,15 @@ export default function CaregiversPage() {
           Invite caregivers to monitor your glucose data via Telegram
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner
+          onRetry={fetchInvitations}
+          isRetrying={isLoading}
+          message="Unable to connect to server. Caregiver management is unavailable."
+        />
+      )}
 
       {/* Error state */}
       {error && (
@@ -323,8 +331,8 @@ export default function CaregiversPage() {
                       <button
                         type="button"
                         onClick={() => handleRevoke(inv.id)}
-                        disabled={revokingId === inv.id}
-                        className="shrink-0 ml-3 p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50"
+                        disabled={revokingId === inv.id || isOffline}
+                        className="shrink-0 ml-3 p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         aria-label="Revoke invitation"
                       >
                         {revokingId === inv.id ? (
@@ -345,7 +353,8 @@ export default function CaregiversPage() {
             <button
               type="button"
               onClick={handleCreate}
-              disabled={isCreating}
+              disabled={isCreating || isOffline}
+              title={isOffline ? "Cannot create invitations while disconnected" : undefined}
               className={clsx(
                 "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-blue-600 text-white hover:bg-blue-500",

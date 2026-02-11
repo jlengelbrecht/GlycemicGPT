@@ -25,6 +25,7 @@ import {
   changePassword,
   type CurrentUserResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const ROLE_LABELS: Record<string, string> = {
   diabetic: "Diabetic",
@@ -37,6 +38,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Display name form
   const [displayName, setDisplayName] = useState("");
@@ -62,11 +64,10 @@ export default function ProfilePage() {
       const data = await getCurrentUser();
       setProfile(data);
       setDisplayName(data.display_name || "");
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load profile"
-        );
+        setIsOffline(true);
       }
     } finally {
       setIsLoading(false);
@@ -149,6 +150,15 @@ export default function ProfilePage() {
           Manage your account and personal information
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner
+          onRetry={fetchProfile}
+          isRetrying={isLoading}
+          message="Unable to connect to server. Profile management is unavailable."
+        />
+      )}
 
       {/* Error state */}
       {error && (
@@ -292,7 +302,8 @@ export default function ProfilePage() {
 
             <button
               type="submit"
-              disabled={isSavingName || !nameHasChanges}
+              disabled={isSavingName || !nameHasChanges || isOffline}
+              title={isOffline ? "Cannot save while disconnected" : undefined}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-blue-600 text-white hover:bg-blue-500",
@@ -334,11 +345,14 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => setShowPasswordForm(true)}
+              disabled={isOffline}
+              title={isOffline ? "Cannot change password while disconnected" : undefined}
               className={clsx(
                 "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                 "bg-slate-800 text-slate-300 hover:bg-slate-700",
                 "transition-colors",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500"
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
+                "disabled:opacity-50 disabled:cursor-not-allowed"
               )}
             >
               <Key className="h-4 w-4" aria-hidden="true" />
@@ -427,8 +441,10 @@ export default function ProfilePage() {
                     isSavingPassword ||
                     !currentPassword ||
                     !newPassword ||
-                    !confirmPassword
+                    !confirmPassword ||
+                    isOffline
                   }
+                  title={isOffline ? "Cannot change password while disconnected" : undefined}
                   className={clsx(
                     "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                     "bg-blue-600 text-white hover:bg-blue-500",

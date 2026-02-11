@@ -24,6 +24,7 @@ import {
   updateTargetGlucoseRange,
   type TargetGlucoseRangeResponse,
 } from "@/lib/api";
+import { OfflineBanner } from "@/components/ui/offline-banner";
 
 const DEFAULTS = { low_target: 70, high_target: 180 };
 
@@ -33,6 +34,7 @@ export default function GlucoseRangePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form state
   const [lowTarget, setLowTarget] = useState<string>("70");
@@ -45,13 +47,10 @@ export default function GlucoseRangePage() {
       setRange(data);
       setLowTarget(String(data.low_target));
       setHighTarget(String(data.high_target));
+      setIsOffline(false);
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("401"))) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load target glucose range"
-        );
+        setIsOffline(true);
       }
       // Use defaults as baseline so the form is still functional
       setRange({
@@ -165,6 +164,11 @@ export default function GlucoseRangePage() {
           Set your personal target range for dashboard display and AI analysis
         </p>
       </div>
+
+      {/* Offline banner */}
+      {isOffline && (
+        <OfflineBanner onRetry={fetchRange} isRetrying={isLoading} />
+      )}
 
       {/* Error state */}
       {error && (
@@ -301,7 +305,8 @@ export default function GlucoseRangePage() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="submit"
-                disabled={isSaving || !hasChanges || !isValid}
+                disabled={isSaving || !hasChanges || !isValid || isOffline}
+                title={isOffline ? "Cannot save while disconnected" : undefined}
                 className={clsx(
                   "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-blue-600 text-white hover:bg-blue-500",
@@ -326,6 +331,7 @@ export default function GlucoseRangePage() {
                 onClick={handleReset}
                 disabled={
                   isSaving ||
+                  isOffline ||
                   (range?.low_target === DEFAULTS.low_target &&
                     range?.high_target === DEFAULTS.high_target)
                 }
