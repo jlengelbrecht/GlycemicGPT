@@ -15,6 +15,8 @@ from src.database import get_db
 from src.logging_config import get_logger
 from src.models.ai_provider import AIProviderConfig, AIProviderStatus
 from src.schemas.ai_provider import (
+    AIChatRequest,
+    AIChatResponse,
     AIProviderConfigRequest,
     AIProviderConfigResponse,
     AIProviderDeleteResponse,
@@ -22,6 +24,7 @@ from src.schemas.ai_provider import (
 )
 from src.schemas.auth import ErrorResponse
 from src.services.ai_provider import mask_api_key, validate_ai_api_key
+from src.services.telegram_chat import handle_chat_web
 
 logger = get_logger(__name__)
 
@@ -270,3 +273,32 @@ async def test_ai_provider(
             success=False,
             message=error_message or "API key validation failed",
         )
+
+
+@router.post(
+    "/chat",
+    response_model=AIChatResponse,
+    responses={
+        200: {"description": "AI chat response"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        404: {"model": ErrorResponse, "description": "No AI provider configured"},
+        502: {"model": ErrorResponse, "description": "AI provider error"},
+    },
+)
+async def ai_chat(
+    request: AIChatRequest,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> AIChatResponse:
+    """Send a message to the AI with glucose context.
+
+    Uses the user's configured AI provider and recent glucose data
+    to generate a contextual response.
+    """
+    response_text = await handle_chat_web(db, current_user.id, request.message)
+
+    return AIChatResponse(
+        response=response_text,
+        disclaimer="Not medical advice. Consult your healthcare provider.",
+    )

@@ -1743,3 +1743,26 @@ export async function deleteAIProvider(): Promise<AIProviderDeleteResponse> {
   }
   return response.json();
 }
+
+// ── Story 11.2: AI Chat ──
+
+export interface AIChatResponse {
+  response: string;
+  disclaimer: string;
+}
+
+export async function sendAIChat(message: string): Promise<AIChatResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ message }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to send message: ${response.status}`
+    );
+  }
+  return response.json();
+}

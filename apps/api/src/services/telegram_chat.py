@@ -255,6 +255,114 @@ async def handle_chat(
     return _truncate_response(safe_content)
 
 
+# ── Story 11.2: Web-optimized user AI chat ──
+
+
+async def handle_chat_web(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    text: str,
+) -> str:
+    """Process a user's AI query for the web interface.
+
+    Similar to handle_chat() but returns plain text without HTML
+    escaping or Telegram-specific formatting, and raises HTTPException
+    on errors instead of returning error strings.
+
+    Args:
+        db: Database session.
+        user_id: User's UUID.
+        text: The user's message text.
+
+    Returns:
+        Plain text AI response content.
+
+    Raises:
+        HTTPException: If user not found (404), no AI provider (404),
+            or AI provider error (502).
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        ai_client = await get_ai_client(user, db)
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=404,
+                detail="No AI provider configured",
+            ) from exc
+        raise
+
+    truncated_text = text[:MAX_USER_MESSAGE_LENGTH]
+
+    try:
+        glucose_context = await _build_glucose_context(db, user_id)
+    except Exception:
+        logger.error(
+            "Failed to build glucose context for web chat",
+            user_id=str(user_id),
+            exc_info=True,
+        )
+        glucose_context = "Recent glucose data: unavailable due to a temporary error."
+
+    # Use a web-optimized system prompt (allows markdown, longer responses)
+    web_prompt = (
+        "You are a supportive diabetes management assistant integrated with GlycemicGPT. "
+        "You help users understand their glucose patterns, discuss insulin management, "
+        "and answer questions about their diabetes care.\n\n"
+        "Guidelines:\n"
+        "- Be supportive and non-judgmental\n"
+        "- Reference the user's recent glucose data when relevant\n"
+        "- Do NOT recommend specific insulin dose changes\n"
+        "- Do NOT recommend specific carb-to-insulin ratios\n"
+        "- Suggest discussing observations with their endocrinologist\n"
+        "- You may use markdown formatting for readability\n\n"
+    )
+    if glucose_context:
+        system_prompt = web_prompt + glucose_context
+    else:
+        system_prompt = web_prompt.rstrip()
+
+    try:
+        ai_response = await ai_client.generate(
+            messages=[AIMessage(role="user", content=truncated_text)],
+            system_prompt=system_prompt,
+            max_tokens=1200,
+        )
+    except Exception:
+        logger.error(
+            "AI provider error in web chat",
+            user_id=str(user_id),
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to get a response from the AI provider",
+        )
+
+    content = ai_response.content.strip()
+    if not content:
+        raise HTTPException(
+            status_code=502,
+            detail="The AI returned an empty response",
+        )
+
+    logger.info(
+        "Web AI chat response generated",
+        user_id=str(user_id),
+        model=ai_response.model,
+        provider=ai_response.provider.value,
+        input_tokens=ai_response.usage.input_tokens,
+        output_tokens=ai_response.usage.output_tokens,
+    )
+
+    return content
+
+
 # ── Story 7.6: Caregiver AI chat ──
 
 _CAREGIVER_SYSTEM_PROMPT_PREFIX = """\
