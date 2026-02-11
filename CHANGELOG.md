@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.52](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.51...v0.1.52) (2026-02-11)
+
+
+### ✨ Features
+
+* wire daily briefs web delivery with unread badge and filter tabs (Story 11.3) ([#121](https://github.com/jlengelbrecht/GlycemicGPT/issues/121)) ([cf4da55](https://github.com/jlengelbrecht/GlycemicGPT/commit/cf4da55842747719191913d78e58d3c4f3dc7c2d))
+
 ## [0.1.51](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.50...v0.1.51) (2026-02-11)
 
 
