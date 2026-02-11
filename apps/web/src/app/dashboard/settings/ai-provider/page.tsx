@@ -1,10 +1,12 @@
 /**
  * AI Provider Configuration Page
  *
- * Story 11.1: Create AI Provider Configuration Page
+ * Story 14.3: Expanded AI Provider Page
  *
- * Allows users to configure their AI provider (Claude or OpenAI),
- * enter API keys, test connections, and manage their AI configuration.
+ * Allows users to configure their AI provider from 5 options across 3 categories:
+ * - Subscription Plans: Claude Subscription, ChatGPT Subscription
+ * - Pay-Per-Token APIs: Claude API, OpenAI API
+ * - Self-Hosted: Custom OpenAI-Compatible
  */
 
 "use client";
@@ -17,8 +19,10 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  Globe,
   Key,
   Loader2,
+  Server,
   Trash2,
   Wifi,
   WifiOff,
@@ -35,18 +39,104 @@ import {
 } from "@/lib/api";
 import { OfflineBanner } from "@/components/ui/offline-banner";
 
-const PROVIDER_OPTIONS: { value: AIProviderType; label: string; description: string }[] = [
+// Provider definitions grouped by category
+interface ProviderOption {
+  value: AIProviderType;
+  label: string;
+  description: string;
+  requiresBaseUrl: boolean;
+  requiresApiKey: boolean;
+  requiresModelName: boolean;
+  apiKeyPlaceholder: string;
+  apiKeyHint: string;
+  baseUrlPlaceholder?: string;
+  modelPlaceholder?: string;
+  pricingHint: string;
+}
+
+const SUBSCRIPTION_PROVIDERS: ProviderOption[] = [
   {
-    value: "claude",
-    label: "Claude (Anthropic)",
-    description: "Recommended. Supports Claude Sonnet, Opus, and Haiku models.",
+    value: "claude_subscription",
+    label: "Claude Subscription",
+    description: "Use your Claude Max/Pro subscription via proxy (e.g., claude-max-api-proxy).",
+    requiresBaseUrl: true,
+    requiresApiKey: false,
+    requiresModelName: false,
+    apiKeyPlaceholder: "not-needed",
+    apiKeyHint: "Most proxies don't require an API key. Use 'not-needed' if unsure.",
+    baseUrlPlaceholder: "http://localhost:3456/v1",
+    modelPlaceholder: "claude-sonnet-4-5-20250929",
+    pricingHint: "Unlimited usage with your subscription",
   },
   {
-    value: "openai",
-    label: "OpenAI",
-    description: "Supports GPT-4o and other OpenAI models.",
+    value: "chatgpt_subscription",
+    label: "ChatGPT Subscription",
+    description: "Use your ChatGPT Plus/Team subscription via proxy.",
+    requiresBaseUrl: true,
+    requiresApiKey: false,
+    requiresModelName: false,
+    apiKeyPlaceholder: "not-needed",
+    apiKeyHint: "Most proxies don't require an API key. Use 'not-needed' if unsure.",
+    baseUrlPlaceholder: "http://localhost:8080/v1",
+    modelPlaceholder: "gpt-4o",
+    pricingHint: "Unlimited usage with your subscription",
   },
 ];
+
+const API_PROVIDERS: ProviderOption[] = [
+  {
+    value: "claude_api",
+    label: "Claude API (Anthropic)",
+    description: "Direct Anthropic API. Supports Claude Sonnet, Opus, and Haiku models.",
+    requiresBaseUrl: false,
+    requiresApiKey: true,
+    requiresModelName: false,
+    apiKeyPlaceholder: "sk-ant-...",
+    apiKeyHint: "Get your API key from console.anthropic.com",
+    modelPlaceholder: "claude-sonnet-4-5-20250929",
+    pricingHint: "Pay-per-token",
+  },
+  {
+    value: "openai_api",
+    label: "OpenAI API",
+    description: "Direct OpenAI API. Supports GPT-4o and other OpenAI models.",
+    requiresBaseUrl: false,
+    requiresApiKey: true,
+    requiresModelName: false,
+    apiKeyPlaceholder: "sk-...",
+    apiKeyHint: "Get your API key from platform.openai.com",
+    modelPlaceholder: "gpt-4o",
+    pricingHint: "Pay-per-token",
+  },
+];
+
+const SELF_HOSTED_PROVIDERS: ProviderOption[] = [
+  {
+    value: "openai_compatible",
+    label: "Custom OpenAI-Compatible",
+    description: "Any OpenAI-compatible endpoint: LiteLLM, Ollama, vLLM, or other self-hosted models.",
+    requiresBaseUrl: true,
+    requiresApiKey: false,
+    requiresModelName: true,
+    apiKeyPlaceholder: "optional-key",
+    apiKeyHint: "Only required if your endpoint needs authentication.",
+    baseUrlPlaceholder: "http://localhost:11434/v1",
+    modelPlaceholder: "llama3.1:70b",
+    pricingHint: "Free (self-hosted)",
+  },
+];
+
+const ALL_PROVIDERS = [...SUBSCRIPTION_PROVIDERS, ...API_PROVIDERS, ...SELF_HOSTED_PROVIDERS];
+
+const PROVIDER_LABELS: Record<AIProviderType, string> = {
+  claude_subscription: "Claude Subscription",
+  chatgpt_subscription: "ChatGPT Subscription",
+  claude_api: "Claude API (Anthropic)",
+  openai_api: "OpenAI API",
+  openai_compatible: "Custom OpenAI-Compatible",
+  claude: "Claude (Legacy)",
+  openai: "OpenAI (Legacy)",
+};
 
 const STATUS_CONFIG: Record<AIProviderStatus, { label: string; color: string; bg: string }> = {
   connected: { label: "Connected", color: "text-green-400", bg: "bg-green-500/10" },
@@ -63,16 +153,28 @@ export default function AIProviderPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Form state
-  const [providerType, setProviderType] = useState<AIProviderType>("claude");
+  const [providerType, setProviderType] = useState<AIProviderType>("claude_api");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [modelName, setModelName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
 
   // Action state
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const selectedProvider =
+    ALL_PROVIDERS.find((p) => p.value === providerType) || API_PROVIDERS[0];
+
+  const handleProviderSwitch = (newType: AIProviderType) => {
+    setProviderType(newType);
+    // Clear form fields to prevent stale data from hidden fields being sent
+    setApiKey("");
+    setBaseUrl("");
+    setModelName("");
+  };
 
   // Auto-clear success message
   useEffect(() => {
@@ -85,14 +187,18 @@ export default function AIProviderPage() {
     try {
       const data = await getAIProvider();
       setConfig(data);
-      setProviderType(data.provider_type);
+      // Map legacy provider types to their modern equivalents
+      const knownType = ALL_PROVIDERS.some((p) => p.value === data.provider_type)
+        ? data.provider_type
+        : "claude_api";
+      setProviderType(knownType);
       setModelName(data.model_name || "");
+      setBaseUrl(data.base_url || "");
       setIsOffline(false);
     } catch (err) {
       const is401 = err instanceof Error && err.message.includes("401");
       const is404 = err instanceof Error && err.message.includes("404");
       if (is404) {
-        // No provider configured - that's fine
         setConfig(null);
         setIsOffline(false);
       } else if (!is401) {
@@ -108,8 +214,17 @@ export default function AIProviderPage() {
   }, [fetchConfig]);
 
   const handleSave = async () => {
-    if (!apiKey.trim()) {
+    // Validate required fields based on provider
+    if (selectedProvider.requiresApiKey && !apiKey.trim()) {
       setError("Please enter an API key");
+      return;
+    }
+    if (selectedProvider.requiresBaseUrl && !baseUrl.trim()) {
+      setError("Please enter a base URL for this provider type");
+      return;
+    }
+    if (selectedProvider.requiresModelName && !modelName.trim()) {
+      setError("Please enter a model name for this provider type");
       return;
     }
 
@@ -120,8 +235,9 @@ export default function AIProviderPage() {
     try {
       const result = await configureAIProvider({
         provider_type: providerType,
-        api_key: apiKey.trim(),
+        api_key: apiKey.trim() || "not-needed",
         model_name: modelName.trim() || null,
+        base_url: baseUrl.trim() || null,
       });
       setConfig(result);
       setApiKey("");
@@ -144,7 +260,6 @@ export default function AIProviderPage() {
       const result = await testAIProvider();
       if (result.success) {
         setSuccess(result.message);
-        // Refresh config to get updated status
         await fetchConfig();
       } else {
         setError(result.message);
@@ -170,7 +285,8 @@ export default function AIProviderPage() {
       setConfirmDelete(false);
       setApiKey("");
       setModelName("");
-      setProviderType("claude");
+      setBaseUrl("");
+      setProviderType("claude_api");
       setSuccess("AI provider configuration removed");
     } catch (err) {
       setConfirmDelete(false);
@@ -184,6 +300,19 @@ export default function AIProviderPage() {
 
   const isConfigured = config !== null;
   const statusInfo = config ? STATUS_CONFIG[config.status] : null;
+
+  // Determine if save button should be enabled
+  const canSave = (() => {
+    if (isOffline || isSaving) return false;
+    if (selectedProvider.requiresApiKey && !apiKey.trim()) return false;
+    if (selectedProvider.requiresBaseUrl && !baseUrl.trim()) return false;
+    if (selectedProvider.requiresModelName && !modelName.trim()) return false;
+    // For non-required API key providers, we still need at least something
+    if (!selectedProvider.requiresApiKey && !apiKey.trim()) {
+      // That's fine, we'll default to "not-needed"
+    }
+    return true;
+  })();
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -280,7 +409,7 @@ export default function AIProviderPage() {
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-400">Provider</span>
               <span className="text-white font-medium">
-                {config.provider_type === "claude" ? "Claude (Anthropic)" : "OpenAI"}
+                {PROVIDER_LABELS[config.provider_type] || config.provider_type}
               </span>
             </div>
             <div className="flex items-center justify-between text-sm">
@@ -289,6 +418,14 @@ export default function AIProviderPage() {
                 {config.masked_api_key}
               </span>
             </div>
+            {config.base_url && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Base URL</span>
+                <span className="text-white font-mono text-xs truncate max-w-[200px]">
+                  {config.base_url}
+                </span>
+              </div>
+            )}
             {config.model_name && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Model</span>
@@ -383,137 +520,245 @@ export default function AIProviderPage() {
 
           {!isConfigured && (
             <p className="text-slate-400 text-sm">
-              GlycemicGPT uses your own AI API key (BYOAI) to analyze glucose
-              data and generate insights. Your key is encrypted before storage
-              and never shared.
+              GlycemicGPT uses your own AI (BYOAI) to analyze glucose data and
+              generate insights. Choose from subscription plans, direct API keys,
+              or self-hosted models below. Your credentials are encrypted before
+              storage and never shared.
             </p>
           )}
 
-          {/* Provider selection */}
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-300">
-              AI Provider
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {PROVIDER_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setProviderType(option.value)}
-                  disabled={isOffline}
-                  className={`text-left p-4 rounded-lg border transition-colors ${
-                    providerType === option.value
-                      ? "border-purple-500 bg-purple-500/10"
-                      : "border-slate-700 bg-slate-800 hover:border-slate-600"
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  aria-pressed={providerType === option.value}
-                  aria-label={`Select ${option.label}`}
-                >
-                  <p className="text-sm font-medium text-white">
-                    {option.label}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {option.description}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* API Key input */}
-          <div className="space-y-2">
-            <label
-              htmlFor="api-key"
-              className="block text-sm font-medium text-slate-300"
-            >
-              API Key
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Key className="h-4 w-4 text-slate-500" />
+          {/* Provider selection by category */}
+          <div className="space-y-4">
+            {/* Subscription Plans */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Globe className="h-4 w-4 text-blue-400" />
+                <label className="text-sm font-medium text-slate-300">
+                  Subscription Plans
+                </label>
+                <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                  Unlimited usage
+                </span>
               </div>
-              <input
-                id="api-key"
-                type={showApiKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={
-                  providerType === "claude"
-                    ? "Enter your Anthropic API key"
-                    : "Enter your OpenAI API key"
-                }
-                disabled={isOffline || isSaving}
-                autoComplete="off"
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
-                aria-label={showApiKey ? "Hide API key" : "Show API key"}
-              >
-                {showApiKey ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {SUBSCRIPTION_PROVIDERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleProviderSwitch(option.value)}
+                    disabled={isOffline}
+                    className={`text-left p-3 rounded-lg border transition-colors ${
+                      providerType === option.value
+                        ? "border-purple-500 bg-purple-500/10"
+                        : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    aria-pressed={providerType === option.value}
+                    aria-label={`Select ${option.label}`}
+                  >
+                    <p className="text-sm font-medium text-white">{option.label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{option.description}</p>
+                  </button>
+                ))}
+              </div>
             </div>
-            <p className="text-xs text-slate-500">
-              {providerType === "claude"
-                ? "Get your API key from console.anthropic.com"
-                : "Get your API key from platform.openai.com"}
-            </p>
+
+            {/* Pay-Per-Token APIs */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Key className="h-4 w-4 text-amber-400" />
+                <label className="text-sm font-medium text-slate-300">
+                  Pay-Per-Token APIs
+                </label>
+                <span className="text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                  Usage-based pricing
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {API_PROVIDERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleProviderSwitch(option.value)}
+                    disabled={isOffline}
+                    className={`text-left p-3 rounded-lg border transition-colors ${
+                      providerType === option.value
+                        ? "border-purple-500 bg-purple-500/10"
+                        : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    aria-pressed={providerType === option.value}
+                    aria-label={`Select ${option.label}`}
+                  >
+                    <p className="text-sm font-medium text-white">{option.label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Self-Hosted */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Server className="h-4 w-4 text-green-400" />
+                <label className="text-sm font-medium text-slate-300">
+                  Self-Hosted
+                </label>
+                <span className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+                  Free (self-hosted)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {SELF_HOSTED_PROVIDERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleProviderSwitch(option.value)}
+                    disabled={isOffline}
+                    className={`text-left p-3 rounded-lg border transition-colors ${
+                      providerType === option.value
+                        ? "border-purple-500 bg-purple-500/10"
+                        : "border-slate-700 bg-slate-800 hover:border-slate-600"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    aria-pressed={providerType === option.value}
+                    aria-label={`Select ${option.label}`}
+                  >
+                    <p className="text-sm font-medium text-white">{option.label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Model override (optional) */}
-          <div className="space-y-2">
-            <label
-              htmlFor="model-name"
-              className="block text-sm font-medium text-slate-300"
-            >
-              Model Name{" "}
-              <span className="text-slate-500 font-normal">(optional)</span>
-            </label>
-            <input
-              id="model-name"
-              type="text"
-              value={modelName}
-              onChange={(e) => setModelName(e.target.value)}
-              placeholder={
-                providerType === "claude"
-                  ? "claude-sonnet-4-5-20250929"
-                  : "gpt-4o"
-              }
-              disabled={isOffline || isSaving}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
-            />
+          {/* Dynamic form fields based on selected provider */}
+          <div className="space-y-4 border-t border-slate-800 pt-4">
             <p className="text-xs text-slate-500">
-              Leave blank to use the default model. Override with a specific
-              model ID if needed.
+              {selectedProvider.pricingHint}
             </p>
+
+            {/* Base URL input (shown for subscription and self-hosted) */}
+            {selectedProvider.requiresBaseUrl && (
+              <div className="space-y-2">
+                <label
+                  htmlFor="base-url"
+                  className="block text-sm font-medium text-slate-300"
+                >
+                  Base URL <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Globe className="h-4 w-4 text-slate-500" />
+                  </div>
+                  <input
+                    id="base-url"
+                    type="url"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder={selectedProvider.baseUrlPlaceholder}
+                    disabled={isOffline || isSaving}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  The URL of your proxy or self-hosted endpoint (e.g., http://your-server:3456/v1)
+                </p>
+              </div>
+            )}
+
+            {/* API Key input */}
+            <div className="space-y-2">
+              <label
+                htmlFor="api-key"
+                className="block text-sm font-medium text-slate-300"
+              >
+                API Key{" "}
+                {selectedProvider.requiresApiKey ? (
+                  <span className="text-red-400">*</span>
+                ) : (
+                  <span className="text-slate-500 font-normal">(optional)</span>
+                )}
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Key className="h-4 w-4 text-slate-500" />
+                </div>
+                <input
+                  id="api-key"
+                  type={showApiKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={selectedProvider.apiKeyPlaceholder}
+                  disabled={isOffline || isSaving}
+                  autoComplete="off"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
+                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                >
+                  {showApiKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500">
+                {selectedProvider.apiKeyHint}
+              </p>
+            </div>
+
+            {/* Model Name input */}
+            <div className="space-y-2">
+              <label
+                htmlFor="model-name"
+                className="block text-sm font-medium text-slate-300"
+              >
+                Model Name{" "}
+                {selectedProvider.requiresModelName ? (
+                  <span className="text-red-400">*</span>
+                ) : (
+                  <span className="text-slate-500 font-normal">(optional)</span>
+                )}
+              </label>
+              <input
+                id="model-name"
+                type="text"
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder={selectedProvider.modelPlaceholder}
+                disabled={isOffline || isSaving}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
+              />
+              <p className="text-xs text-slate-500">
+                {selectedProvider.requiresModelName
+                  ? "Required: specify which model to use on your endpoint."
+                  : "Leave blank to use the default model."}
+              </p>
+            </div>
           </div>
 
           {/* Save button */}
           <button
             onClick={handleSave}
-            disabled={!apiKey.trim() || isSaving || isOffline}
+            disabled={!canSave}
             title={
               isOffline
                 ? "Cannot save while disconnected"
-                : !apiKey.trim()
-                  ? "Enter an API key first"
+                : !canSave
+                  ? "Fill in required fields first"
                   : undefined
             }
             className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
-            aria-label={isConfigured ? "Update AI provider" : "Save and validate API key"}
+            aria-label={isConfigured ? "Update AI provider" : "Save and validate"}
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CheckCircle2 className="h-4 w-4" />
             )}
-            {isConfigured ? "Update API Key" : "Save & Validate"}
+            {isConfigured ? "Update Configuration" : "Save & Validate"}
           </button>
         </div>
       )}
@@ -523,10 +768,10 @@ export default function AIProviderPage() {
         <div className="flex items-start gap-2">
           <Brain className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" />
           <p className="text-xs text-slate-500">
-            Your API key is encrypted before storage and is only used to
-            communicate with your chosen AI provider. We never share your key
-            with third parties. The key is validated before being saved —
-            invalid keys will not be stored.
+            Your credentials are encrypted before storage and only used to
+            communicate with your chosen AI provider. We never share your
+            credentials with third parties. The connection is validated before
+            saving -- invalid configurations will not be stored.
           </p>
         </div>
       </div>

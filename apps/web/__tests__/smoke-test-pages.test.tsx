@@ -64,7 +64,7 @@ jest.mock("@/lib/api", () => ({
   respondToInsight: jest.fn().mockResolvedValue({}),
   // AI Chat
   sendAIChat: jest.fn().mockResolvedValue({ response: "test" }),
-  getAIProvider: jest.fn().mockResolvedValue({ provider: null, configured: false }),
+  getAIProvider: jest.fn().mockRejectedValue(new Error("No AI provider configured: 404")),
   // AI Provider settings
   configureAIProvider: jest.fn().mockResolvedValue({}),
   testAIProvider: jest.fn().mockResolvedValue({ success: true }),
