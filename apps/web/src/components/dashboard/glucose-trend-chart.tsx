@@ -46,6 +46,13 @@ const PERIODS: { value: ChartTimePeriod; label: string }[] = [
   { value: "24h", label: "24H" },
 ];
 
+const PERIOD_TO_MS: Record<ChartTimePeriod, number> = {
+  "3h": 3 * 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+};
+
 // --- Chart data point ---
 
 interface ChartPoint {
@@ -164,6 +171,12 @@ export function GlucoseTrendChart({
   }, [refreshKey, refetch]);
 
   const data = useMemo(() => transformReadings(readings), [readings]);
+
+  // X-axis domain: always show the full selected time window
+  const xDomain = useMemo(() => {
+    const now = Date.now();
+    return [now - PERIOD_TO_MS[period], now];
+  }, [period]);
 
   // Y-axis domain: show reasonable range, expand to fit data
   const yDomain = useMemo(() => {
@@ -286,7 +299,7 @@ export function GlucoseTrendChart({
             <XAxis
               dataKey="timestamp"
               type="number"
-              domain={["dataMin", "dataMax"]}
+              domain={xDomain}
               tickFormatter={formatXTick}
               tick={{ fill: "#94a3b8", fontSize: 12 }}
               axisLine={{ stroke: "#475569" }}
