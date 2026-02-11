@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.62](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.61...v0.1.62) (2026-02-11)
+
+
+### 🐛 Bug Fixes
+
+* correct trend arrow mapping and deployment config ([#142](https://github.com/jlengelbrecht/GlycemicGPT/issues/142)) ([e437661](https://github.com/jlengelbrecht/GlycemicGPT/commit/e437661eeb6da298bd7b69e5aacdae9306c0cd4f))
+
 ## [0.1.61](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.60...v0.1.61) (2026-02-11)
 
 
