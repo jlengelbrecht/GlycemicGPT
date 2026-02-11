@@ -200,7 +200,7 @@ async def login(
         key=settings.jwt_cookie_name,
         value=token,
         httponly=True,
-        secure=True,  # Requires HTTPS in production
+        secure=settings.cookie_secure,
         samesite="lax",
         max_age=settings.session_expire_hours * 3600,
         path="/",
@@ -281,7 +281,7 @@ async def logout(
     response.delete_cookie(
         key=settings.jwt_cookie_name,
         path="/",
-        secure=True,
+        secure=settings.cookie_secure,
         httponly=True,
         samesite="lax",
     )

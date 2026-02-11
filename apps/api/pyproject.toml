@@ -22,7 +22,7 @@ dependencies = [
     "tconnectsync>=2.3.0",
     "anthropic>=0.40.0",
     "openai>=1.50.0",
-    "setuptools>=81.0.0",
+    "setuptools>=69.0.0,<82",  # tconnectsync needs pkg_resources, removed in setuptools 82
 ]
 
 [project.optional-dependencies]

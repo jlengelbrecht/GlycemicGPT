@@ -31,7 +31,10 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache .
+# Verify pkg_resources is importable (required by tconnectsync at runtime,
+# provided by setuptools <82 — removed in 82+)
+RUN uv pip install --system --no-cache . && \
+    python -c "import pkg_resources"
 
 # Copy remaining files
 COPY migrations/ ./migrations/
