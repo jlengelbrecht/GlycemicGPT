@@ -611,6 +611,78 @@ export interface TelegramTestMessageResponse {
 }
 
 /**
+ * Telegram Bot Configuration types (Story 12.3)
+ */
+export interface TelegramBotConfigResponse {
+  configured: boolean;
+  bot_username: string | null;
+  configured_at: string | null;
+}
+
+export interface TelegramBotValidateResponse {
+  valid: boolean;
+  bot_username: string;
+}
+
+/**
+ * Get Telegram bot configuration status
+ */
+export async function getTelegramBotConfig(): Promise<TelegramBotConfigResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch bot config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Validate and save a Telegram bot token
+ */
+export async function saveTelegramBotToken(
+  token: string
+): Promise<TelegramBotValidateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ token }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to save bot token: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Remove the configured Telegram bot token
+ */
+export async function removeTelegramBotToken(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/telegram/bot-config`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to remove bot token: ${response.status}`
+    );
+  }
+}
+
+/**
  * Get Telegram link status for the current user
  */
 export async function getTelegramStatus(): Promise<TelegramStatusResponse> {
