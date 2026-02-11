@@ -1,4 +1,4 @@
-"""Story 5.2: Tests for BYOAI abstraction layer."""
+"""Story 5.2 / 14.4: Tests for BYOAI abstraction layer."""
 
 import uuid
 from types import SimpleNamespace
@@ -33,13 +33,17 @@ class TestClaudeClient:
             usage=SimpleNamespace(input_tokens=10, output_tokens=5),
         )
 
-        client = ClaudeClient(api_key="sk-test", model="claude-sonnet-4-5-20250929")
+        client = ClaudeClient(
+            api_key="sk-test",
+            model="claude-sonnet-4-5-20250929",
+            provider_type=AIProviderType.CLAUDE_API,
+        )
         result = await client.generate(_user_message())
 
         assert isinstance(result, AIResponse)
         assert result.content == "Hello from Claude"
         assert result.model == "claude-sonnet-4-5-20250929"
-        assert result.provider == AIProviderType.CLAUDE
+        assert result.provider == AIProviderType.CLAUDE_API
         assert result.usage.input_tokens == 10
         assert result.usage.output_tokens == 5
 
@@ -210,15 +214,66 @@ class TestOpenAIClient:
             usage=SimpleNamespace(prompt_tokens=8, completion_tokens=4),
         )
 
-        client = OpenAIClient(api_key="sk-test", model="gpt-4o")
+        client = OpenAIClient(
+            api_key="sk-test",
+            model="gpt-4o",
+            provider_type=AIProviderType.OPENAI_API,
+        )
         result = await client.generate(_user_message())
 
         assert isinstance(result, AIResponse)
         assert result.content == "Hello from OpenAI"
         assert result.model == "gpt-4o"
-        assert result.provider == AIProviderType.OPENAI
+        assert result.provider == AIProviderType.OPENAI_API
         assert result.usage.input_tokens == 8
         assert result.usage.output_tokens == 4
+
+    @patch("src.integrations.openai_client.openai.AsyncOpenAI")
+    async def test_generate_with_base_url(self, mock_cls):
+        """Test that base_url is passed to AsyncOpenAI constructor."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="proxy response"))],
+            model="claude-sonnet-4-5-20250929",
+            usage=SimpleNamespace(prompt_tokens=5, completion_tokens=3),
+        )
+
+        client = OpenAIClient(
+            api_key="not-needed",
+            model="claude-sonnet-4-5-20250929",
+            base_url="http://localhost:3456/v1",
+            provider_type=AIProviderType.CLAUDE_SUBSCRIPTION,
+        )
+        result = await client.generate(_user_message())
+
+        # Verify base_url was passed to constructor
+        mock_cls.assert_called_once_with(
+            api_key="not-needed",
+            base_url="http://localhost:3456/v1",
+        )
+        assert result.provider == AIProviderType.CLAUDE_SUBSCRIPTION
+
+    @patch("src.integrations.openai_client.openai.AsyncOpenAI")
+    async def test_generate_without_base_url(self, mock_cls):
+        """Test that base_url is not passed when None."""
+        mock_client = AsyncMock()
+        mock_cls.return_value = mock_client
+        mock_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="response"))],
+            model="gpt-4o",
+            usage=SimpleNamespace(prompt_tokens=5, completion_tokens=3),
+        )
+
+        client = OpenAIClient(
+            api_key="sk-test",
+            model="gpt-4o",
+            provider_type=AIProviderType.OPENAI_API,
+        )
+        await client.generate(_user_message())
+
+        # Verify only api_key was passed (no base_url)
+        mock_cls.assert_called_once_with(api_key="sk-test")
 
     @patch("src.integrations.openai_client.openai.AsyncOpenAI")
     async def test_generate_with_system_prompt(self, mock_cls):
@@ -425,14 +480,15 @@ class TestAIClientFactory:
     """Tests for get_ai_client factory function."""
 
     async def test_factory_returns_claude_client(self):
-        """Test factory returns ClaudeClient for Claude provider."""
+        """Test factory returns ClaudeClient for claude_api provider."""
         from src.services.ai_client import get_ai_client
 
         mock_user = SimpleNamespace(id=uuid.uuid4())
         mock_config = SimpleNamespace(
-            provider_type=AIProviderType.CLAUDE,
+            provider_type=AIProviderType.CLAUDE_API,
             encrypted_api_key="encrypted-key",
             model_name=None,
+            base_url=None,
         )
 
         mock_db = AsyncMock()
@@ -449,14 +505,15 @@ class TestAIClientFactory:
         assert client.model == "claude-sonnet-4-5-20250929"
 
     async def test_factory_returns_openai_client(self):
-        """Test factory returns OpenAIClient for OpenAI provider."""
+        """Test factory returns OpenAIClient for openai_api provider."""
         from src.services.ai_client import get_ai_client
 
         mock_user = SimpleNamespace(id=uuid.uuid4())
         mock_config = SimpleNamespace(
-            provider_type=AIProviderType.OPENAI,
+            provider_type=AIProviderType.OPENAI_API,
             encrypted_api_key="encrypted-key",
             model_name="gpt-4o-mini",
+            base_url=None,
         )
 
         mock_db = AsyncMock()
@@ -471,6 +528,58 @@ class TestAIClientFactory:
 
         assert isinstance(client, OpenAIClient)
         assert client.model == "gpt-4o-mini"
+
+    async def test_factory_returns_openai_client_for_subscription(self):
+        """Test factory returns OpenAIClient with base_url for subscription types."""
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type=AIProviderType.CLAUDE_SUBSCRIPTION,
+            encrypted_api_key="encrypted-key",
+            model_name=None,
+            base_url="http://localhost:3456/v1",
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        with patch(
+            "src.services.ai_client.decrypt_credential", return_value="not-needed"
+        ):
+            client = await get_ai_client(mock_user, mock_db)
+
+        assert isinstance(client, OpenAIClient)
+        assert client._base_url == "http://localhost:3456/v1"
+        assert client._provider_type == AIProviderType.CLAUDE_SUBSCRIPTION
+
+    async def test_factory_returns_openai_client_for_compatible(self):
+        """Test factory returns OpenAIClient for openai_compatible type."""
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type=AIProviderType.OPENAI_COMPATIBLE,
+            encrypted_api_key="encrypted-key",
+            model_name="llama3.1:70b",
+            base_url="http://localhost:11434/v1",
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        with patch(
+            "src.services.ai_client.decrypt_credential", return_value="not-needed"
+        ):
+            client = await get_ai_client(mock_user, mock_db)
+
+        assert isinstance(client, OpenAIClient)
+        assert client.model == "llama3.1:70b"
+        assert client._base_url == "http://localhost:11434/v1"
 
     async def test_factory_raises_404_when_no_provider(self):
         """Test factory raises HTTPException 404 when no provider configured."""
@@ -497,9 +606,10 @@ class TestAIClientFactory:
 
         mock_user = SimpleNamespace(id=uuid.uuid4())
         mock_config = SimpleNamespace(
-            provider_type=AIProviderType.CLAUDE,
+            provider_type=AIProviderType.CLAUDE_API,
             encrypted_api_key="encrypted-key",
             model_name="claude-opus-4-6",
+            base_url=None,
         )
 
         mock_db = AsyncMock()
@@ -525,6 +635,7 @@ class TestAIClientFactory:
             provider_type="gemini",
             encrypted_api_key="encrypted-key",
             model_name=None,
+            base_url=None,
         )
 
         mock_db = AsyncMock()

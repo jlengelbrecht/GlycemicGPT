@@ -17,6 +17,19 @@ from src.models.base import Base, TimestampMixin
 class AIProviderType(str, enum.Enum):
     """Supported AI provider types."""
 
+    # Direct API (pay-per-token)
+    CLAUDE_API = "claude_api"
+    OPENAI_API = "openai_api"
+
+    # Subscription proxies (unlimited usage via proxy)
+    CLAUDE_SUBSCRIPTION = "claude_subscription"
+    CHATGPT_SUBSCRIPTION = "chatgpt_subscription"
+
+    # Self-hosted / generic OpenAI-compatible endpoint
+    OPENAI_COMPATIBLE = "openai_compatible"
+
+    # Legacy values kept for backwards compatibility with existing DB rows
+    # Migration 028 updates these, but enum values can't be removed in PG
     CLAUDE = "claude"
     OPENAI = "openai"
 
@@ -73,6 +86,12 @@ class AIProviderConfig(Base, TimestampMixin):
     # Optional model name override (e.g., "claude-sonnet-4-5-20250929", "gpt-4o")
     model_name: Mapped[str | None] = mapped_column(
         String(100),
+        nullable=True,
+    )
+
+    # Base URL for subscription proxies and self-hosted endpoints
+    base_url: Mapped[str | None] = mapped_column(
+        String(500),
         nullable=True,
     )
 

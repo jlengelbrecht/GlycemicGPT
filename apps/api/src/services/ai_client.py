@@ -1,8 +1,9 @@
-"""Story 5.2: BYOAI abstraction layer.
+"""Story 5.2 / 14.2: BYOAI abstraction layer.
 
 Abstract base class and factory for AI provider clients.
 Provides a unified interface for generating AI responses
-regardless of the underlying provider (Claude or OpenAI).
+regardless of the underlying provider (Claude, OpenAI, subscription proxy,
+or self-hosted OpenAI-compatible endpoint).
 """
 
 import abc
@@ -20,8 +21,31 @@ from src.schemas.ai_response import AIMessage, AIResponse
 logger = get_logger(__name__)
 
 # Default models when user has not specified a model_name override
-DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-DEFAULT_OPENAI_MODEL = "gpt-4o"
+DEFAULT_MODELS: dict[AIProviderType, str] = {
+    AIProviderType.CLAUDE_API: "claude-sonnet-4-5-20250929",
+    AIProviderType.OPENAI_API: "gpt-4o",
+    AIProviderType.CLAUDE_SUBSCRIPTION: "claude-sonnet-4-5-20250929",
+    AIProviderType.CHATGPT_SUBSCRIPTION: "gpt-4o",
+    AIProviderType.OPENAI_COMPATIBLE: "",  # Must be specified by user
+    # Legacy values
+    AIProviderType.CLAUDE: "claude-sonnet-4-5-20250929",
+    AIProviderType.OPENAI: "gpt-4o",
+}
+
+# Provider types that use the OpenAI SDK (with optional base_url)
+_OPENAI_SDK_TYPES = {
+    AIProviderType.OPENAI_API,
+    AIProviderType.CLAUDE_SUBSCRIPTION,
+    AIProviderType.CHATGPT_SUBSCRIPTION,
+    AIProviderType.OPENAI_COMPATIBLE,
+    AIProviderType.OPENAI,  # Legacy
+}
+
+# Provider types that use the Anthropic SDK
+_ANTHROPIC_SDK_TYPES = {
+    AIProviderType.CLAUDE_API,
+    AIProviderType.CLAUDE,  # Legacy
+}
 
 
 class BaseAIClient(abc.ABC):
@@ -31,9 +55,17 @@ class BaseAIClient(abc.ABC):
     returning a normalized AIResponse.
     """
 
-    def __init__(self, api_key: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        base_url: str | None = None,
+        provider_type: AIProviderType | None = None,
+    ) -> None:
         self._api_key = api_key
         self.model = model
+        self._base_url = base_url
+        self._provider_type = provider_type
 
     @abc.abstractmethod
     async def generate(
@@ -88,14 +120,27 @@ async def get_ai_client(
         )
 
     api_key = decrypt_credential(config.encrypted_api_key)
+    model = config.model_name or DEFAULT_MODELS.get(config.provider_type, "")
 
-    if config.provider_type == AIProviderType.CLAUDE:
-        model = config.model_name or DEFAULT_CLAUDE_MODEL
-        return ClaudeClient(api_key=api_key, model=model)
+    if config.provider_type in _ANTHROPIC_SDK_TYPES:
+        return ClaudeClient(
+            api_key=api_key,
+            model=model,
+            provider_type=config.provider_type,
+        )
 
-    if config.provider_type == AIProviderType.OPENAI:
-        model = config.model_name or DEFAULT_OPENAI_MODEL
-        return OpenAIClient(api_key=api_key, model=model)
+    if config.provider_type in _OPENAI_SDK_TYPES:
+        if not model:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No model specified. Please configure a model name for your provider.",
+            )
+        return OpenAIClient(
+            api_key=api_key,
+            model=model,
+            base_url=config.base_url,
+            provider_type=config.provider_type,
+        )
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,

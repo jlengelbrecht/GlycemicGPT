@@ -1,8 +1,11 @@
-"""Story 5.1: AI provider configuration router.
+"""Story 5.1 / 14.2: AI provider configuration router.
 
-API endpoints for configuring AI provider (Claude or OpenAI) with API key management.
+API endpoints for configuring AI provider with API key management.
+Supports 5 provider types: claude_api, openai_api, claude_subscription,
+chatgpt_subscription, and openai_compatible.
 """
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -47,6 +50,7 @@ def _build_response(
         provider_type=config.provider_type,
         status=config.status,
         model_name=config.model_name,
+        base_url=config.base_url,
         masked_api_key=masked_key,
         last_validated_at=config.last_validated_at,
         last_error=config.last_error,
@@ -111,10 +115,13 @@ async def configure_ai_provider(
     Validates the API key, encrypts it, and stores the configuration.
     If a provider is already configured, it is updated.
     """
-    # Validate the API key
-    is_valid, error_message = validate_ai_api_key(
+    # Validate the API key (run in thread to avoid blocking event loop)
+    is_valid, error_message = await asyncio.to_thread(
+        validate_ai_api_key,
         request.provider_type,
         request.api_key,
+        base_url=request.base_url,
+        model_name=request.model_name,
     )
 
     if not is_valid:
@@ -142,6 +149,7 @@ async def configure_ai_provider(
         existing.provider_type = request.provider_type
         existing.encrypted_api_key = encrypt_credential(request.api_key)
         existing.model_name = request.model_name
+        existing.base_url = request.base_url
         existing.status = AIProviderStatus.CONNECTED
         existing.last_validated_at = now
         existing.last_error = None
@@ -154,6 +162,7 @@ async def configure_ai_provider(
             provider_type=request.provider_type,
             encrypted_api_key=encrypt_credential(request.api_key),
             model_name=request.model_name,
+            base_url=request.base_url,
             status=AIProviderStatus.CONNECTED,
             last_validated_at=now,
         )
@@ -243,11 +252,14 @@ async def test_ai_provider(
             detail="No AI provider configured",
         )
 
-    # Decrypt and test the key
+    # Decrypt and test the key (run in thread to avoid blocking event loop)
     decrypted_key = decrypt_credential(config.encrypted_api_key)
-    is_valid, error_message = validate_ai_api_key(
+    is_valid, error_message = await asyncio.to_thread(
+        validate_ai_api_key,
         config.provider_type,
         decrypted_key,
+        base_url=config.base_url,
+        model_name=config.model_name,
     )
 
     now = datetime.now(UTC)

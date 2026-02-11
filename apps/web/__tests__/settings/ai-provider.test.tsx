@@ -1,19 +1,20 @@
 /**
- * Tests for AI Provider Configuration Page (Story 11.1)
+ * Tests for AI Provider Configuration Page (Story 14.3)
  *
  * Verifies:
  * 1. Page renders with heading and back link
  * 2. Loading state shows spinner
- * 3. Not configured: shows setup form with provider selection and API key input
+ * 3. Not configured: shows setup form with 5 provider options in 3 categories
  * 4. Configured: shows current config with status badge, masked key, test/remove buttons
- * 5. Provider selection toggles between Claude and OpenAI
+ * 5. Provider selection across categories
  * 6. API key input has show/hide toggle
- * 7. Save button disabled when API key is empty or offline
- * 8. Save calls configureAIProvider with correct payload
+ * 7. Save button disabled when required fields empty or offline
+ * 8. Save calls configureAIProvider with correct payload including base_url
  * 9. Test Connection calls testAIProvider
  * 10. Remove flow: confirmation dialog, calls deleteAIProvider
  * 11. Error and success banners display correctly
  * 12. Offline state disables all actions
+ * 13. Dynamic form fields based on selected provider
  */
 
 import {
@@ -63,7 +64,7 @@ jest.mock("../../src/lib/api", () => ({
 
 import AIProviderPage from "../../src/app/dashboard/settings/ai-provider/page";
 
-describe("Story 11.1: AI Provider Configuration Page", () => {
+describe("Story 14.3: AI Provider Configuration Page", () => {
   beforeEach(() => {
     mockGetAIProvider.mockReset();
     mockConfigureAIProvider.mockReset();
@@ -120,7 +121,14 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       // Resolve to prevent act warnings
       await act(async () => {
-        resolve!({ provider_type: "claude", status: "connected", masked_api_key: "sk-...xY7z", created_at: "2026-01-01", updated_at: "2026-01-01" });
+        resolve!({
+          provider_type: "claude_api",
+          status: "connected",
+          masked_api_key: "sk-...xY7z",
+          base_url: null,
+          created_at: "2026-01-01",
+          updated_at: "2026-01-01",
+        });
       });
     });
   });
@@ -132,7 +140,22 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       );
     });
 
-    it("shows setup form with provider selection", async () => {
+    it("shows setup form with provider selection categories", async () => {
+      render(<AIProviderPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { name: /set up ai provider/i })
+        ).toBeInTheDocument();
+      });
+
+      // Check for all 3 categories
+      expect(screen.getByText("Subscription Plans")).toBeInTheDocument();
+      expect(screen.getByText("Pay-Per-Token APIs")).toBeInTheDocument();
+      expect(screen.getByText("Self-Hosted")).toBeInTheDocument();
+    });
+
+    it("shows all 5 provider options", async () => {
       render(<AIProviderPage />);
 
       await waitFor(() => {
@@ -142,10 +165,19 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       });
 
       expect(
-        screen.getByRole("button", { name: /select claude/i })
+        screen.getByRole("button", { name: /select claude subscription/i })
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /select openai/i })
+        screen.getByRole("button", { name: /select chatgpt subscription/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /select claude api/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /select openai api/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /select custom openai-compatible/i })
       ).toBeInTheDocument();
     });
 
@@ -154,7 +186,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/glycemicgpt uses your own ai api key/i)
+          screen.getByText(/glycemicgpt uses your own ai/i)
         ).toBeInTheDocument();
       });
     });
@@ -200,7 +232,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       expect(input).toHaveAttribute("type", "password");
     });
 
-    it("shows Save button disabled when API key is empty", async () => {
+    it("shows Save button disabled when API key empty for API provider", async () => {
       render(<AIProviderPage />);
 
       await waitFor(() => {
@@ -209,6 +241,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
         ).toBeInTheDocument();
       });
 
+      // Default provider is claude_api which requires API key
       expect(
         screen.getByRole("button", { name: /save and validate/i })
       ).toBeDisabled();
@@ -232,38 +265,12 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       ).toBeEnabled();
     });
 
-    it("shows optional model name field", async () => {
+    it("shows model name field", async () => {
       render(<AIProviderPage />);
 
       await waitFor(() => {
         expect(screen.getByLabelText(/model name/i)).toBeInTheDocument();
       });
-    });
-
-    it("changes placeholder when switching provider", async () => {
-      render(<AIProviderPage />);
-
-      await waitFor(() => {
-        expect(document.getElementById("api-key")).toBeInTheDocument();
-      });
-
-      // Default is Claude
-      expect(document.getElementById("api-key")!).toHaveAttribute(
-        "placeholder",
-        "Enter your Anthropic API key"
-      );
-
-      // Switch to OpenAI
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole("button", { name: /select openai/i })
-        );
-      });
-
-      expect(document.getElementById("api-key")!).toHaveAttribute(
-        "placeholder",
-        "Enter your OpenAI API key"
-      );
     });
 
     it("does NOT show current configuration section", async () => {
@@ -279,13 +286,70 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
         screen.queryByRole("heading", { name: /current configuration/i })
       ).not.toBeInTheDocument();
     });
+
+    it("shows base URL field when subscription provider is selected", async () => {
+      render(<AIProviderPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { name: /set up ai provider/i })
+        ).toBeInTheDocument();
+      });
+
+      // Default is claude_api - no base URL field
+      expect(document.getElementById("base-url")).not.toBeInTheDocument();
+
+      // Switch to Claude Subscription
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: /select claude subscription/i })
+        );
+      });
+
+      expect(document.getElementById("base-url")).toBeInTheDocument();
+    });
+
+    it("requires base URL for subscription providers", async () => {
+      render(<AIProviderPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { name: /set up ai provider/i })
+        ).toBeInTheDocument();
+      });
+
+      // Switch to Claude Subscription
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: /select claude subscription/i })
+        );
+      });
+
+      // Save button should be disabled without base_url
+      expect(
+        screen.getByRole("button", { name: /save and validate/i })
+      ).toBeDisabled();
+
+      // Enter base URL
+      await act(async () => {
+        fireEvent.change(document.getElementById("base-url")!, {
+          target: { value: "http://localhost:3456/v1" },
+        });
+      });
+
+      // Now enabled (API key not required for subscription providers)
+      expect(
+        screen.getByRole("button", { name: /save and validate/i })
+      ).toBeEnabled();
+    });
   });
 
   describe("when provider IS configured", () => {
     const configuredResponse = {
-      provider_type: "claude" as const,
+      provider_type: "claude_api" as const,
       status: "connected" as const,
       model_name: null,
+      base_url: null,
       masked_api_key: "sk-...xY7z",
       last_validated_at: "2026-01-15T12:00:00Z",
       last_error: null,
@@ -325,7 +389,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       });
 
       // Provider name appears in both config card and selection button
-      const providerElements = screen.getAllByText("Claude (Anthropic)");
+      const providerElements = screen.getAllByText("Claude API (Anthropic)");
       expect(providerElements.length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("sk-...xY7z")).toBeInTheDocument();
     });
@@ -360,7 +424,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       });
     });
 
-    it("shows Update API Key button instead of Save", async () => {
+    it("shows Update button instead of Save", async () => {
       render(<AIProviderPage />);
 
       await waitFor(() => {
@@ -402,6 +466,26 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
         ).toBeInTheDocument();
       });
     });
+
+    it("shows base_url when configured with subscription provider", async () => {
+      mockGetAIProvider.mockResolvedValue({
+        ...configuredResponse,
+        provider_type: "claude_subscription",
+        base_url: "http://localhost:3456/v1",
+      });
+
+      render(<AIProviderPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("http://localhost:3456/v1")
+        ).toBeInTheDocument();
+      });
+
+      // Should show provider label
+      const providerElements = screen.getAllByText("Claude Subscription");
+      expect(providerElements.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe("save flow", () => {
@@ -411,11 +495,12 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       );
     });
 
-    it("calls configureAIProvider with correct payload", async () => {
+    it("calls configureAIProvider with correct payload for API provider", async () => {
       mockConfigureAIProvider.mockResolvedValue({
-        provider_type: "claude",
+        provider_type: "claude_api",
         status: "connected",
         model_name: null,
+        base_url: null,
         masked_api_key: "sk-...test",
         last_validated_at: "2026-01-15T12:00:00Z",
         last_error: null,
@@ -443,18 +528,71 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await waitFor(() => {
         expect(mockConfigureAIProvider).toHaveBeenCalledWith({
-          provider_type: "claude",
+          provider_type: "claude_api",
           api_key: "test-claude-key-456",
           model_name: null,
+          base_url: null,
+        });
+      });
+    });
+
+    it("calls configureAIProvider with base_url for subscription provider", async () => {
+      mockConfigureAIProvider.mockResolvedValue({
+        provider_type: "claude_subscription",
+        status: "connected",
+        model_name: null,
+        base_url: "http://proxy:3456/v1",
+        masked_api_key: "...eded",
+        last_validated_at: "2026-01-15T12:00:00Z",
+        last_error: null,
+        created_at: "2026-01-15T12:00:00Z",
+        updated_at: "2026-01-15T12:00:00Z",
+      });
+
+      render(<AIProviderPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole("heading", { name: /set up ai provider/i })
+        ).toBeInTheDocument();
+      });
+
+      // Select Claude Subscription
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: /select claude subscription/i })
+        );
+      });
+
+      // Enter base URL
+      await act(async () => {
+        fireEvent.change(document.getElementById("base-url")!, {
+          target: { value: "http://proxy:3456/v1" },
+        });
+      });
+
+      await act(async () => {
+        fireEvent.click(
+          screen.getByRole("button", { name: /save and validate/i })
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockConfigureAIProvider).toHaveBeenCalledWith({
+          provider_type: "claude_subscription",
+          api_key: "not-needed",
+          model_name: null,
+          base_url: "http://proxy:3456/v1",
         });
       });
     });
 
     it("shows success message after save", async () => {
       mockConfigureAIProvider.mockResolvedValue({
-        provider_type: "claude",
+        provider_type: "claude_api",
         status: "connected",
         model_name: null,
+        base_url: null,
         masked_api_key: "sk-...myky",
         last_validated_at: "2026-01-15T12:00:00Z",
         last_error: null,
@@ -519,9 +657,10 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
     it("sends model name when provided", async () => {
       mockConfigureAIProvider.mockResolvedValue({
-        provider_type: "openai",
+        provider_type: "openai_api",
         status: "connected",
         model_name: "gpt-4o-mini",
+        base_url: null,
         masked_api_key: "sk-...test",
         last_validated_at: "2026-01-15T12:00:00Z",
         last_error: null,
@@ -535,10 +674,10 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
         expect(document.getElementById("api-key")).toBeInTheDocument();
       });
 
-      // Switch to OpenAI
+      // Switch to OpenAI API
       await act(async () => {
         fireEvent.click(
-          screen.getByRole("button", { name: /select openai/i })
+          screen.getByRole("button", { name: /select openai api/i })
         );
       });
 
@@ -562,9 +701,10 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await waitFor(() => {
         expect(mockConfigureAIProvider).toHaveBeenCalledWith({
-          provider_type: "openai",
+          provider_type: "openai_api",
           api_key: "test-openai-key-789",
           model_name: "gpt-4o-mini",
+          base_url: null,
         });
       });
     });
@@ -573,9 +713,10 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
   describe("test connection flow", () => {
     beforeEach(() => {
       mockGetAIProvider.mockResolvedValue({
-        provider_type: "claude",
+        provider_type: "claude_api",
         status: "connected",
         model_name: null,
+        base_url: null,
         masked_api_key: "sk-...xY7z",
         last_validated_at: "2026-01-15T12:00:00Z",
         last_error: null,
@@ -665,9 +806,10 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
   describe("remove flow", () => {
     beforeEach(() => {
       mockGetAIProvider.mockResolvedValue({
-        provider_type: "claude",
+        provider_type: "claude_api",
         status: "connected",
         model_name: null,
+        base_url: null,
         masked_api_key: "sk-...xY7z",
         last_validated_at: "2026-01-15T12:00:00Z",
         last_error: null,
@@ -868,15 +1010,18 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: /select claude/i })
+          screen.getByRole("button", { name: /select claude api/i })
         ).toBeInTheDocument();
       });
 
       expect(
-        screen.getByRole("button", { name: /select claude/i })
+        screen.getByRole("button", { name: /select claude api/i })
       ).toBeDisabled();
       expect(
-        screen.getByRole("button", { name: /select openai/i })
+        screen.getByRole("button", { name: /select openai api/i })
+      ).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /select claude subscription/i })
       ).toBeDisabled();
     });
 
