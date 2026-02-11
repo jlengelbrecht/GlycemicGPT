@@ -439,8 +439,8 @@ export default function AIProviderPage() {
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder={
                   providerType === "claude"
-                    ? "sk-ant-api03-..."
-                    : "sk-proj-..."
+                    ? "Enter your Anthropic API key"
+                    : "Enter your OpenAI API key"
                 }
                 disabled={isOffline || isSaving}
                 autoComplete="off"

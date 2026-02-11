@@ -223,7 +223,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await act(async () => {
         fireEvent.change(document.getElementById("api-key")!, {
-          target: { value: "sk-ant-api03-test" },
+          target: { value: "test-claude-key-123" },
         });
       });
 
@@ -250,7 +250,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       // Default is Claude
       expect(document.getElementById("api-key")!).toHaveAttribute(
         "placeholder",
-        "sk-ant-api03-..."
+        "Enter your Anthropic API key"
       );
 
       // Switch to OpenAI
@@ -262,7 +262,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       expect(document.getElementById("api-key")!).toHaveAttribute(
         "placeholder",
-        "sk-proj-..."
+        "Enter your OpenAI API key"
       );
     });
 
@@ -431,7 +431,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await act(async () => {
         fireEvent.change(document.getElementById("api-key")!, {
-          target: { value: "sk-ant-api03-mykey" },
+          target: { value: "test-claude-key-456" },
         });
       });
 
@@ -444,7 +444,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       await waitFor(() => {
         expect(mockConfigureAIProvider).toHaveBeenCalledWith({
           provider_type: "claude",
-          api_key: "sk-ant-api03-mykey",
+          api_key: "test-claude-key-456",
           model_name: null,
         });
       });
@@ -470,7 +470,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await act(async () => {
         fireEvent.change(document.getElementById("api-key")!, {
-          target: { value: "sk-ant-api03-mykey" },
+          target: { value: "test-claude-key-456" },
         });
       });
 
@@ -544,7 +544,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
 
       await act(async () => {
         fireEvent.change(document.getElementById("api-key")!, {
-          target: { value: "sk-proj-test" },
+          target: { value: "test-openai-key-789" },
         });
       });
 
@@ -563,7 +563,7 @@ describe("Story 11.1: AI Provider Configuration Page", () => {
       await waitFor(() => {
         expect(mockConfigureAIProvider).toHaveBeenCalledWith({
           provider_type: "openai",
-          api_key: "sk-proj-test",
+          api_key: "test-openai-key-789",
           model_name: "gpt-4o-mini",
         });
       });
