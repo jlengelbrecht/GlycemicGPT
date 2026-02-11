@@ -17,7 +17,7 @@
  * - Logical tab order
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, Clock } from "lucide-react";
 
@@ -25,6 +25,7 @@ import {
   GlucoseHero,
   TimeInRangeBar,
   ConnectionStatusBanner,
+  GlucoseTrendChart,
 } from "@/components/dashboard";
 import { useGlucoseStreamContext, useUserContext } from "@/providers";
 import { getTargetGlucoseRange } from "@/lib/api";
@@ -41,6 +42,20 @@ export default function DashboardPage() {
     error,
     reconnect,
   } = useGlucoseStreamContext();
+
+  // Chart refresh: throttle to once per 5 minutes when new SSE data arrives
+  const [chartRefreshKey, setChartRefreshKey] = useState(0);
+  const lastRefreshRef = useRef(0);
+
+  useEffect(() => {
+    if (glucose?.reading_timestamp) {
+      const now = Date.now();
+      if (now - lastRefreshRef.current > 5 * 60 * 1000) {
+        lastRefreshRef.current = now;
+        setChartRefreshKey((k) => k + 1);
+      }
+    }
+  }, [glucose?.reading_timestamp]);
 
   // Story 9.1: Fetch user's target glucose range
   const [targetRange, setTargetRange] = useState("70-180 mg/dL");
@@ -127,6 +142,9 @@ export default function DashboardPage() {
         cob={cob}
         isLoading={!isLive && !glucose}
       />
+
+      {/* Glucose trend chart */}
+      <GlucoseTrendChart refreshKey={chartRefreshKey} />
 
       {/* Metrics grid with proper heading hierarchy */}
       <section aria-labelledby="metrics-heading">
