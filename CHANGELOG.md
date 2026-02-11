@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.53](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.52...v0.1.53) (2026-02-11)
+
+
+### ✨ Features
+
+* add local dev server testing checklist and smoke tests (Story 13.1) ([#123](https://github.com/jlengelbrecht/GlycemicGPT/issues/123)) ([599efb1](https://github.com/jlengelbrecht/GlycemicGPT/commit/599efb18485fcbe8c8d6a6116d751ce89daef18f))
+
 ## [0.1.52](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.51...v0.1.52) (2026-02-11)
 
 
