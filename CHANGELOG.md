@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.55](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.54...v0.1.55) (2026-02-11)
+
+
+### ✨ Features
+
+* expand AI provider system to support subscriptions and self-hosted models (Epic 14) ([#128](https://github.com/jlengelbrecht/GlycemicGPT/issues/128)) ([b01d790](https://github.com/jlengelbrecht/GlycemicGPT/commit/b01d79041953e19676433ba6cb36e8eeb018a42a))
+
 ## [0.1.54](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.53...v0.1.54) (2026-02-11)
 
 
