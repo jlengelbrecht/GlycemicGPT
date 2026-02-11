@@ -31,12 +31,9 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # Install dependencies using uv
-RUN uv pip install --system --no-cache .
-
-# tconnectsync requires pkg_resources (setuptools) at runtime.
-# uv may not preserve setuptools after build-time resolution, so install
-# it separately with pip and verify pkg_resources is importable.
-RUN pip install --no-cache-dir setuptools && \
+# Verify pkg_resources is importable (required by tconnectsync at runtime,
+# provided by setuptools <82 — removed in 82+)
+RUN uv pip install --system --no-cache . && \
     python -c "import pkg_resources"
 
 # Copy remaining files
