@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.63](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.62...v0.1.63) (2026-02-12)
+
+
+### ✨ Features
+
+* glucose trend chart, IoB pipeline fix, and insulin settings ([#145](https://github.com/jlengelbrecht/GlycemicGPT/issues/145)) ([5cdcbe6](https://github.com/jlengelbrecht/GlycemicGPT/commit/5cdcbe66cc2a92d100619930eff20b69f3fe6c50))
+
 ## [0.1.62](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.61...v0.1.62) (2026-02-11)
 
 
