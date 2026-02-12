@@ -102,6 +102,11 @@ class User(Base, TimestampMixin):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    pump_profiles = relationship(
+        "PumpProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     ai_provider_config = relationship(
         "AIProviderConfig",
         back_populates="user",

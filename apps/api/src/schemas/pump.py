@@ -44,6 +44,7 @@ class TandemSyncResponse(BaseModel):
     message: str
     events_fetched: int
     events_stored: int
+    profiles_stored: int = 0
     last_event: PumpEventResponse | None = None
 
 

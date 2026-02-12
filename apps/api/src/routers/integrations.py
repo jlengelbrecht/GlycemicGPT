@@ -769,6 +769,7 @@ async def sync_tandem_data(
             message="Sync completed successfully",
             events_fetched=result["events_fetched"],
             events_stored=result["events_stored"],
+            profiles_stored=result.get("profiles_stored", 0),
             last_event=last_event,
         )
 
