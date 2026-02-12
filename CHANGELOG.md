@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.71](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.70...v0.1.71) (2026-02-12)
+
+
+### ✨ Features
+
+* enhance AI Chat with comprehensive pump data context (Story 15.7) ([#161](https://github.com/jlengelbrecht/GlycemicGPT/issues/161)) ([de10053](https://github.com/jlengelbrecht/GlycemicGPT/commit/de1005382af02d4037ab9f0264eda8b522f1bc09))
+
 ## [0.1.70](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.69...v0.1.70) (2026-02-12)
 
 
