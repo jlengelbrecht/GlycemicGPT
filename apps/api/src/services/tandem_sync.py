@@ -287,7 +287,7 @@ def _normalize_pump_event(event, _seen_ids: set | None = None) -> dict | None:
     """
     try:
         d = event.todict()
-    except Exception:
+    except (AttributeError, TypeError):
         return None
 
     # tconnectsync uses "id" (string) for the event type ID
@@ -422,10 +422,12 @@ def fetch_with_retry(
         if not device_id:
             continue
 
+        serial = pump_info.get("serialNumber", "")
+        redacted_serial = f"***{serial[-4:]}" if len(serial) >= 4 else "***"
         logger.info(
             "Fetching events for pump",
             device_id=device_id,
-            serial=pump_info.get("serialNumber"),
+            serial=redacted_serial,
             min_date=min_date_str,
             max_date=max_date_str,
         )

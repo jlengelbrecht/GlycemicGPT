@@ -183,9 +183,12 @@ export function GlucoseTrendChart({
   // Y-axis domain: show reasonable range, expand to fit data
   const yDomain = useMemo(() => {
     if (data.length === 0) return [40, 300];
-    const values = data.map((d) => d.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    let min = data[0].value;
+    let max = data[0].value;
+    for (const d of data) {
+      if (d.value < min) min = d.value;
+      if (d.value > max) max = d.value;
+    }
     return [Math.min(40, min - 10), Math.max(300, max + 10)];
   }, [data]);
 

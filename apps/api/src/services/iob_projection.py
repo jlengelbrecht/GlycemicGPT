@@ -170,18 +170,21 @@ def project_iob(
 async def get_last_iob(
     db: AsyncSession,
     user_id: uuid.UUID,
-    max_hours: int = 4,
+    max_hours: float | None = None,
 ) -> tuple[float | None, datetime | None]:
     """Get the most recent IoB value for a user.
 
     Args:
         db: Database session
         user_id: User ID to query
-        max_hours: Maximum age of IoB reading to consider
+        max_hours: Maximum age of IoB reading to consider.
+                   Defaults to the user's configured DIA (up to 8h).
 
     Returns:
         Tuple of (iob_value, timestamp) or (None, None) if no data
     """
+    if max_hours is None:
+        max_hours = await get_user_dia(db, user_id)
     cutoff = datetime.now(UTC) - timedelta(hours=max_hours)
 
     result = await db.execute(

@@ -27,6 +27,8 @@ import {
 } from "@/lib/api";
 import { OfflineBanner } from "@/components/ui/offline-banner";
 
+type SavedConfig = Pick<InsulinConfigResponse, "insulin_type" | "dia_hours" | "onset_minutes">;
+
 const DEFAULTS = {
   insulin_type: "humalog",
   dia_hours: 4.0,
@@ -52,7 +54,7 @@ const INSULIN_LABELS: Record<string, string> = {
 };
 
 export default function InsulinConfigPage() {
-  const [config, setConfig] = useState<InsulinConfigResponse | null>(null);
+  const [config, setConfig] = useState<SavedConfig | null>(null);
   const [presets, setPresets] = useState<InsulinPresets>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export default function InsulinConfigPage() {
         insulin_type: DEFAULTS.insulin_type,
         dia_hours: DEFAULTS.dia_hours,
         onset_minutes: DEFAULTS.onset_minutes,
-      } as InsulinConfigResponse);
+      });
     } finally {
       setIsLoading(false);
     }

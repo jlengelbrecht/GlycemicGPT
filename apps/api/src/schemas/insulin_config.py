@@ -3,7 +3,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Allowed insulin type values
+VALID_INSULIN_TYPES = {"humalog", "novolog", "fiasp", "lyumjev", "apidra", "custom"}
 
 # Preset insulin types with their default DIA and onset values
 INSULIN_PRESETS: dict[str, dict[str, float]] = {
@@ -33,6 +36,8 @@ class InsulinConfigUpdate(BaseModel):
     All fields are optional -- only provided fields are updated.
     """
 
+    model_config = {"extra": "forbid"}
+
     insulin_type: str | None = Field(
         default=None,
         max_length=50,
@@ -50,6 +55,16 @@ class InsulinConfigUpdate(BaseModel):
         le=60.0,
         description="Insulin onset time in minutes. Range: 1-60.",
     )
+
+    @field_validator("insulin_type")
+    @classmethod
+    def validate_insulin_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_INSULIN_TYPES:
+            raise ValueError(
+                f"Invalid insulin type '{v}'. "
+                f"Must be one of: {', '.join(sorted(VALID_INSULIN_TYPES))}"
+            )
+        return v
 
 
 class InsulinConfigDefaults(BaseModel):
