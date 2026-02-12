@@ -626,6 +626,29 @@ class TestAIClientFactory:
 
         assert client.model == "claude-opus-4-6"
 
+    async def test_factory_uses_placeholder_key_when_encrypted_api_key_is_none(self):
+        """Test factory uses 'sidecar-managed' placeholder when encrypted_api_key is None."""
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type=AIProviderType.CLAUDE_SUBSCRIPTION,
+            encrypted_api_key=None,
+            model_name=None,
+            base_url="http://ai-sidecar:3456/v1",
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        client = await get_ai_client(mock_user, mock_db)
+
+        assert isinstance(client, OpenAIClient)
+        assert client._api_key == "sidecar-managed"
+        assert client._base_url == "http://ai-sidecar:3456/v1"
+
     async def test_factory_raises_400_on_unsupported_provider(self):
         """Test factory raises HTTPException 400 for unsupported provider type."""
         from fastapi import HTTPException
