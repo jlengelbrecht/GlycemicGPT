@@ -26,5 +26,8 @@ Thumbs.db
 # Kotlin
 *.class
 
+# Nix shell Gradle home
+.gradle-home/
+
 # Test outputs
 app/src/androidTest/outputs/
