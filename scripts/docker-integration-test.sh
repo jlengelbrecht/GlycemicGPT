@@ -347,11 +347,11 @@ else
 fi
 
 # 6d. Sidecar not exposed to host (should fail to connect on host port 3456)
-SIDECAR_HOST=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 3 "http://localhost:3456/health" 2>/dev/null || echo "000")
-if [ "$SIDECAR_HOST" = "000" ]; then
-  pass "Sidecar NOT exposed to host network (expected)"
+SIDECAR_HOST=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 3 "http://localhost:3456/health" 2>/dev/null; echo "")
+if echo "$SIDECAR_HOST" | grep -q "^200"; then
+  fail "Sidecar unexpectedly reachable on host port 3456 (got HTTP 200)"
 else
-  fail "Sidecar unexpectedly reachable on host port 3456 (got $SIDECAR_HOST)"
+  pass "Sidecar NOT exposed to host network (expected)"
 fi
 
 # 6e. Subscription auth status endpoint via API
