@@ -86,7 +86,11 @@ class TestBuildGlucoseContext:
     """Tests for _build_glucose_context."""
 
     @pytest.mark.asyncio
-    @patch("src.services.telegram_chat.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.services.telegram_chat.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.services.telegram_chat.get_iob_projection", new_callable=AsyncMock)
     async def test_with_readings_and_iob(self, mock_iob, mock_dia):
         mock_iob.return_value = make_iob(projected_iob=2.5)
@@ -113,7 +117,11 @@ class TestBuildGlucoseContext:
         assert "Readings: 3" in context
 
     @pytest.mark.asyncio
-    @patch("src.services.telegram_chat.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.services.telegram_chat.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.services.telegram_chat.get_iob_projection", new_callable=AsyncMock)
     async def test_no_readings(self, mock_iob, mock_dia):
         mock_scalars = MagicMock()
@@ -129,7 +137,11 @@ class TestBuildGlucoseContext:
         mock_iob.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("src.services.telegram_chat.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.services.telegram_chat.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.services.telegram_chat.get_iob_projection", new_callable=AsyncMock)
     async def test_stale_iob_shows_warning(self, mock_iob, mock_dia):
         mock_iob.return_value = make_iob(is_stale=True)
@@ -147,7 +159,11 @@ class TestBuildGlucoseContext:
         assert "stale" in context.lower()
 
     @pytest.mark.asyncio
-    @patch("src.services.telegram_chat.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.services.telegram_chat.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.services.telegram_chat.get_iob_projection", new_callable=AsyncMock)
     async def test_no_iob_data(self, mock_iob, mock_dia):
         mock_iob.return_value = None

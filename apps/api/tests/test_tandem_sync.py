@@ -762,12 +762,14 @@ class TestNormalizePumpEvent:
         """Event ID 16 (LidBgReadingTaken) should extract IoB."""
         import arrow
 
-        event = self._make_event({
-            "id": "16",
-            "eventTimestamp": arrow.now(),
-            "IOB": "6.14",
-            "BG": "257",
-        })
+        event = self._make_event(
+            {
+                "id": "16",
+                "eventTimestamp": arrow.now(),
+                "IOB": "6.14",
+                "BG": "257",
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is not None
         assert result["type"] == "bg_reading"
@@ -778,11 +780,13 @@ class TestNormalizePumpEvent:
         """Event ID 20 (LidBolusCompleted) should extract units."""
         import arrow
 
-        event = self._make_event({
-            "id": "20",
-            "eventTimestamp": arrow.now(),
-            "InsulinDelivered": "3.5",
-        })
+        event = self._make_event(
+            {
+                "id": "20",
+                "eventTimestamp": arrow.now(),
+                "InsulinDelivered": "3.5",
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is not None
         assert result["type"] == "bolus"
@@ -792,11 +796,13 @@ class TestNormalizePumpEvent:
         """Event ID 280 (LidBolusDelivery) should extract units."""
         import arrow
 
-        event = self._make_event({
-            "id": "280",
-            "eventTimestamp": arrow.now(),
-            "insulindelivered": "2.0",
-        })
+        event = self._make_event(
+            {
+                "id": "280",
+                "eventTimestamp": arrow.now(),
+                "insulindelivered": "2.0",
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is not None
         assert result["type"] == "bolus"
@@ -806,18 +812,22 @@ class TestNormalizePumpEvent:
         """Unmapped event IDs should return None."""
         import arrow
 
-        event = self._make_event({
-            "id": "999",
-            "eventTimestamp": arrow.now(),
-        })
+        event = self._make_event(
+            {
+                "id": "999",
+                "eventTimestamp": arrow.now(),
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is None
 
     def test_missing_timestamp_returns_none(self):
         """Events without timestamps should return None."""
-        event = self._make_event({
-            "id": "16",
-        })
+        event = self._make_event(
+            {
+                "id": "16",
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is None
 
@@ -825,10 +835,12 @@ class TestNormalizePumpEvent:
         """Events without IOB field should not have iob key."""
         import arrow
 
-        event = self._make_event({
-            "id": "3",
-            "eventTimestamp": arrow.now(),
-        })
+        event = self._make_event(
+            {
+                "id": "3",
+                "eventTimestamp": arrow.now(),
+            }
+        )
         result = _normalize_pump_event(event)
         assert result is not None
         assert result["type"] == "basal"

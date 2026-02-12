@@ -108,7 +108,9 @@ async def generate_glucose_stream(
                             iob_data = None
                             try:
                                 dia = await get_user_dia(db, user_id)
-                                projection = await get_iob_projection(db, user_id, dia_hours=dia)
+                                projection = await get_iob_projection(
+                                    db, user_id, dia_hours=dia
+                                )
                                 if projection:
                                     iob_data = {
                                         "current": projection.projected_iob,

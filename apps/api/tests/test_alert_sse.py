@@ -52,7 +52,11 @@ class TestAlertDeduplication:
 
     @patch("src.routers.glucose_stream.get_active_alerts")
     @patch("src.routers.glucose_stream.get_latest_glucose_reading")
-    @patch("src.routers.glucose_stream.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.routers.glucose_stream.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.routers.glucose_stream.get_iob_projection")
     @patch("src.routers.glucose_stream.get_db_session")
     async def test_alert_not_sent_twice(
@@ -124,7 +128,11 @@ class TestAlertDeduplication:
 
     @patch("src.routers.glucose_stream.get_active_alerts")
     @patch("src.routers.glucose_stream.get_latest_glucose_reading")
-    @patch("src.routers.glucose_stream.get_user_dia", new_callable=AsyncMock, return_value=4.0)
+    @patch(
+        "src.routers.glucose_stream.get_user_dia",
+        new_callable=AsyncMock,
+        return_value=4.0,
+    )
     @patch("src.routers.glucose_stream.get_iob_projection")
     @patch("src.routers.glucose_stream.get_db_session")
     async def test_no_alert_events_when_no_alerts(
