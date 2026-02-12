@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.69](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.68...v0.1.69) (2026-02-12)
+
+
+### ✨ Features
+
+* refactor AI provider frontend for sidecar subscription UX (Story 15.5) ([#157](https://github.com/jlengelbrecht/GlycemicGPT/issues/157)) ([6e18f39](https://github.com/jlengelbrecht/GlycemicGPT/commit/6e18f391d046c2eba3a1f2657db8038d6fb791c9))
+
 ## [0.1.68](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.67...v0.1.68) (2026-02-12)
 
 
