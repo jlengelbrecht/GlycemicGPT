@@ -1843,6 +1843,7 @@ export interface AIProviderConfigResponse {
   status: AIProviderStatus;
   model_name: string | null;
   base_url: string | null;
+  sidecar_provider: SidecarProviderName | null;
   masked_api_key: string;
   last_validated_at: string | null;
   last_error: string | null;
@@ -1924,6 +1925,38 @@ export async function deleteAIProvider(): Promise<AIProviderDeleteResponse> {
   return response.json();
 }
 
+// ── Story 15.4: Subscription Configure ──
+
+export type SidecarProviderName = "claude" | "codex";
+
+export interface SubscriptionConfigureRequest {
+  sidecar_provider: SidecarProviderName;
+  model_name?: string | null;
+}
+
+export async function configureSubscriptionProvider(
+  request: SubscriptionConfigureRequest
+): Promise<AIProviderConfigResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/configure`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail ||
+        `Failed to configure subscription provider: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
 // ── Story 15.2: Subscription Auth ──
 
 export interface SubscriptionAuthStartResponse {
@@ -1952,7 +1985,7 @@ export interface SidecarHealthResponse {
 }
 
 export async function startSubscriptionAuth(
-  provider: string
+  provider: SidecarProviderName
 ): Promise<SubscriptionAuthStartResponse> {
   const response = await apiFetch(
     `${API_BASE_URL}/api/ai/subscription/auth/start`,
@@ -1974,7 +2007,7 @@ export async function startSubscriptionAuth(
 }
 
 export async function submitSubscriptionToken(
-  provider: string,
+  provider: SidecarProviderName,
   token: string
 ): Promise<SubscriptionAuthTokenResponse> {
   const response = await apiFetch(
@@ -2012,7 +2045,7 @@ export async function getSubscriptionAuthStatus(): Promise<SubscriptionAuthStatu
 }
 
 export async function revokeSubscriptionAuth(
-  provider: string
+  provider: SidecarProviderName
 ): Promise<void> {
   const response = await apiFetch(
     `${API_BASE_URL}/api/ai/subscription/auth/revoke`,

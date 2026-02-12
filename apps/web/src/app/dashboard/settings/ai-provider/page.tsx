@@ -31,6 +31,7 @@ import {
 import {
   getAIProvider,
   configureAIProvider,
+  configureSubscriptionProvider,
   testAIProvider,
   deleteAIProvider,
   startSubscriptionAuth,
@@ -41,6 +42,7 @@ import {
   type AIProviderConfigResponse,
   type AIProviderType,
   type AIProviderStatus,
+  type SidecarProviderName,
   type SubscriptionAuthStatusResponse,
   type SidecarHealthResponse,
 } from "@/lib/api";
@@ -62,7 +64,7 @@ interface ProviderOption {
 }
 
 // Mapping from frontend provider type to sidecar provider name
-const SUBSCRIPTION_SIDECAR_MAP: Record<string, string> = {
+const SUBSCRIPTION_SIDECAR_MAP: Record<string, SidecarProviderName> = {
   claude_subscription: "claude",
   chatgpt_subscription: "codex",
 };
@@ -176,13 +178,16 @@ export default function AIProviderPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Subscription auth state (Story 15.2)
+  // Subscription auth state (Story 15.2 / 15.5)
   const [subscriptionToken, setSubscriptionToken] = useState("");
   const [isSubmittingToken, setIsSubmittingToken] = useState(false);
   const [sidecarHealth, setSidecarHealth] = useState<SidecarHealthResponse | null>(null);
   const [subscriptionAuth, setSubscriptionAuth] = useState<SubscriptionAuthStatusResponse | null>(null);
   const [authInstructions, setAuthInstructions] = useState<string | null>(null);
   const [isRevokingAuth, setIsRevokingAuth] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [isConfiguringSubscription, setIsConfiguringSubscription] = useState(false);
+  const [isStartingAuth, setIsStartingAuth] = useState(false);
 
   const selectedProvider =
     ALL_PROVIDERS.find((p) => p.value === providerType) || API_PROVIDERS[0];
@@ -198,6 +203,10 @@ export default function AIProviderPage() {
     setModelName("");
     setSubscriptionToken("");
     setAuthInstructions(null);
+    // Clear stale messages from previous provider context
+    setError(null);
+    setSuccess(null);
+    setConfirmRevoke(false);
   };
 
   // Auto-clear success message
@@ -255,6 +264,7 @@ export default function AIProviderPage() {
 
   const handleStartAuth = async () => {
     if (!sidecarProvider) return;
+    setIsStartingAuth(true);
     setError(null);
     try {
       const result = await startSubscriptionAuth(sidecarProvider);
@@ -263,6 +273,8 @@ export default function AIProviderPage() {
       setError(
         err instanceof Error ? err.message : "Failed to start auth flow"
       );
+    } finally {
+      setIsStartingAuth(false);
     }
   };
 
@@ -275,14 +287,54 @@ export default function AIProviderPage() {
       await submitSubscriptionToken(sidecarProvider, subscriptionToken.trim());
       setSubscriptionToken("");
       setAuthInstructions(null);
-      setSuccess("Token accepted. Provider connected via sidecar.");
       await fetchSubscriptionStatus();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to submit token"
       );
+      setIsSubmittingToken(false);
+      return;
+    }
+
+    // Auto-configure the provider in the DB via the sidecar endpoint
+    try {
+      const result = await configureSubscriptionProvider({
+        sidecar_provider: sidecarProvider,
+        model_name: modelName.trim() || null,
+      });
+      setConfig(result);
+      setSuccess("Token accepted and provider configured via sidecar.");
+    } catch (err) {
+      // Token was accepted but DB configuration failed
+      setSuccess("Token accepted.");
+      setError(
+        err instanceof Error
+          ? `Provider configuration failed: ${err.message}`
+          : "Token accepted, but failed to save provider configuration. Click 'Save Configuration' to retry."
+      );
     } finally {
       setIsSubmittingToken(false);
+    }
+  };
+
+  const handleConfigureSubscription = async () => {
+    if (!sidecarProvider) return;
+    setIsConfiguringSubscription(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await configureSubscriptionProvider({
+        sidecar_provider: sidecarProvider,
+        model_name: modelName.trim() || null,
+      });
+      setConfig(result);
+      setSuccess("Subscription provider configured successfully.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to configure subscription provider"
+      );
+    } finally {
+      setIsConfiguringSubscription(false);
     }
   };
 
@@ -290,14 +342,36 @@ export default function AIProviderPage() {
     if (!sidecarProvider) return;
     setIsRevokingAuth(true);
     setError(null);
+    setSuccess(null);
+    let configRemovalFailed = false;
     try {
       await revokeSubscriptionAuth(sidecarProvider);
-      setSuccess("Subscription auth revoked.");
+      // Also remove the DB config since the sidecar auth is gone
+      if (config?.sidecar_provider === sidecarProvider) {
+        try {
+          await deleteAIProvider();
+        } catch {
+          configRemovalFailed = true;
+        }
+        setConfig(null);
+      }
+      if (configRemovalFailed) {
+        setSuccess("Sidecar auth revoked.");
+        setError("Failed to remove provider configuration. Use 'Remove AI Provider' to clean up.");
+      } else {
+        setSuccess("Subscription auth revoked and provider removed.");
+      }
+      // Clear form state
+      setModelName("");
+      setSubscriptionToken("");
+      setAuthInstructions(null);
+      setConfirmRevoke(false);
       await fetchSubscriptionStatus();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to revoke auth"
       );
+      setConfirmRevoke(false);
     } finally {
       setIsRevokingAuth(false);
     }
@@ -376,8 +450,12 @@ export default function AIProviderPage() {
       setApiKey("");
       setModelName("");
       setBaseUrl("");
+      setSubscriptionToken("");
+      setAuthInstructions(null);
       setProviderType("claude_api");
       setSuccess("AI provider configuration removed");
+      // Refresh sidecar auth state (backend revokes sidecar auth on delete)
+      await fetchSubscriptionStatus().catch(() => {});
     } catch (err) {
       setConfirmDelete(false);
       setError(
@@ -397,10 +475,6 @@ export default function AIProviderPage() {
     if (selectedProvider.requiresApiKey && !apiKey.trim()) return false;
     if (selectedProvider.requiresBaseUrl && !baseUrl.trim()) return false;
     if (selectedProvider.requiresModelName && !modelName.trim()) return false;
-    // For non-required API key providers, we still need at least something
-    if (!selectedProvider.requiresApiKey && !apiKey.trim()) {
-      // That's fine, we'll default to "not-needed"
-    }
     return true;
   })();
 
@@ -502,12 +576,22 @@ export default function AIProviderPage() {
                 {PROVIDER_LABELS[config.provider_type] || config.provider_type}
               </span>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">API Key</span>
-              <span className="text-white font-mono text-xs">
-                {config.masked_api_key}
-              </span>
-            </div>
+            {config.sidecar_provider ? (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Authentication</span>
+                <span className="text-green-400 text-xs flex items-center gap-1">
+                  <Wifi className="h-3 w-3" />
+                  Managed by sidecar
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">API Key</span>
+                <span className="text-white font-mono text-xs">
+                  {config.masked_api_key}
+                </span>
+              </div>
+            )}
             {config.base_url && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-400">Base URL</span>
@@ -746,33 +830,93 @@ export default function AIProviderPage() {
                   )}
                 </div>
 
+                {/* Optional model name for subscription providers (always visible) */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="sub-model-name"
+                    className="block text-sm font-medium text-slate-300"
+                  >
+                    Model Name{" "}
+                    <span className="text-slate-500 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    id="sub-model-name"
+                    type="text"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder={selectedProvider.modelPlaceholder}
+                    disabled={isOffline || isConfiguringSubscription || isSubmittingToken}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Leave blank to use the default model.
+                  </p>
+                </div>
+
                 {/* Current auth status for this provider */}
                 {subscriptionAuth?.sidecar_available && sidecarProvider && (() => {
                   const providerAuth = sidecarProvider === "claude"
                     ? subscriptionAuth.claude
                     : subscriptionAuth.codex;
                   const isAuthed = providerAuth?.authenticated === true;
+                  // Check if DB config already matches this sidecar provider
+                  const isAlreadyConfigured = config?.sidecar_provider === sidecarProvider;
 
                   if (isAuthed) {
                     return (
-                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="h-5 w-5 text-green-400" />
-                          <span className="text-green-400 font-medium text-sm">
-                            {sidecarProvider === "claude" ? "Claude" : "ChatGPT"} subscription connected via sidecar
-                          </span>
-                        </div>
-                        <button
-                          onClick={handleRevokeAuth}
-                          disabled={isRevokingAuth || isOffline}
-                          className="text-red-400 hover:text-red-300 disabled:opacity-50 text-sm transition-colors flex items-center gap-1"
-                        >
-                          {isRevokingAuth ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <div className="space-y-4">
+                        <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-400" />
+                            <span className="text-green-400 font-medium text-sm">
+                              {sidecarProvider === "claude" ? "Claude" : "ChatGPT"} subscription connected via sidecar
+                            </span>
+                          </div>
+                          {!confirmRevoke ? (
+                            <button
+                              onClick={() => setConfirmRevoke(true)}
+                              disabled={isRevokingAuth || isOffline}
+                              className="text-red-400 hover:text-red-300 disabled:opacity-50 text-sm transition-colors flex items-center gap-1"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Sign out
+                            </button>
                           ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-red-400">This will remove your auth token and provider config.</span>
+                              <button
+                                onClick={handleRevokeAuth}
+                                disabled={isRevokingAuth || isOffline}
+                                className="text-red-400 hover:text-red-300 disabled:opacity-50 text-xs font-medium transition-colors flex items-center gap-1"
+                              >
+                                {isRevokingAuth ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  "Confirm"
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setConfirmRevoke(false)}
+                                className="text-slate-400 hover:text-white text-xs transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           )}
-                          Sign out
+                        </div>
+
+                        {/* Save/Update configuration button */}
+                        <button
+                          onClick={handleConfigureSubscription}
+                          disabled={isOffline || isConfiguringSubscription}
+                          className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {isConfiguringSubscription ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          {isAlreadyConfigured ? "Update Configuration" : "Save Configuration"}
                         </button>
                       </div>
                     );
@@ -790,10 +934,14 @@ export default function AIProviderPage() {
                     {!authInstructions ? (
                       <button
                         onClick={handleStartAuth}
-                        disabled={isOffline || !sidecarHealth?.available}
+                        disabled={isOffline || isStartingAuth || !sidecarHealth?.available}
                         className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
                       >
-                        <Key className="h-4 w-4" />
+                        {isStartingAuth ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Key className="h-4 w-4" />
+                        )}
                         Sign in with {sidecarProvider === "claude" ? "Claude" : "ChatGPT"}
                       </button>
                     ) : (
@@ -819,6 +967,7 @@ export default function AIProviderPage() {
                             disabled={isOffline || isSubmittingToken}
                             autoComplete="off"
                             spellCheck={false}
+                            maxLength={5000}
                             rows={3}
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-xs resize-vertical"
                           />
