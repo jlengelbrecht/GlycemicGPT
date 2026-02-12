@@ -1,6 +1,6 @@
 # GlycemicGPT Implementation Progress
 
-> Last Updated: 2026-02-11
+> Last Updated: 2026-02-12
 
 ## Summary
 
@@ -19,14 +19,16 @@
 | 11 | AI Configuration & Chat Interface | 3/3 | **Complete** |
 | 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 3/3 | **Complete** |
-| 14 | Expanded AI Provider Support | 0/4 | **In Progress** |
-| 15 | Frontend Auth UI & Route Protection | 6/8 | **In Progress** |
+| 14 | Expanded AI Provider Support | 4/4 | **Complete** |
+| 15 | Frontend Auth UI & Route Protection | 8/8 | **Complete** |
+| 16 | Android Mobile App with BLE Pump Connectivity | 0/12 | Planning |
 
 **MVP Stories:** 54/54 complete (100%)
 **Post-MVP Fix Stories:** 13/13 complete (100%)
-**Epic 14 (AI Provider Expansion):** 0/4 in progress
-**Epic 15 (Frontend Auth UI):** 6/8 in progress
-**Overall Progress:** 73/79 stories complete (92%)
+**Epic 14 (AI Provider Expansion):** 4/4 complete
+**Epic 15 (Frontend Auth UI):** 8/8 complete
+**Epic 16 (Mobile App + BLE):** 0/12 planned
+**Overall Progress:** 79/91 stories complete (87%)
 
 ---
 
@@ -183,16 +185,18 @@
 
 ## Current Sprint Focus
 
-**Post-MVP Fixes** - IN PROGRESS
+**Epic 16: Android Mobile App with BLE Pump Connectivity** - PLANNING
 
-Next up (recommended order):
-1. Story 10.1: Fix Save Changes button (unblocks all settings work)
-2. Stories 10.2, 10.3, 12.1, 12.4 in parallel (missing pages + offline UX)
-3. Stories 11.1, 12.2, 12.3 (AI config + communications hub)
-4. Stories 11.2, 11.3 (AI chat + brief delivery)
-5. Stories 13.1, 13.2, 13.3 (testing + real data)
+Critical path (stories 16.1-16.5):
+1. Story 16.1: Android project scaffolding & build config
+2. Story 16.2: BLE connection manager & pump pairing
+3. Story 16.3: PumpDriver interface & Tandem BLE implementation
+4. Story 16.4: Real-time data polling & local storage
+5. Story 16.5: Backend sync -- push real-time data to API
 
-Full epic details: [mvp-fix-epics.md](planning-artifacts/mvp-fix-epics.md)
+Parallel after 16.5: Stories 16.6-16.12 (cloud upload, UI, watch, TTS, caregivers, security)
+
+Full epic details: [epic-16-mobile-app-ble.md](planning-artifacts/epic-16-mobile-app-ble.md)
 
 ---
 
@@ -275,10 +279,10 @@ All 5 stories completed:
 
 **Epic Details:** [epic-14-expanded-ai-providers.md](planning-artifacts/epic-14-expanded-ai-providers.md)
 
-- [ ] Story 14.1: Database Migration for Expanded Provider Types
-- [ ] Story 14.2: Backend Support for 5 Provider Types
-- [ ] Story 14.3: Frontend AI Provider Page Redesign
-- [ ] Story 14.4: Tests for Expanded Provider System
+- [x] Story 14.1: Database Migration for Expanded Provider Types - [PR #128](https://github.com/jlengelbrecht/GlycemicGPT/pull/128)
+- [x] Story 14.2: Backend Support for 5 Provider Types - [PR #128](https://github.com/jlengelbrecht/GlycemicGPT/pull/128)
+- [x] Story 14.3: Frontend AI Provider Page Redesign - [PR #128](https://github.com/jlengelbrecht/GlycemicGPT/pull/128)
+- [x] Story 14.4: Tests for Expanded Provider System - [PR #128](https://github.com/jlengelbrecht/GlycemicGPT/pull/128)
 
 ---
 
@@ -294,5 +298,26 @@ All 5 stories completed:
 - [x] Story 15.4: Logout, Auth State & Global 401 Handling - [PR #153](https://github.com/jlengelbrecht/GlycemicGPT/pull/153)
 - [x] Story 15.5: Post-Login Disclaimer Enforcement - [PR #157](https://github.com/jlengelbrecht/GlycemicGPT/pull/157)
 - [x] Story 15.6: Landing Page & Auth Navigation Polish (implemented in prior stories)
-- [ ] Story 15.7: Enhance AI Chat with Comprehensive Pump Data Context
-- [ ] Story 15.8: Sync Pump Settings & Therapy Data from Tandem APIs
+- [x] Story 15.7: Enhance AI Chat with Comprehensive Pump Data Context - [PR #161](https://github.com/jlengelbrecht/GlycemicGPT/pull/161)
+- [x] Story 15.8: Sync Pump Settings & Therapy Data from Tandem APIs - [PR #163](https://github.com/jlengelbrecht/GlycemicGPT/pull/163)
+
+---
+
+## Epic 16: Android Mobile App with BLE Pump Connectivity
+
+**Goal:** Build an Android app that connects to the Tandem t:slim X2 pump via BLE for real-time data (IoB, basal, BG), uploads to Tandem cloud at 5-15 min intervals, syncs to GlycemicGPT backend in real-time, and includes a Wear OS watch face, TTS voice AI chat, and native caregiver push notifications. READ-ONLY pump access only -- no insulin delivery or pump control.
+
+**Epic Details:** [epic-16-mobile-app-ble.md](planning-artifacts/epic-16-mobile-app-ble.md)
+
+- [ ] Story 16.1: Android Project Scaffolding & Build Configuration
+- [ ] Story 16.2: BLE Connection Manager & Pump Pairing
+- [ ] Story 16.3: PumpDriver Interface & Tandem BLE Implementation
+- [ ] Story 16.4: Real-Time Data Polling & Local Storage
+- [ ] Story 16.5: Backend Sync -- Push Real-Time Data to GlycemicGPT API
+- [ ] Story 16.6: Tandem Cloud Upload at Faster Intervals
+- [ ] Story 16.7: App Home Screen & Pump Status Dashboard
+- [ ] Story 16.8: App Settings & Configuration
+- [ ] Story 16.9: Wear OS Watch Face Companion
+- [ ] Story 16.10: TTS/STT Voice AI Chat
+- [ ] Story 16.11: Caregiver & Emergency Contact Push Notifications
+- [ ] Story 16.12: Security Hardening & Backend Exposure
