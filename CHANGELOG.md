@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.67](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.66...v0.1.67) (2026-02-12)
+
+
+### ✨ Features
+
+* add sidecar_provider column and make encrypted_api_key nullable (Story 15.7) ([#153](https://github.com/jlengelbrecht/GlycemicGPT/issues/153)) ([f223552](https://github.com/jlengelbrecht/GlycemicGPT/commit/f2235525371ead14826009e2393be8cc3171d501))
+
 ## [0.1.66](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.65...v0.1.66) (2026-02-12)
 
 
