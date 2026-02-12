@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.72](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.71...v0.1.72) (2026-02-12)
+
+
+### ✨ Features
+
+* sync pump settings profiles from Tandem API (Story 15.8) ([#163](https://github.com/jlengelbrecht/GlycemicGPT/issues/163)) ([f3a49a4](https://github.com/jlengelbrecht/GlycemicGPT/commit/f3a49a4027d7e8f6cd92b73b098d615c9840751f))
+
 ## [0.1.71](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.70...v0.1.71) (2026-02-12)
 
 
