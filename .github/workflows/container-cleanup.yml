@@ -35,12 +35,25 @@ jobs:
           delete-only-untagged-versions: false
           ignore-versions: '^(latest|\\d+\\.\\d+\\.\\d+|\\d+\\.\\d+)$'
 
+  cleanup-sidecar:
+    name: Cleanup Sidecar Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old Sidecar image versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: glycemicgpt-sidecar
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          ignore-versions: '^(latest|\\d+\\.\\d+\\.\\d+|\\d+\\.\\d+)$'
+
   cleanup-untagged:
     name: Cleanup Untagged Images
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [glycemicgpt-api, glycemicgpt-web]
+        package: [glycemicgpt-api, glycemicgpt-web, glycemicgpt-sidecar]
     steps:
       - name: Delete untagged versions
         uses: actions/delete-package-versions@v5

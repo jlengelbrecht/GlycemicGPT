@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
+      - 'sidecar/**'
       - 'docker-compose.yml'
       - 'docker-compose.test.yml'
       - 'scripts/docker-integration-test.sh'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
+      - 'sidecar/**'
       - 'docker-compose.yml'
       - 'docker-compose.test.yml'
       - 'scripts/docker-integration-test.sh'
