@@ -35,7 +35,7 @@ describe("ClaudeProvider", () => {
   });
 
   it("reports authenticated when env token is set", async () => {
-    process.env.CLAUDE_CODE_OAUTH_TOKEN = "sk-ant-oat01-test";
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "test-claude-token-dummy";
     const { ClaudeProvider } = await import("../src/providers/claude.js");
     const provider = new ClaudeProvider();
     const state = await provider.checkAuth();
@@ -44,7 +44,7 @@ describe("ClaudeProvider", () => {
 
   it("reports authenticated when token file exists", async () => {
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    writeFileSync(join(tempDir, "claude_token"), "sk-ant-oat01-file-token");
+    writeFileSync(join(tempDir, "claude_token"), "test-claude-file-token-dummy");
     const { ClaudeProvider } = await import("../src/providers/claude.js");
     const provider = new ClaudeProvider();
     const state = await provider.checkAuth();
@@ -91,7 +91,7 @@ describe("CodexProvider", () => {
   });
 
   it("reports authenticated when OPENAI_API_KEY is set", async () => {
-    process.env.OPENAI_API_KEY = "sk-test-key";
+    process.env.OPENAI_API_KEY = "test-openai-key-dummy";
     const { CodexProvider } = await import("../src/providers/codex.js");
     const provider = new CodexProvider();
     const state = await provider.checkAuth();
@@ -102,7 +102,7 @@ describe("CodexProvider", () => {
     delete process.env.OPENAI_API_KEY;
     writeFileSync(
       join(tempDir, "auth.json"),
-      JSON.stringify({ accessToken: "sk-test", expiresAt: 9999999999 }),
+      JSON.stringify({ accessToken: "test-codex-token-dummy", expiresAt: 9999999999 }),
     );
     const { CodexProvider } = await import("../src/providers/codex.js");
     const provider = new CodexProvider();
@@ -114,7 +114,7 @@ describe("CodexProvider", () => {
     delete process.env.OPENAI_API_KEY;
     writeFileSync(
       join(tempDir, "auth.json"),
-      JSON.stringify({ accessToken: "sk-test", expiresAt: 1000000000 }),
+      JSON.stringify({ accessToken: "test-codex-token-dummy", expiresAt: 1000000000 }),
     );
     const { CodexProvider } = await import("../src/providers/codex.js");
     const provider = new CodexProvider();

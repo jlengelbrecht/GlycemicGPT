@@ -57,7 +57,7 @@ describe("token-store", () => {
       "../src/auth/token-store.js"
     );
 
-    const auth = { accessToken: "sk-test", expiresAt: 9999999999 };
+    const auth = { accessToken: "test-codex-token-dummy", expiresAt: 9999999999 };
     storeCodexAuth(auth);
 
     const stored = readCodexAuth();
@@ -69,7 +69,7 @@ describe("token-store", () => {
       "../src/auth/token-store.js"
     );
 
-    storeCodexAuth({ accessToken: "sk-test" });
+    storeCodexAuth({ accessToken: "test-codex-token-dummy" });
     expect(readCodexAuth()).toBeTruthy();
 
     revokeCodexAuth();
