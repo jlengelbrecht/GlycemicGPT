@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.70](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.69...v0.1.70) (2026-02-12)
+
+
+### 🐛 Bug Fixes
+
+* install Claude/Codex CLIs in sidecar and fix CLI invocation flags ([#159](https://github.com/jlengelbrecht/GlycemicGPT/issues/159)) ([df88e01](https://github.com/jlengelbrecht/GlycemicGPT/commit/df88e01ed491762add29eedf5f9d4bdea2221ff7))
+
 ## [0.1.69](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.68...v0.1.69) (2026-02-12)
 
 
