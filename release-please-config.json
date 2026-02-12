@@ -18,7 +18,8 @@
       "pull-request-header": "🤖 I have created a release",
       "extra-files": [
         "apps/api/pyproject.toml",
-        "apps/web/package.json"
+        "apps/web/package.json",
+        "sidecar/package.json"
       ]
     }
   },
