@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.66](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.65...v0.1.66) (2026-02-12)
+
+
+### ✨ Features
+
+* add ai-sidecar to docker compose for all environments (Story 15.3) ([#151](https://github.com/jlengelbrecht/GlycemicGPT/issues/151)) ([b1fc695](https://github.com/jlengelbrecht/GlycemicGPT/commit/b1fc69591d33e77defee0b252dbecfcbb0b1146e))
+
 ## [0.1.65](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.64...v0.1.65) (2026-02-12)
 
 
