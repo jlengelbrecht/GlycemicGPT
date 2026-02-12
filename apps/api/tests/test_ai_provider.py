@@ -611,6 +611,152 @@ class TestAIProviderConfiguration:
         assert data["base_url"] is None
 
 
+class TestSidecarNullSafety:
+    """Tests for null encrypted_api_key handling (sidecar-managed providers)."""
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_get_provider_with_null_api_key_returns_sidecar_managed(
+        self, mock_validate
+    ):
+        """Test GET /provider returns 'sidecar-managed' when encrypted_api_key is NULL."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure a subscription provider (this sets encrypted_api_key)
+            await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Now NULL out the encrypted_api_key to simulate sidecar OAuth
+            from src.database import get_session_maker
+            from src.models.ai_provider import AIProviderConfig
+
+            session_maker = get_session_maker()
+            async with session_maker() as db:
+                from sqlalchemy import update
+
+                await db.execute(
+                    update(AIProviderConfig).values(encrypted_api_key=None)
+                )
+                await db.commit()
+
+            # GET should return sidecar-managed instead of crashing
+            response = await client.get(
+                "/api/ai/provider",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["masked_api_key"] == "sidecar-managed"
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_test_provider_with_null_api_key_returns_sidecar_message(
+        self, mock_validate
+    ):
+        """Test POST /provider/test returns success with sidecar message when key is NULL."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure a subscription provider
+            await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # NULL out the encrypted_api_key to simulate sidecar OAuth
+            from src.database import get_session_maker
+            from src.models.ai_provider import AIProviderConfig
+
+            session_maker = get_session_maker()
+            async with session_maker() as db:
+                from sqlalchemy import update
+
+                await db.execute(
+                    update(AIProviderConfig).values(encrypted_api_key=None)
+                )
+                await db.commit()
+
+            # Test endpoint should not crash
+            response = await client.post(
+                "/api/ai/provider/test",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "sidecar" in data["message"].lower()
+
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_update_provider_clears_sidecar_provider(self, mock_validate):
+        """Test that reconfiguring a provider clears stale sidecar_provider."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure a subscription provider
+            await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_subscription",
+                    "api_key": "not-needed",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Simulate sidecar being active by setting sidecar_provider
+            from src.database import get_session_maker
+            from src.models.ai_provider import AIProviderConfig
+
+            session_maker = get_session_maker()
+            async with session_maker() as db:
+                from sqlalchemy import update
+
+                await db.execute(
+                    update(AIProviderConfig).values(sidecar_provider="claude")
+                )
+                await db.commit()
+
+            # Reconfigure to a direct API provider
+            response = await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_api",
+                    "api_key": "sk-ant-test-switch-provider-1234",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "claude_api"
+        assert data["sidecar_provider"] is None
+
+
 class TestAPIKeyEncryption:
     """Tests for API key encryption roundtrip."""
 

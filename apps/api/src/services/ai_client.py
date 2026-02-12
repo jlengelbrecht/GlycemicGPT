@@ -119,7 +119,12 @@ async def get_ai_client(
             detail="No AI provider configured. Please configure an AI provider first.",
         )
 
-    api_key = decrypt_credential(config.encrypted_api_key)
+    # Subscription types using sidecar OAuth may have no stored API key;
+    # they use a placeholder key since the sidecar handles authentication.
+    if config.encrypted_api_key:
+        api_key = decrypt_credential(config.encrypted_api_key)
+    else:
+        api_key = "sidecar-managed"
     model = config.model_name or DEFAULT_MODELS.get(config.provider_type, "")
 
     if config.provider_type in _ANTHROPIC_SDK_TYPES:

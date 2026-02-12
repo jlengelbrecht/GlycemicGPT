@@ -77,10 +77,16 @@ class AIProviderConfig(Base, TimestampMixin):
         nullable=False,
     )
 
-    # Encrypted API key
-    encrypted_api_key: Mapped[str] = mapped_column(
+    # Encrypted API key (nullable for subscription types using sidecar OAuth)
+    encrypted_api_key: Mapped[str | None] = mapped_column(
         Text,
-        nullable=False,
+        nullable=True,
+    )
+
+    # Which sidecar provider is active ("claude" or "codex"), null for non-subscription types
+    sidecar_provider: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
     )
 
     # Optional model name override (e.g., "claude-sonnet-4-5-20250929", "gpt-4o")

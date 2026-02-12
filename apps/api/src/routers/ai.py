@@ -66,6 +66,7 @@ def _build_response(
         status=config.status,
         model_name=config.model_name,
         base_url=config.base_url,
+        sidecar_provider=config.sidecar_provider,
         masked_api_key=masked_key,
         last_validated_at=config.last_validated_at,
         last_error=config.last_error,
@@ -103,8 +104,12 @@ async def get_ai_provider(
             detail="No AI provider configured",
         )
 
-    decrypted_key = decrypt_credential(config.encrypted_api_key)
-    masked = mask_api_key(decrypted_key)
+    if config.encrypted_api_key:
+        decrypted_key = decrypt_credential(config.encrypted_api_key)
+        masked = mask_api_key(decrypted_key)
+    else:
+        # Subscription types using sidecar OAuth have no stored API key
+        masked = "sidecar-managed"
 
     return _build_response(config, masked)
 
@@ -165,6 +170,7 @@ async def configure_ai_provider(
         existing.encrypted_api_key = encrypt_credential(request.api_key)
         existing.model_name = request.model_name
         existing.base_url = request.base_url
+        existing.sidecar_provider = None  # Clear stale sidecar state on reconfigure
         existing.status = AIProviderStatus.CONNECTED
         existing.last_validated_at = now
         existing.last_error = None
@@ -265,6 +271,15 @@ async def test_ai_provider(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No AI provider configured",
+        )
+
+    # Subscription types using sidecar OAuth have no stored API key;
+    # their health is checked via the sidecar /health endpoint instead.
+    if not config.encrypted_api_key:
+        return AIProviderTestResponse(
+            success=True,
+            message="Subscription provider uses sidecar authentication. "
+            "Check sidecar health endpoint for detailed status.",
         )
 
     # Decrypt and test the key (run in thread to avoid blocking event loop)
