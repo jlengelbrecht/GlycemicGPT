@@ -14,6 +14,14 @@
 
 ---
 
+## [0.1.73](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.72...v0.1.73) (2026-02-12)
+
+
+### 🐛 Bug Fixes
+
+* convert carbRatio from milliunits in Tandem pump profile sync ([#165](https://github.com/jlengelbrecht/GlycemicGPT/issues/165)) ([8ee9677](https://github.com/jlengelbrecht/GlycemicGPT/commit/8ee9677286d02a6d4ef8fdbab96483a97b0e8579))
+* use hybrid dose-summation for accurate IoB projection ([#166](https://github.com/jlengelbrecht/GlycemicGPT/issues/166)) ([1c2da35](https://github.com/jlengelbrecht/GlycemicGPT/commit/1c2da35587d17eac43c449e65ecff734d7eb16c8))
+
 ## [0.1.72](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.71...v0.1.72) (2026-02-12)
 
 
