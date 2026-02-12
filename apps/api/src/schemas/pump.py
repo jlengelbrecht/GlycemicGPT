@@ -118,3 +118,4 @@ class IoBProjectionResponse(BaseModel):
     minutes_since_confirmed: int
     is_stale: bool
     stale_warning: str | None = None
+    is_estimated: bool = False
