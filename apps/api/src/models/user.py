@@ -184,6 +184,12 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         overlaps="patient",
     )
+    insulin_config = relationship(
+        "InsulinConfig",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     target_glucose_range = relationship(
         "TargetGlucoseRange",
         back_populates="user",

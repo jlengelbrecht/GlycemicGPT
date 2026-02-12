@@ -319,6 +319,11 @@ class TestStatusEndpointIntegration:
                 new_callable=AsyncMock,
                 return_value=projection,
             ),
+            patch(
+                "src.services.iob_projection.get_user_dia",
+                new_callable=AsyncMock,
+                return_value=4.0,
+            ),
         ):
             result = await get_caregiver_patient_status(
                 patient_id=patient_id,

@@ -31,6 +31,7 @@ class PumpEventType(str, enum.Enum):
     CORRECTION = "correction"  # Control-IQ automated correction
     SUSPEND = "suspend"  # Insulin delivery suspended
     RESUME = "resume"  # Insulin delivery resumed
+    BG_READING = "bg_reading"  # CGM reading from pump (has IoB)
 
 
 class ControlIQMode(str, enum.Enum):

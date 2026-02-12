@@ -14,6 +14,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.pump_data import PumpEvent
 
 
+async def get_user_dia(db: AsyncSession, user_id: uuid.UUID) -> float:
+    """Get the user's configured DIA, or the default 4.0 hours.
+
+    Args:
+        db: Database session
+        user_id: User ID to look up
+
+    Returns:
+        DIA in hours
+    """
+    from src.models.insulin_config import InsulinConfig
+
+    result = await db.execute(
+        select(InsulinConfig).where(InsulinConfig.user_id == user_id)
+    )
+    config = result.scalar_one_or_none()
+    if config is not None:
+        return config.dia_hours
+    return INSULIN_DIA_HOURS
+
+
 @dataclass
 class IoBProjection:
     """Projected IoB values at different time points."""
@@ -149,18 +170,21 @@ def project_iob(
 async def get_last_iob(
     db: AsyncSession,
     user_id: uuid.UUID,
-    max_hours: int = 4,
+    max_hours: float | None = None,
 ) -> tuple[float | None, datetime | None]:
     """Get the most recent IoB value for a user.
 
     Args:
         db: Database session
         user_id: User ID to query
-        max_hours: Maximum age of IoB reading to consider
+        max_hours: Maximum age of IoB reading to consider.
+                   Defaults to the user's configured DIA (up to 8h).
 
     Returns:
         Tuple of (iob_value, timestamp) or (None, None) if no data
     """
+    if max_hours is None:
+        max_hours = await get_user_dia(db, user_id)
     cutoff = datetime.now(UTC) - timedelta(hours=max_hours)
 
     result = await db.execute(

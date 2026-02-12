@@ -33,6 +33,11 @@ from src.schemas.escalation_config import (
     EscalationConfigResponse,
     EscalationConfigUpdate,
 )
+from src.schemas.insulin_config import (
+    InsulinConfigDefaults,
+    InsulinConfigResponse,
+    InsulinConfigUpdate,
+)
 from src.schemas.settings_export import (
     ExportType,
     SettingsExportRequest,
@@ -59,6 +64,10 @@ from src.services.data_retention_config import (
     update_config as update_retention_config,
 )
 from src.services.escalation_config import get_or_create_config, update_config
+from src.services.insulin_config import (
+    get_or_create_config as get_or_create_insulin_config,
+)
+from src.services.insulin_config import update_config as update_insulin_config
 from src.services.settings_export import export_user_data
 from src.services.target_glucose_range import get_or_create_range, update_range
 
@@ -229,6 +238,56 @@ async def get_target_glucose_range_defaults() -> TargetGlucoseRangeDefaults:
     This endpoint does not require authentication.
     """
     return TargetGlucoseRangeDefaults()
+
+
+# ── Insulin configuration endpoints ──
+
+
+@router.get(
+    "/insulin-config",
+    response_model=InsulinConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def get_insulin_config(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> InsulinConfigResponse:
+    """Get the current user's insulin configuration.
+
+    Returns defaults (Humalog, 4h DIA) if not configured yet.
+    """
+    config = await get_or_create_insulin_config(user.id, db)
+    return InsulinConfigResponse.model_validate(config)
+
+
+@router.patch(
+    "/insulin-config",
+    response_model=InsulinConfigResponse,
+    dependencies=[Depends(require_diabetic_or_admin)],
+)
+async def patch_insulin_config(
+    body: InsulinConfigUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> InsulinConfigResponse:
+    """Update the current user's insulin configuration.
+
+    Only provided fields are updated. DIA must be between 2-8 hours.
+    """
+    config = await update_insulin_config(user.id, body, db)
+    return InsulinConfigResponse.model_validate(config)
+
+
+@router.get(
+    "/insulin-config/defaults",
+    response_model=InsulinConfigDefaults,
+)
+async def get_insulin_config_defaults() -> InsulinConfigDefaults:
+    """Get the default insulin configuration values and presets.
+
+    This endpoint does not require authentication.
+    """
+    return InsulinConfigDefaults()
 
 
 # ── Brief delivery configuration endpoints (Story 9.2) ──

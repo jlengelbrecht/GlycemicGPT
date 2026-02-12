@@ -55,7 +55,7 @@ from src.services.dexcom_sync import (
     get_latest_glucose_reading,
     sync_dexcom_for_user,
 )
-from src.services.iob_projection import get_iob_projection
+from src.services.iob_projection import get_iob_projection, get_user_dia
 from src.services.tandem_sync import (
     TandemAuthError,
     TandemConnectionError,
@@ -942,12 +942,13 @@ async def get_iob_projection_endpoint(
     - Projected IoB values for 30 and 60 minutes ahead
     - Staleness warning if data is over 2 hours old
 
-    Uses the standard 4-hour decay curve for rapid-acting insulin (Novolog/Humalog).
+    Uses the user's configured DIA (defaults to 4 hours for Humalog/Novolog).
 
     Returns:
         IoBProjectionResponse with confirmed and projected IoB values
     """
-    projection = await get_iob_projection(db, current_user.id)
+    dia = await get_user_dia(db, current_user.id)
+    projection = await get_iob_projection(db, current_user.id, dia_hours=dia)
 
     if projection is None:
         raise HTTPException(
