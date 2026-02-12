@@ -306,7 +306,7 @@ async def _build_pump_profile_section(
         cr = seg.get("carb_ratio") or 0
         tgt = seg.get("target_bg") or 0
         lines.append(
-            f"- {time_str}: Basal {basal:.3f} u/hr, CF 1:{cf}, CR 1:{cr}, Target {tgt}"
+            f"- {time_str}: Basal {basal:.3f} u/hr, CF 1:{cf}, CR 1:{cr:g}, Target {tgt}"
         )
 
     extras = []

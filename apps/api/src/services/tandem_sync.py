@@ -586,13 +586,14 @@ async def _store_pump_settings(
                     time_str = f"{display_hour}:{minutes:02d} {period}"
 
                     basal_raw = getattr(seg, "basalRate", 0) or 0
+                    cr_raw = getattr(seg, "carbRatio", 0) or 0
                     segments.append(
                         {
                             "time": time_str,
                             "start_minutes": start_time,
                             "basal_rate": float(basal_raw) / 1000.0,
                             "correction_factor": int(getattr(seg, "isf", 0) or 0),
-                            "carb_ratio": int(getattr(seg, "carbRatio", 0) or 0),
+                            "carb_ratio": float(cr_raw) / 1000.0,
                             "target_bg": int(getattr(seg, "targetBg", 0) or 0),
                         }
                     )
