@@ -33,9 +33,16 @@ import {
   configureAIProvider,
   testAIProvider,
   deleteAIProvider,
+  startSubscriptionAuth,
+  submitSubscriptionToken,
+  getSubscriptionAuthStatus,
+  revokeSubscriptionAuth,
+  getSidecarHealth,
   type AIProviderConfigResponse,
   type AIProviderType,
   type AIProviderStatus,
+  type SubscriptionAuthStatusResponse,
+  type SidecarHealthResponse,
 } from "@/lib/api";
 import { OfflineBanner } from "@/components/ui/offline-banner";
 
@@ -54,30 +61,34 @@ interface ProviderOption {
   pricingHint: string;
 }
 
+// Mapping from frontend provider type to sidecar provider name
+const SUBSCRIPTION_SIDECAR_MAP: Record<string, string> = {
+  claude_subscription: "claude",
+  chatgpt_subscription: "codex",
+};
+
 const SUBSCRIPTION_PROVIDERS: ProviderOption[] = [
   {
     value: "claude_subscription",
     label: "Claude Subscription",
-    description: "Use your Claude Max/Pro subscription via proxy (e.g., claude-max-api-proxy).",
-    requiresBaseUrl: true,
+    description: "Use your Claude Max/Pro subscription via the built-in AI sidecar.",
+    requiresBaseUrl: false,
     requiresApiKey: false,
     requiresModelName: false,
     apiKeyPlaceholder: "not-needed",
-    apiKeyHint: "Most proxies don't require an API key. Use 'not-needed' if unsure.",
-    baseUrlPlaceholder: "http://localhost:3456/v1",
+    apiKeyHint: "",
     modelPlaceholder: "claude-sonnet-4-5-20250929",
     pricingHint: "Unlimited usage with your subscription",
   },
   {
     value: "chatgpt_subscription",
     label: "ChatGPT Subscription",
-    description: "Use your ChatGPT Plus/Team subscription via proxy.",
-    requiresBaseUrl: true,
+    description: "Use your ChatGPT Plus/Team subscription via the built-in AI sidecar.",
+    requiresBaseUrl: false,
     requiresApiKey: false,
     requiresModelName: false,
     apiKeyPlaceholder: "not-needed",
-    apiKeyHint: "Most proxies don't require an API key. Use 'not-needed' if unsure.",
-    baseUrlPlaceholder: "http://localhost:8080/v1",
+    apiKeyHint: "",
     modelPlaceholder: "gpt-4o",
     pricingHint: "Unlimited usage with your subscription",
   },
@@ -165,8 +176,19 @@ export default function AIProviderPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Subscription auth state (Story 15.2)
+  const [subscriptionToken, setSubscriptionToken] = useState("");
+  const [isSubmittingToken, setIsSubmittingToken] = useState(false);
+  const [sidecarHealth, setSidecarHealth] = useState<SidecarHealthResponse | null>(null);
+  const [subscriptionAuth, setSubscriptionAuth] = useState<SubscriptionAuthStatusResponse | null>(null);
+  const [authInstructions, setAuthInstructions] = useState<string | null>(null);
+  const [isRevokingAuth, setIsRevokingAuth] = useState(false);
+
   const selectedProvider =
     ALL_PROVIDERS.find((p) => p.value === providerType) || API_PROVIDERS[0];
+
+  const isSubscription = providerType in SUBSCRIPTION_SIDECAR_MAP;
+  const sidecarProvider = SUBSCRIPTION_SIDECAR_MAP[providerType] || null;
 
   const handleProviderSwitch = (newType: AIProviderType) => {
     setProviderType(newType);
@@ -174,6 +196,8 @@ export default function AIProviderPage() {
     setApiKey("");
     setBaseUrl("");
     setModelName("");
+    setSubscriptionToken("");
+    setAuthInstructions(null);
   };
 
   // Auto-clear success message
@@ -212,6 +236,72 @@ export default function AIProviderPage() {
   useEffect(() => {
     fetchConfig();
   }, [fetchConfig]);
+
+  // Fetch subscription auth state when subscription provider is selected
+  const fetchSubscriptionStatus = useCallback(async () => {
+    const [health, auth] = await Promise.all([
+      getSidecarHealth().catch(() => null),
+      getSubscriptionAuthStatus().catch(() => null),
+    ]);
+    setSidecarHealth(health);
+    setSubscriptionAuth(auth);
+  }, []);
+
+  useEffect(() => {
+    if (isSubscription) {
+      fetchSubscriptionStatus();
+    }
+  }, [isSubscription, fetchSubscriptionStatus]);
+
+  const handleStartAuth = async () => {
+    if (!sidecarProvider) return;
+    setError(null);
+    try {
+      const result = await startSubscriptionAuth(sidecarProvider);
+      setAuthInstructions(result.instructions);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to start auth flow"
+      );
+    }
+  };
+
+  const handleSubmitToken = async () => {
+    if (!sidecarProvider || !subscriptionToken.trim()) return;
+    setIsSubmittingToken(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await submitSubscriptionToken(sidecarProvider, subscriptionToken.trim());
+      setSubscriptionToken("");
+      setAuthInstructions(null);
+      setSuccess("Token accepted. Provider connected via sidecar.");
+      await fetchSubscriptionStatus();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to submit token"
+      );
+    } finally {
+      setIsSubmittingToken(false);
+    }
+  };
+
+  const handleRevokeAuth = async () => {
+    if (!sidecarProvider) return;
+    setIsRevokingAuth(true);
+    setError(null);
+    try {
+      await revokeSubscriptionAuth(sidecarProvider);
+      setSuccess("Subscription auth revoked.");
+      await fetchSubscriptionStatus();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to revoke auth"
+      );
+    } finally {
+      setIsRevokingAuth(false);
+    }
+  };
 
   const handleSave = async () => {
     // Validate required fields based on provider
@@ -635,131 +725,255 @@ export default function AIProviderPage() {
               {selectedProvider.pricingHint}
             </p>
 
-            {/* Base URL input (shown for subscription and self-hosted) */}
-            {selectedProvider.requiresBaseUrl && (
-              <div className="space-y-2">
-                <label
-                  htmlFor="base-url"
-                  className="block text-sm font-medium text-slate-300"
-                >
-                  Base URL <span className="text-red-400">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Globe className="h-4 w-4 text-slate-500" />
-                  </div>
-                  <input
-                    id="base-url"
-                    type="url"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    placeholder={selectedProvider.baseUrlPlaceholder}
-                    disabled={isOffline || isSaving}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
-                  />
+            {/* Subscription provider: token paste flow */}
+            {isSubscription && (
+              <div className="space-y-4">
+                {/* Sidecar status */}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-slate-400">AI Sidecar:</span>
+                  {sidecarHealth === null ? (
+                    <span className="text-slate-500">Checking...</span>
+                  ) : sidecarHealth.available ? (
+                    <span className="text-green-400 flex items-center gap-1">
+                      <Wifi className="h-3.5 w-3.5" />
+                      Ready
+                    </span>
+                  ) : (
+                    <span className="text-red-400 flex items-center gap-1">
+                      <WifiOff className="h-3.5 w-3.5" />
+                      Unavailable
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-slate-500">
-                  The URL of your proxy or self-hosted endpoint (e.g., http://your-server:3456/v1)
-                </p>
+
+                {/* Current auth status for this provider */}
+                {subscriptionAuth?.sidecar_available && sidecarProvider && (() => {
+                  const providerAuth = sidecarProvider === "claude"
+                    ? subscriptionAuth.claude
+                    : subscriptionAuth.codex;
+                  const isAuthed = providerAuth?.authenticated === true;
+
+                  if (isAuthed) {
+                    return (
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-5 w-5 text-green-400" />
+                          <span className="text-green-400 font-medium text-sm">
+                            {sidecarProvider === "claude" ? "Claude" : "ChatGPT"} subscription connected via sidecar
+                          </span>
+                        </div>
+                        <button
+                          onClick={handleRevokeAuth}
+                          disabled={isRevokingAuth || isOffline}
+                          className="text-red-400 hover:text-red-300 disabled:opacity-50 text-sm transition-colors flex items-center gap-1"
+                        >
+                          {isRevokingAuth ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                          Sign out
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
+
+                {/* Token paste form (shown when not authenticated) */}
+                {(!subscriptionAuth?.sidecar_available ||
+                  !(sidecarProvider === "claude"
+                    ? subscriptionAuth?.claude?.authenticated
+                    : subscriptionAuth?.codex?.authenticated)) && (
+                  <div className="space-y-3">
+                    {!authInstructions ? (
+                      <button
+                        onClick={handleStartAuth}
+                        disabled={isOffline || !sidecarHealth?.available}
+                        className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Key className="h-4 w-4" />
+                        Sign in with {sidecarProvider === "claude" ? "Claude" : "ChatGPT"}
+                      </button>
+                    ) : (
+                      <>
+                        <div className="bg-slate-800 rounded-lg p-4 space-y-2">
+                          <p className="text-sm text-slate-300 font-medium">How to get your token:</p>
+                          <p className="text-xs text-slate-400 leading-relaxed">
+                            {authInstructions}
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <label
+                            htmlFor="subscription-token"
+                            className="block text-sm font-medium text-slate-300"
+                          >
+                            Paste your token
+                          </label>
+                          <textarea
+                            id="subscription-token"
+                            value={subscriptionToken}
+                            onChange={(e) => setSubscriptionToken(e.target.value)}
+                            placeholder="Paste the token from the CLI command..."
+                            disabled={isOffline || isSubmittingToken}
+                            autoComplete="off"
+                            spellCheck={false}
+                            rows={3}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-xs resize-vertical"
+                          />
+                        </div>
+                        <button
+                          onClick={handleSubmitToken}
+                          disabled={isOffline || isSubmittingToken || !subscriptionToken.trim()}
+                          className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {isSubmittingToken ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          Connect
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* API Key input */}
-            <div className="space-y-2">
-              <label
-                htmlFor="api-key"
-                className="block text-sm font-medium text-slate-300"
-              >
-                API Key{" "}
-                {selectedProvider.requiresApiKey ? (
-                  <span className="text-red-400">*</span>
-                ) : (
-                  <span className="text-slate-500 font-normal">(optional)</span>
+            {/* Non-subscription providers: standard form fields */}
+            {!isSubscription && (
+              <>
+                {/* Base URL input (shown for self-hosted) */}
+                {selectedProvider.requiresBaseUrl && (
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="base-url"
+                      className="block text-sm font-medium text-slate-300"
+                    >
+                      Base URL <span className="text-red-400">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Globe className="h-4 w-4 text-slate-500" />
+                      </div>
+                      <input
+                        id="base-url"
+                        type="url"
+                        value={baseUrl}
+                        onChange={(e) => setBaseUrl(e.target.value)}
+                        placeholder={selectedProvider.baseUrlPlaceholder}
+                        disabled={isOffline || isSaving}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      The URL of your self-hosted endpoint (e.g., http://your-server:11434/v1)
+                    </p>
+                  </div>
                 )}
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Key className="h-4 w-4 text-slate-500" />
-                </div>
-                <input
-                  id="api-key"
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={selectedProvider.apiKeyPlaceholder}
-                  disabled={isOffline || isSaving}
-                  autoComplete="off"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
-                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                >
-                  {showApiKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-              <p className="text-xs text-slate-500">
-                {selectedProvider.apiKeyHint}
-              </p>
-            </div>
 
-            {/* Model Name input */}
-            <div className="space-y-2">
-              <label
-                htmlFor="model-name"
-                className="block text-sm font-medium text-slate-300"
-              >
-                Model Name{" "}
-                {selectedProvider.requiresModelName ? (
-                  <span className="text-red-400">*</span>
-                ) : (
-                  <span className="text-slate-500 font-normal">(optional)</span>
-                )}
-              </label>
-              <input
-                id="model-name"
-                type="text"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                placeholder={selectedProvider.modelPlaceholder}
-                disabled={isOffline || isSaving}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
-              />
-              <p className="text-xs text-slate-500">
-                {selectedProvider.requiresModelName
-                  ? "Required: specify which model to use on your endpoint."
-                  : "Leave blank to use the default model."}
-              </p>
-            </div>
+                {/* API Key input */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="api-key"
+                    className="block text-sm font-medium text-slate-300"
+                  >
+                    API Key{" "}
+                    {selectedProvider.requiresApiKey ? (
+                      <span className="text-red-400">*</span>
+                    ) : (
+                      <span className="text-slate-500 font-normal">(optional)</span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Key className="h-4 w-4 text-slate-500" />
+                    </div>
+                    <input
+                      id="api-key"
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={selectedProvider.apiKeyPlaceholder}
+                      disabled={isOffline || isSaving}
+                      autoComplete="off"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 font-mono text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white transition-colors"
+                      aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {selectedProvider.apiKeyHint}
+                  </p>
+                </div>
+
+                {/* Model Name input */}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="model-name"
+                    className="block text-sm font-medium text-slate-300"
+                  >
+                    Model Name{" "}
+                    {selectedProvider.requiresModelName ? (
+                      <span className="text-red-400">*</span>
+                    ) : (
+                      <span className="text-slate-500 font-normal">(optional)</span>
+                    )}
+                  </label>
+                  <input
+                    id="model-name"
+                    type="text"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder={selectedProvider.modelPlaceholder}
+                    disabled={isOffline || isSaving}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50 text-sm"
+                  />
+                  <p className="text-xs text-slate-500">
+                    {selectedProvider.requiresModelName
+                      ? "Required: specify which model to use on your endpoint."
+                      : "Leave blank to use the default model."}
+                  </p>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={!canSave}
-            title={
-              isOffline
-                ? "Cannot save while disconnected"
-                : !canSave
-                  ? "Fill in required fields first"
-                  : undefined
-            }
-            className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
-            aria-label={isConfigured ? "Update AI provider" : "Save and validate"}
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            {isConfigured ? "Update Configuration" : "Save & Validate"}
-          </button>
+          {/* Save button (only for non-subscription providers) */}
+          {!isSubscription && (
+            <button
+              onClick={handleSave}
+              disabled={!canSave}
+              title={
+                isOffline
+                  ? "Cannot save while disconnected"
+                  : !canSave
+                    ? "Fill in required fields first"
+                    : undefined
+              }
+              className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg px-4 py-3 transition-colors flex items-center justify-center gap-2"
+              aria-label={isConfigured ? "Update AI provider" : "Save and validate"}
+            >
+              {isSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              {isConfigured ? "Update Configuration" : "Save & Validate"}
+            </button>
+          )}
         </div>
       )}
 

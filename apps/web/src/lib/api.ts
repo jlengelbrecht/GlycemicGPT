@@ -1924,6 +1924,128 @@ export async function deleteAIProvider(): Promise<AIProviderDeleteResponse> {
   return response.json();
 }
 
+// ── Story 15.2: Subscription Auth ──
+
+export interface SubscriptionAuthStartResponse {
+  provider: string;
+  auth_method: string;
+  instructions: string;
+}
+
+export interface SubscriptionAuthTokenResponse {
+  success: boolean;
+  provider: string;
+  error?: string;
+}
+
+export interface SubscriptionAuthStatusResponse {
+  sidecar_available: boolean;
+  claude?: { authenticated: boolean };
+  codex?: { authenticated: boolean };
+}
+
+export interface SidecarHealthResponse {
+  available: boolean;
+  status: string;
+  claude_auth?: boolean;
+  codex_auth?: boolean;
+}
+
+export async function startSubscriptionAuth(
+  provider: string
+): Promise<SubscriptionAuthStartResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/auth/start`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to start subscription auth: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function submitSubscriptionToken(
+  provider: string,
+  token: string
+): Promise<SubscriptionAuthTokenResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/auth/token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, token }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to submit token: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function getSubscriptionAuthStatus(): Promise<SubscriptionAuthStatusResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/auth/status`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch subscription auth status: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function revokeSubscriptionAuth(
+  provider: string
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/auth/revoke`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to revoke subscription auth: ${response.status}`
+    );
+  }
+}
+
+export async function getSidecarHealth(): Promise<SidecarHealthResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/ai/subscription/sidecar/health`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch sidecar health: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
 // ── Story 11.2: AI Chat ──
 
 export interface AIChatResponse {

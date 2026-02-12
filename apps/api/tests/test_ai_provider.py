@@ -421,8 +421,8 @@ class TestAIProviderConfiguration:
         assert data["model_name"] == "llama3.1:70b"
 
     @patch("src.routers.ai.validate_ai_api_key")
-    async def test_subscription_requires_base_url(self, mock_validate):
-        """Test that subscription providers require base_url."""
+    async def test_subscription_does_not_require_base_url(self, mock_validate):
+        """Test that subscription providers no longer require base_url (sidecar handles routing)."""
         mock_validate.return_value = (True, None)
 
         async with AsyncClient(
@@ -436,12 +436,13 @@ class TestAIProviderConfiguration:
                 json={
                     "provider_type": "claude_subscription",
                     "api_key": "not-needed",
-                    # Missing base_url
+                    # No base_url needed -- sidecar handles routing
                 },
                 cookies={settings.jwt_cookie_name: session_cookie},
             )
 
-        assert response.status_code == 422
+        # Should succeed (201) since subscription providers no longer require base_url
+        assert response.status_code == 201
 
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_openai_compatible_requires_model_name(self, mock_validate):

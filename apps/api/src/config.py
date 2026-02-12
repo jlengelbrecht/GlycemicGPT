@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     telegram_polling_enabled: bool = True
     telegram_polling_interval_seconds: int = 5
 
+    # AI Sidecar (Story 15.2)
+    ai_sidecar_url: str = "http://ai-sidecar:3456"
+    ai_sidecar_api_key: str = ""  # SIDECAR_API_KEY for inter-service auth
+
     # Testing
     testing: bool = False  # Set to True during tests to disable connection pooling
 
