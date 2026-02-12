@@ -128,8 +128,10 @@ class AIProviderConfigResponse(BaseModel):
     status: AIProviderStatus
     model_name: str | None = None
     base_url: str | None = None
+    sidecar_provider: str | None = None
     masked_api_key: str = Field(
-        ..., description="Masked API key showing only last 4 characters"
+        ...,
+        description="Masked API key (last 4 chars) or 'sidecar-managed' for subscription types",
     )
     last_validated_at: datetime | None = None
     last_error: str | None = None
