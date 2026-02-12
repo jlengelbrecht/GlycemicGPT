@@ -1,9 +1,11 @@
-"""Story 5.2 / 14.2: BYOAI abstraction layer.
+"""Story 5.2 / 14.2 / 15.4: BYOAI abstraction layer.
 
 Abstract base class and factory for AI provider clients.
 Provides a unified interface for generating AI responses
 regardless of the underlying provider (Claude, OpenAI, subscription proxy,
 or self-hosted OpenAI-compatible endpoint).
+
+Story 15.4: Subscription types auto-route through managed sidecar.
 """
 
 import abc
@@ -12,6 +14,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.core.encryption import decrypt_credential
 from src.logging_config import get_logger
 from src.models.ai_provider import AIProviderConfig, AIProviderType
@@ -45,6 +48,12 @@ _OPENAI_SDK_TYPES = {
 _ANTHROPIC_SDK_TYPES = {
     AIProviderType.CLAUDE_API,
     AIProviderType.CLAUDE,  # Legacy
+}
+
+# Subscription types that route through the managed sidecar
+_SUBSCRIPTION_TYPES = {
+    AIProviderType.CLAUDE_SUBSCRIPTION,
+    AIProviderType.CHATGPT_SUBSCRIPTION,
 }
 
 
@@ -127,6 +136,12 @@ async def get_ai_client(
         api_key = "sidecar-managed"
     model = config.model_name or DEFAULT_MODELS.get(config.provider_type, "")
 
+    # For subscription types, auto-route through the managed sidecar
+    # when no explicit base_url is configured.
+    base_url = config.base_url
+    if config.provider_type in _SUBSCRIPTION_TYPES and not base_url:
+        base_url = f"{settings.ai_sidecar_url}/v1"
+
     if config.provider_type in _ANTHROPIC_SDK_TYPES:
         return ClaudeClient(
             api_key=api_key,
@@ -143,7 +158,7 @@ async def get_ai_client(
         return OpenAIClient(
             api_key=api_key,
             model=model,
-            base_url=config.base_url,
+            base_url=base_url,
             provider_type=config.provider_type,
         )
 

@@ -295,6 +295,13 @@ class TestAIProviderConfiguration:
             response = await client.post("/api/ai/provider/test")
             assert response.status_code == 401
 
+            # POST subscription configure
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+            )
+            assert response.status_code == 401
+
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_test_endpoint_success(self, mock_validate):
         """Test the /provider/test endpoint when key is valid."""
@@ -661,10 +668,10 @@ class TestSidecarNullSafety:
         assert data["masked_api_key"] == "sidecar-managed"
 
     @patch("src.routers.ai.validate_ai_api_key")
-    async def test_test_provider_with_null_api_key_returns_sidecar_message(
+    async def test_test_provider_with_null_api_key_no_sidecar_returns_failure(
         self, mock_validate
     ):
-        """Test POST /provider/test returns success with sidecar message when key is NULL."""
+        """Test POST /provider/test returns failure when key is NULL and no sidecar_provider set."""
         mock_validate.return_value = (True, None)
 
         async with AsyncClient(
@@ -683,7 +690,7 @@ class TestSidecarNullSafety:
                 cookies={settings.jwt_cookie_name: session_cookie},
             )
 
-            # NULL out the encrypted_api_key to simulate sidecar OAuth
+            # NULL out the encrypted_api_key WITHOUT setting sidecar_provider
             from src.database import get_session_maker
             from src.models.ai_provider import AIProviderConfig
 
@@ -696,7 +703,7 @@ class TestSidecarNullSafety:
                 )
                 await db.commit()
 
-            # Test endpoint should not crash
+            # Test endpoint should return failure (no key, no sidecar)
             response = await client.post(
                 "/api/ai/provider/test",
                 cookies={settings.jwt_cookie_name: session_cookie},
@@ -704,8 +711,8 @@ class TestSidecarNullSafety:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert "sidecar" in data["message"].lower()
+        assert data["success"] is False
+        assert "reconfigure" in data["message"].lower()
 
     @patch("src.routers.ai.validate_ai_api_key")
     async def test_update_provider_clears_sidecar_provider(self, mock_validate):
@@ -755,6 +762,248 @@ class TestSidecarNullSafety:
         data = response.json()
         assert data["provider_type"] == "claude_api"
         assert data["sidecar_provider"] is None
+
+    @patch("src.routers.ai.revoke_sidecar_auth")
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_delete_sidecar_provider_revokes_auth(
+        self, mock_validate, mock_revoke
+    ):
+        """Test that deleting a sidecar-managed provider calls revoke_sidecar_auth."""
+        mock_validate.return_value = (True, None)
+        mock_revoke.return_value = {"revoked": True, "provider": "claude"}
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure a subscription provider via sidecar
+            await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Delete it
+            response = await client.delete(
+                "/api/ai/provider",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        assert "removed successfully" in response.json()["message"]
+        mock_revoke.assert_called_once_with("claude")
+
+    @patch("src.routers.ai.revoke_sidecar_auth")
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_delete_sidecar_provider_succeeds_when_revoke_fails(
+        self, mock_validate, mock_revoke
+    ):
+        """Test that delete succeeds even when sidecar revocation fails."""
+        mock_validate.return_value = (True, None)
+        mock_revoke.return_value = None  # Sidecar unreachable
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # Configure a subscription provider via sidecar
+            await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Delete it (should still succeed)
+            response = await client.delete(
+                "/api/ai/provider",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        mock_revoke.assert_called_once_with("claude")
+
+
+class TestSubscriptionConfigure:
+    """Tests for POST /api/ai/subscription/configure endpoint (Story 15.4)."""
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_configure_subscription_via_sidecar(self, mock_validate):
+        """Test configuring a subscription provider via sidecar."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "claude_subscription"
+        assert data["sidecar_provider"] == "claude"
+        assert data["masked_api_key"] == "sidecar-managed"
+        assert data["status"] == "connected"
+        assert data["base_url"] is None  # Auto-routed via AI_SIDECAR_URL
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_configure_codex_subscription_via_sidecar(self, mock_validate):
+        """Test configuring ChatGPT subscription via codex sidecar."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "codex"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "chatgpt_subscription"
+        assert data["sidecar_provider"] == "codex"
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_configure_subscription_rejects_unauthenticated_sidecar(
+        self, mock_validate
+    ):
+        """Test that configure fails when sidecar is not authenticated."""
+        mock_validate.return_value = (
+            False,
+            "Sidecar is running but not authenticated for claude.",
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 400
+        assert "not authenticated" in response.json()["detail"].lower()
+
+    async def test_configure_subscription_rejects_invalid_provider(self):
+        """Test that invalid sidecar_provider is rejected."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "gemini"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 422
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    @patch("src.routers.ai.validate_ai_api_key")
+    async def test_subscription_configure_overwrites_existing_provider(
+        self, mock_api_validate, mock_sidecar_validate
+    ):
+        """Test that subscription configure overwrites an existing direct API config."""
+        mock_api_validate.return_value = (True, None)
+        mock_sidecar_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            # First configure a direct API provider
+            await client.post(
+                "/api/ai/provider",
+                json={
+                    "provider_type": "claude_api",
+                    "api_key": "sk-ant-test-overwrite-1234",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            # Now switch to subscription via sidecar
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["provider_type"] == "claude_subscription"
+        assert data["sidecar_provider"] == "claude"
+        assert data["masked_api_key"] == "sidecar-managed"
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_configure_subscription_with_custom_model(self, mock_validate):
+        """Test configuring subscription provider with custom model name."""
+        mock_validate.return_value = (True, None)
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={
+                    "sidecar_provider": "claude",
+                    "model_name": "claude-opus-4-6",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["model_name"] == "claude-opus-4-6"
+
+    @patch("src.routers.ai.validate_sidecar_connection")
+    async def test_configure_subscription_returns_502_when_sidecar_unreachable(
+        self, mock_validate
+    ):
+        """Test that configure returns 502 when sidecar is unreachable."""
+        mock_validate.return_value = (
+            False,
+            "AI sidecar is not reachable. Ensure the sidecar container is running.",
+        )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            session_cookie = await register_and_login(client)
+
+            response = await client.post(
+                "/api/ai/subscription/configure",
+                json={"sidecar_provider": "claude"},
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 502
+        assert "not reachable" in response.json()["detail"].lower()
 
 
 class TestAPIKeyEncryption:

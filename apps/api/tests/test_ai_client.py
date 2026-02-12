@@ -649,6 +649,56 @@ class TestAIClientFactory:
         assert client._api_key == "sidecar-managed"
         assert client._base_url == "http://ai-sidecar:3456/v1"
 
+    async def test_factory_auto_routes_subscription_through_sidecar(self):
+        """Test factory auto-sets base_url to sidecar for subscription types with no base_url."""
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type=AIProviderType.CLAUDE_SUBSCRIPTION,
+            encrypted_api_key=None,
+            model_name=None,
+            base_url=None,  # No explicit base_url
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        with patch("src.services.ai_client.settings") as mock_settings:
+            mock_settings.ai_sidecar_url = "http://ai-sidecar:3456"
+            client = await get_ai_client(mock_user, mock_db)
+
+        assert isinstance(client, OpenAIClient)
+        assert client._base_url == "http://ai-sidecar:3456/v1"
+        assert client._api_key == "sidecar-managed"
+
+    async def test_factory_preserves_explicit_base_url_for_subscription(self):
+        """Test factory uses explicit base_url when set, even for subscription types."""
+        from src.services.ai_client import get_ai_client
+
+        mock_user = SimpleNamespace(id=uuid.uuid4())
+        mock_config = SimpleNamespace(
+            provider_type=AIProviderType.CLAUDE_SUBSCRIPTION,
+            encrypted_api_key="encrypted-key",
+            model_name=None,
+            base_url="http://custom-proxy:8080/v1",  # Explicit base_url
+        )
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+        mock_db.execute.return_value = mock_result
+
+        with patch(
+            "src.services.ai_client.decrypt_credential", return_value="not-needed"
+        ):
+            client = await get_ai_client(mock_user, mock_db)
+
+        assert isinstance(client, OpenAIClient)
+        assert client._base_url == "http://custom-proxy:8080/v1"
+
     async def test_factory_raises_400_on_unsupported_provider(self):
         """Test factory raises HTTPException 400 for unsupported provider type."""
         from fastapi import HTTPException

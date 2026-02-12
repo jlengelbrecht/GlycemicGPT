@@ -1,4 +1,4 @@
-"""Tests for the sidecar communication service (Story 15.2)."""
+"""Tests for the sidecar communication service (Story 15.2 / 15.4)."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,6 +11,7 @@ from src.services.sidecar import (
     revoke_sidecar_auth,
     start_sidecar_auth,
     submit_sidecar_token,
+    validate_sidecar_connection,
 )
 
 
@@ -200,3 +201,71 @@ class TestRevokeSidecarAuth:
 
         assert result is not None
         assert result["revoked"] is True
+
+
+class TestValidateSidecarConnection:
+    @pytest.mark.asyncio
+    async def test_healthy_and_authenticated(self):
+        health = {"status": "ok", "claude_auth": True, "codex_auth": False}
+        with patch(
+            "src.services.sidecar.get_sidecar_health", new_callable=AsyncMock
+        ) as mock_health:
+            mock_health.return_value = health
+            success, error = await validate_sidecar_connection("claude")
+
+        assert success is True
+        assert error is None
+
+    @pytest.mark.asyncio
+    async def test_sidecar_unreachable(self):
+        with patch(
+            "src.services.sidecar.get_sidecar_health", new_callable=AsyncMock
+        ) as mock_health:
+            mock_health.return_value = None
+            success, error = await validate_sidecar_connection("claude")
+
+        assert success is False
+        assert "not reachable" in error
+
+    @pytest.mark.asyncio
+    async def test_unhealthy_status(self):
+        health = {"status": "degraded", "claude_auth": True, "codex_auth": False}
+        with patch(
+            "src.services.sidecar.get_sidecar_health", new_callable=AsyncMock
+        ) as mock_health:
+            mock_health.return_value = health
+            success, error = await validate_sidecar_connection("claude")
+
+        assert success is False
+        assert "unhealthy" in error
+
+    @pytest.mark.asyncio
+    async def test_not_authenticated(self):
+        health = {"status": "ok", "claude_auth": False, "codex_auth": False}
+        with patch(
+            "src.services.sidecar.get_sidecar_health", new_callable=AsyncMock
+        ) as mock_health:
+            mock_health.return_value = health
+            success, error = await validate_sidecar_connection("claude")
+
+        assert success is False
+        assert "not authenticated" in error
+
+    @pytest.mark.asyncio
+    async def test_codex_provider_validation(self):
+        health = {"status": "ok", "claude_auth": False, "codex_auth": True}
+        with patch(
+            "src.services.sidecar.get_sidecar_health", new_callable=AsyncMock
+        ) as mock_health:
+            mock_health.return_value = health
+            success, error = await validate_sidecar_connection("codex")
+
+        assert success is True
+        assert error is None
+
+    @pytest.mark.asyncio
+    async def test_unknown_provider_rejected(self):
+        success, error = await validate_sidecar_connection("gemini")
+
+        assert success is False
+        assert "Unknown sidecar provider" in error
