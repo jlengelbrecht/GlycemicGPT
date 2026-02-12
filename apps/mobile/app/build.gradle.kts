@@ -14,8 +14,15 @@ android {
         applicationId = "com.glycemicgpt.mobile"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+
+        val appVersionName = "0.1.73" // x-release-please-version
+        val parts = appVersionName.split(".")
+        val major = parts.getOrElse(0) { "0" }.toInt()
+        val minor = parts.getOrElse(1) { "0" }.toInt()
+        val patch = parts.getOrElse(2) { "0" }.toInt()
+
+        versionCode = major * 1_000_000 + minor * 10_000 + patch
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
