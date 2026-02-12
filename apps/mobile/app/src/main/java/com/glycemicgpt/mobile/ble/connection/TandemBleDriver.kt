@@ -11,6 +11,7 @@ import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Instant
+import javax.inject.Inject
 
 /**
  * Tandem t:slim X2 BLE driver implementing the PumpDriver interface.
@@ -20,7 +21,7 @@ import java.time.Instant
  *
  * Full implementation in Story 16.2 (pairing/connection) and Story 16.3 (data reads).
  */
-class TandemBleDriver : PumpDriver {
+class TandemBleDriver @Inject constructor() : PumpDriver {
 
     private val connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
 
@@ -29,8 +30,9 @@ class TandemBleDriver : PumpDriver {
         return Result.failure(NotImplementedError("BLE connection - Story 16.2"))
     }
 
-    override suspend fun disconnect() {
+    override suspend fun disconnect(): Result<Unit> {
         connectionState.value = ConnectionState.DISCONNECTED
+        return Result.success(Unit)
     }
 
     override suspend fun getIoB(): Result<IoBReading> {

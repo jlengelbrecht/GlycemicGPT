@@ -16,7 +16,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- BLE hardware feature (not required - app can still install on non-BLE devices) -->
+    <!-- BLE hardware feature required - app is useless without BLE -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />

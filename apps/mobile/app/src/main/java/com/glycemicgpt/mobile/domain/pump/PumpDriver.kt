@@ -23,7 +23,7 @@ import java.time.Instant
  */
 interface PumpDriver {
     suspend fun connect(deviceAddress: String): Result<Unit>
-    suspend fun disconnect()
+    suspend fun disconnect(): Result<Unit>
     suspend fun getIoB(): Result<IoBReading>
     suspend fun getBasalRate(): Result<BasalReading>
     suspend fun getBolusHistory(since: Instant): Result<List<BolusEvent>>

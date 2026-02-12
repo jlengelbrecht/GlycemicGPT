@@ -3,9 +3,9 @@
 # Keep BLE protocol classes (needed for runtime reflection in message parsing)
 -keep class com.glycemicgpt.mobile.ble.** { *; }
 
-# Keep Moshi JSON adapters
--keep class com.glycemicgpt.mobile.data.** { *; }
--keepclassmembers class com.glycemicgpt.mobile.data.** {
+# Keep Moshi-annotated JSON model classes
+-keep @com.squareup.moshi.JsonClass class * { *; }
+-keepclassmembers @com.squareup.moshi.JsonClass class * {
     <init>(...);
 }
 

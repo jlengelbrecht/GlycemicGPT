@@ -32,7 +32,8 @@ class TandemBleDriverTest {
 
     @Test
     fun `disconnect sets state to disconnected`() = runTest {
-        driver.disconnect()
+        val result = driver.disconnect()
+        assertTrue(result.isSuccess)
         val state = driver.observeConnectionState().first()
         assertEquals(ConnectionState.DISCONNECTED, state)
     }

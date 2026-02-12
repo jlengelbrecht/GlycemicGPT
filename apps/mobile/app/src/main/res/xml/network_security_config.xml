@@ -7,7 +7,7 @@
         </trust-anchors>
     </base-config>
 
-    <!-- Allow cleartext only for local development (debug builds) -->
+    <!-- Trust user-installed CAs in debug builds (for proxy debugging) -->
     <debug-overrides>
         <trust-anchors>
             <certificates src="user" />

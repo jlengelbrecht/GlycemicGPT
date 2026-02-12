@@ -21,6 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.glycemicgpt.mobile.presentation.alerts.AlertsScreen
 import com.glycemicgpt.mobile.presentation.chat.AiChatScreen
 import com.glycemicgpt.mobile.presentation.home.HomeScreen
 import com.glycemicgpt.mobile.presentation.settings.SettingsScreen
@@ -73,9 +74,4 @@ fun GlycemicGptNavHost() {
             composable(Screen.Settings.route) { SettingsScreen() }
         }
     }
-}
-
-@Composable
-fun AlertsScreen() {
-    PlaceholderScreen(title = "Alerts")
 }
