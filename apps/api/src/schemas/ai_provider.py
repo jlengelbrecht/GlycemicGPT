@@ -15,9 +15,8 @@ from src.models.ai_provider import AIProviderStatus, AIProviderType
 API_KEY_NOT_NEEDED = "not-needed"
 
 # Provider types that require a base_url
+# Note: subscription types no longer require base_url -- the sidecar handles routing
 _BASE_URL_REQUIRED_TYPES = {
-    AIProviderType.CLAUDE_SUBSCRIPTION,
-    AIProviderType.CHATGPT_SUBSCRIPTION,
     AIProviderType.OPENAI_COMPATIBLE,
 }
 
@@ -170,3 +169,80 @@ class AIChatResponse(BaseModel):
         default="Not medical advice. Consult your healthcare provider.",
         description="Safety disclaimer",
     )
+
+
+# ── Story 15.2: Subscription Auth Schemas ──
+
+VALID_SIDECAR_PROVIDERS = {"claude", "codex"}
+
+
+class SubscriptionAuthStartRequest(BaseModel):
+    """Request to start sidecar auth for a subscription provider."""
+
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
+
+    @model_validator(mode="after")
+    def validate_provider(self) -> "SubscriptionAuthStartRequest":
+        if self.provider not in VALID_SIDECAR_PROVIDERS:
+            raise ValueError(
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
+            )
+        return self
+
+
+class SubscriptionAuthStartResponse(BaseModel):
+    """Response with auth method info from the sidecar."""
+
+    provider: str
+    auth_method: str
+    instructions: str
+
+
+class SubscriptionAuthTokenRequest(BaseModel):
+    """Request to submit a token to the sidecar."""
+
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
+    token: str = Field(
+        ...,
+        min_length=10,
+        max_length=5000,
+        description="OAuth token obtained from CLI",
+    )
+
+    @model_validator(mode="after")
+    def validate_provider(self) -> "SubscriptionAuthTokenRequest":
+        if self.provider not in VALID_SIDECAR_PROVIDERS:
+            raise ValueError(
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
+            )
+        return self
+
+
+class SubscriptionAuthTokenResponse(BaseModel):
+    """Response after submitting a token."""
+
+    success: bool
+    provider: str
+    error: str | None = None
+
+
+class SubscriptionAuthRevokeRequest(BaseModel):
+    """Request to revoke sidecar auth for a subscription provider."""
+
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
+
+    @model_validator(mode="after")
+    def validate_provider(self) -> "SubscriptionAuthRevokeRequest":
+        if self.provider not in VALID_SIDECAR_PROVIDERS:
+            raise ValueError(
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
+            )
+        return self
+
+
+class SubscriptionAuthStatusResponse(BaseModel):
+    """Current auth status from the sidecar."""
+
+    sidecar_available: bool
+    claude: dict | None = None
+    codex: dict | None = None

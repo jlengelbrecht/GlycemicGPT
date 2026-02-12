@@ -1,8 +1,10 @@
-"""Story 5.1 / 14.2: AI provider configuration router.
+"""Story 5.1 / 14.2 / 15.2: AI provider configuration router.
 
 API endpoints for configuring AI provider with API key management.
 Supports 5 provider types: claude_api, openai_api, claude_subscription,
 chatgpt_subscription, and openai_compatible.
+
+Story 15.2: Subscription auth endpoints for sidecar token management.
 """
 
 import asyncio
@@ -24,9 +26,22 @@ from src.schemas.ai_provider import (
     AIProviderConfigResponse,
     AIProviderDeleteResponse,
     AIProviderTestResponse,
+    SubscriptionAuthRevokeRequest,
+    SubscriptionAuthStartRequest,
+    SubscriptionAuthStartResponse,
+    SubscriptionAuthStatusResponse,
+    SubscriptionAuthTokenRequest,
+    SubscriptionAuthTokenResponse,
 )
 from src.schemas.auth import ErrorResponse
 from src.services.ai_provider import mask_api_key, validate_ai_api_key
+from src.services.sidecar import (
+    get_sidecar_auth_status,
+    get_sidecar_health,
+    revoke_sidecar_auth,
+    start_sidecar_auth,
+    submit_sidecar_token,
+)
 from src.services.telegram_chat import handle_chat_web
 
 logger = get_logger(__name__)
@@ -314,3 +329,158 @@ async def ai_chat(
         response=response_text,
         disclaimer="Not medical advice. Consult your healthcare provider.",
     )
+
+
+# ── Story 15.2: Subscription Auth Endpoints ──
+
+
+@router.get(
+    "/subscription/auth/status",
+    response_model=SubscriptionAuthStatusResponse,
+    responses={
+        200: {"description": "Current sidecar auth status"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def subscription_auth_status(
+    _current_user: DiabeticOrAdminUser,
+) -> SubscriptionAuthStatusResponse:
+    """Check the sidecar's current authentication state.
+
+    Returns whether the sidecar is reachable and each provider's
+    auth status.
+    """
+    auth_data = await get_sidecar_auth_status()
+
+    if auth_data is None:
+        return SubscriptionAuthStatusResponse(sidecar_available=False)
+
+    return SubscriptionAuthStatusResponse(
+        sidecar_available=True,
+        claude=auth_data.get("claude"),
+        codex=auth_data.get("codex"),
+    )
+
+
+@router.post(
+    "/subscription/auth/start",
+    response_model=SubscriptionAuthStartResponse,
+    responses={
+        200: {"description": "Auth method info"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        502: {"model": ErrorResponse, "description": "Sidecar unreachable"},
+    },
+)
+async def subscription_auth_start(
+    request: SubscriptionAuthStartRequest,
+    _current_user: DiabeticOrAdminUser,
+) -> SubscriptionAuthStartResponse:
+    """Start the auth flow for a subscription provider.
+
+    Returns instructions for how to obtain and submit a token.
+    """
+    result = await start_sidecar_auth(request.provider)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI sidecar is not reachable. Ensure the sidecar container is running.",
+        )
+
+    return SubscriptionAuthStartResponse(
+        provider=result["provider"],
+        auth_method=result.get("auth_method", "token_paste"),
+        instructions=result.get("instructions", ""),
+    )
+
+
+@router.post(
+    "/subscription/auth/token",
+    response_model=SubscriptionAuthTokenResponse,
+    responses={
+        200: {"description": "Token submission result"},
+        400: {"model": ErrorResponse, "description": "Invalid token"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        502: {"model": ErrorResponse, "description": "Sidecar unreachable"},
+    },
+)
+async def subscription_auth_token(
+    request: SubscriptionAuthTokenRequest,
+    _current_user: DiabeticOrAdminUser,
+) -> SubscriptionAuthTokenResponse:
+    """Submit an OAuth token to the sidecar for storage.
+
+    The user obtains the token by running the provider's CLI on their
+    host machine, then pastes it into the settings UI.
+    """
+    result = await submit_sidecar_token(request.provider, request.token)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI sidecar is not reachable. Ensure the sidecar container is running.",
+        )
+
+    if not result.get("success", False):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to store token"),
+        )
+
+    return SubscriptionAuthTokenResponse(
+        success=True,
+        provider=request.provider,
+    )
+
+
+@router.post(
+    "/subscription/auth/revoke",
+    responses={
+        200: {"description": "Auth revoked"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        502: {"model": ErrorResponse, "description": "Sidecar unreachable"},
+    },
+)
+async def subscription_auth_revoke(
+    request: SubscriptionAuthRevokeRequest,
+    _current_user: DiabeticOrAdminUser,
+) -> dict:
+    """Revoke the stored token for a subscription provider."""
+    result = await revoke_sidecar_auth(request.provider)
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI sidecar is not reachable. Ensure the sidecar container is running.",
+        )
+
+    return {"revoked": True, "provider": request.provider}
+
+
+@router.get(
+    "/subscription/sidecar/health",
+    responses={
+        200: {"description": "Sidecar health status"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def subscription_sidecar_health(
+    _current_user: DiabeticOrAdminUser,
+) -> dict:
+    """Check if the AI sidecar container is healthy."""
+    health = await get_sidecar_health()
+
+    if health is None:
+        return {"available": False, "status": "unreachable"}
+
+    return {
+        "available": True,
+        "status": health.get("status", "unknown"),
+        "claude_auth": health.get("claude_auth", False),
+        "codex_auth": health.get("codex_auth", False),
+    }

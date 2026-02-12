@@ -10,8 +10,8 @@
  *   GET  /v1/models           - list available models
  *   POST /v1/chat/completions - OpenAI-compatible chat (streaming + non-streaming)
  *   GET  /auth/status         - authentication state
- *   POST /auth/start          - initiate OAuth (stub, Story 15.2)
- *   GET  /auth/callback       - OAuth callback (stub, Story 15.2)
+ *   POST /auth/start          - return auth method info for a provider
+ *   POST /auth/token          - accept token submission
  *   POST /auth/revoke         - revoke stored auth
  */
 
