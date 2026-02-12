@@ -419,7 +419,7 @@ def make_pump_profile(
             "start_minutes": 0,
             "basal_rate": 1.5,
             "correction_factor": 31,
-            "carb_ratio": 8,
+            "carb_ratio": 8.0,
             "target_bg": 110,
         },
         {
@@ -427,7 +427,7 @@ def make_pump_profile(
             "start_minutes": 300,
             "basal_rate": 1.65,
             "correction_factor": 25,
-            "carb_ratio": 7,
+            "carb_ratio": 7.0,
             "target_bg": 110,
         },
     ]
