@@ -110,11 +110,13 @@ class TestGetSidecarAuthStatus:
 class TestStartSidecarAuth:
     @pytest.mark.asyncio
     async def test_returns_auth_info(self):
-        mock_resp = _make_response({
-            "provider": "claude",
-            "auth_method": "token_paste",
-            "instructions": "Run the CLI...",
-        })
+        mock_resp = _make_response(
+            {
+                "provider": "claude",
+                "auth_method": "token_paste",
+                "instructions": "Run the CLI...",
+            }
+        )
 
         with patch("src.services.sidecar.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
@@ -163,7 +165,6 @@ class TestSubmitSidecarToken:
         assert result is not None
         assert result["success"] is False
         assert "Token too short" in result["error"]
-
 
     @pytest.mark.asyncio
     async def test_non_400_error_returns_failure(self):

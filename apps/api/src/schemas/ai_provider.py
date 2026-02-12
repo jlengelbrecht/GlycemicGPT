@@ -179,16 +179,13 @@ VALID_SIDECAR_PROVIDERS = {"claude", "codex"}
 class SubscriptionAuthStartRequest(BaseModel):
     """Request to start sidecar auth for a subscription provider."""
 
-    provider: str = Field(
-        ..., description="Sidecar provider name: 'claude' or 'codex'"
-    )
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
 
     @model_validator(mode="after")
     def validate_provider(self) -> "SubscriptionAuthStartRequest":
         if self.provider not in VALID_SIDECAR_PROVIDERS:
             raise ValueError(
-                f"Invalid provider '{self.provider}'. "
-                "Must be 'claude' or 'codex'."
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
             )
         return self
 
@@ -204,9 +201,7 @@ class SubscriptionAuthStartResponse(BaseModel):
 class SubscriptionAuthTokenRequest(BaseModel):
     """Request to submit a token to the sidecar."""
 
-    provider: str = Field(
-        ..., description="Sidecar provider name: 'claude' or 'codex'"
-    )
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
     token: str = Field(
         ...,
         min_length=10,
@@ -218,8 +213,7 @@ class SubscriptionAuthTokenRequest(BaseModel):
     def validate_provider(self) -> "SubscriptionAuthTokenRequest":
         if self.provider not in VALID_SIDECAR_PROVIDERS:
             raise ValueError(
-                f"Invalid provider '{self.provider}'. "
-                "Must be 'claude' or 'codex'."
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
             )
         return self
 
@@ -235,16 +229,13 @@ class SubscriptionAuthTokenResponse(BaseModel):
 class SubscriptionAuthRevokeRequest(BaseModel):
     """Request to revoke sidecar auth for a subscription provider."""
 
-    provider: str = Field(
-        ..., description="Sidecar provider name: 'claude' or 'codex'"
-    )
+    provider: str = Field(..., description="Sidecar provider name: 'claude' or 'codex'")
 
     @model_validator(mode="after")
     def validate_provider(self) -> "SubscriptionAuthRevokeRequest":
         if self.provider not in VALID_SIDECAR_PROVIDERS:
             raise ValueError(
-                f"Invalid provider '{self.provider}'. "
-                "Must be 'claude' or 'codex'."
+                f"Invalid provider '{self.provider}'. Must be 'claude' or 'codex'."
             )
         return self
 

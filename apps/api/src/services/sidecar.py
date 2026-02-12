@@ -127,7 +127,5 @@ async def revoke_sidecar_auth(provider: str) -> dict | None:
             resp.raise_for_status()
             return resp.json()
     except Exception as exc:
-        logger.warning(
-            "Sidecar auth revoke failed", provider=provider, error=str(exc)
-        )
+        logger.warning("Sidecar auth revoke failed", provider=provider, error=str(exc))
         return None
