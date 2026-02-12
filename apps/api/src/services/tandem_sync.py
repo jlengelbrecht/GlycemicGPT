@@ -24,6 +24,7 @@ from src.models.integration import (
     IntegrationType,
 )
 from src.models.pump_data import ControlIQMode, PumpEvent, PumpEventType
+from src.models.pump_profile import PumpProfile
 
 logger = get_logger(__name__)
 
@@ -401,11 +402,12 @@ def fetch_with_retry(
     start_date: datetime,
     end_date: datetime,
     max_retries: int = MAX_RETRIES,
-) -> list[dict]:
+) -> tuple[list[dict], dict | None]:
     """Fetch pump events with retry logic for transient failures.
 
     Gets pump metadata to find device IDs, then fetches events via
-    the pump_events() method and normalizes them into dicts.
+    the pump_events() method and normalizes them into dicts. Also
+    extracts raw pump settings from the metadata for profile storage.
 
     Args:
         api: TandemSourceApi instance
@@ -414,7 +416,7 @@ def fetch_with_retry(
         max_retries: Maximum retry attempts
 
     Returns:
-        List of normalized event dicts
+        Tuple of (normalized event dicts, raw settings dict or None)
 
     Raises:
         ApiException: If all retries fail
@@ -425,7 +427,7 @@ def fetch_with_retry(
     metadata = api.pump_event_metadata()
     if not metadata:
         logger.warning("No pumps found in Tandem account")
-        return []
+        return [], None
 
     # Handle both list and dict response structures
     if isinstance(metadata, dict):
@@ -442,18 +444,30 @@ def fetch_with_retry(
                     "Unexpected pump_event_metadata structure",
                     keys=list(metadata.keys()),
                 )
-                return []
+                return [], None
 
     # Format dates as YYYY-MM-DD strings (required by tconnectsync API)
     min_date_str = start_date.strftime("%Y-%m-%d")
     max_date_str = end_date.strftime("%Y-%m-%d")
 
     all_events: list[dict] = []
+    raw_settings: dict | None = None
 
     for pump_info in metadata:
         device_id = pump_info.get("tconnectDeviceId")
         if not device_id:
             continue
+
+        # Extract pump settings from the first pump that has them
+        if raw_settings is None:
+            last_upload = pump_info.get("lastUpload") or {}
+            settings_data = last_upload.get("settings")
+            if settings_data:
+                raw_settings = settings_data
+                logger.info(
+                    "Found pump settings in metadata",
+                    device_id=device_id,
+                )
 
         serial = pump_info.get("serialNumber", "")
         redacted_serial = f"***{serial[-4:]}" if len(serial) >= 4 else "***"
@@ -507,7 +521,143 @@ def fetch_with_retry(
             raise last_error
 
     logger.info("Fetched pump events", total_events=len(all_events))
-    return all_events
+    return all_events, raw_settings
+
+
+async def _store_pump_settings(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    raw_settings: dict,
+) -> int:
+    """Parse and upsert pump profiles from Tandem metadata settings.
+
+    Deserializes the raw settings dict via tconnectsync's PumpSettings
+    dataclass, converts milliunits to units, and upserts each profile
+    into the pump_profiles table.
+
+    Args:
+        db: Database session.
+        user_id: User ID to associate profiles with.
+        raw_settings: Raw settings dict from pump_event_metadata().
+
+    Returns:
+        Number of profiles stored.
+    """
+    from tconnectsync.domain.tandemsource.pump_settings import PumpSettings
+
+    pump_settings = PumpSettings.from_dict(raw_settings)
+    now = datetime.now(UTC)
+    profiles_stored = 0
+
+    active_idp = getattr(pump_settings.profiles, "activeIdp", None)
+    profile_list = getattr(pump_settings.profiles, "profile", None) or []
+
+    # Extract CGM alert thresholds
+    cgm_high = None
+    cgm_low = None
+    try:
+        cgm = pump_settings.cgmSettings
+        if cgm.highGlucoseAlert and cgm.highGlucoseAlert.enabled:
+            cgm_high = cgm.highGlucoseAlert.mgPerDl
+        if cgm.lowGlucoseAlert and cgm.lowGlucoseAlert.enabled:
+            cgm_low = cgm.lowGlucoseAlert.mgPerDl
+    except (AttributeError, TypeError):
+        pass
+
+    skipped = 0
+    for profile in profile_list:
+        try:
+            # Sanitize and truncate profile name to fit String(100) column
+            raw_name = getattr(profile, "name", None) or "Unknown"
+            profile_name = raw_name.replace("\x00", "")[:100]
+
+            # Build segments JSONB array with defensive access
+            segments = []
+            for seg in getattr(profile, "tDependentSegs", None) or []:
+                try:
+                    start_time = int(getattr(seg, "startTime", 0) or 0)
+                    # Clamp to valid range (0-1439 minutes in a day)
+                    start_time = max(0, min(start_time, 1439))
+
+                    hours = start_time // 60
+                    minutes = start_time % 60
+                    period = "AM" if hours < 12 else "PM"
+                    display_hour = hours % 12 or 12
+                    time_str = f"{display_hour}:{minutes:02d} {period}"
+
+                    basal_raw = getattr(seg, "basalRate", 0) or 0
+                    segments.append(
+                        {
+                            "time": time_str,
+                            "start_minutes": start_time,
+                            "basal_rate": float(basal_raw) / 1000.0,
+                            "correction_factor": int(getattr(seg, "isf", 0) or 0),
+                            "carb_ratio": int(getattr(seg, "carbRatio", 0) or 0),
+                            "target_bg": int(getattr(seg, "targetBg", 0) or 0),
+                        }
+                    )
+                except (TypeError, ValueError, AttributeError):
+                    logger.warning(
+                        "Skipped malformed pump profile segment",
+                        user_id=str(user_id),
+                        profile_name=profile_name,
+                    )
+                    continue
+
+            is_active = getattr(profile, "idp", None) == active_idp
+
+            insulin_duration = getattr(profile, "insulinDuration", None)
+            carb_entry = getattr(profile, "carbEntry", 1)
+            max_bolus_raw = getattr(profile, "maxBolus", 0) or 0
+
+            # Upsert using ON CONFLICT DO UPDATE on (user_id, profile_name)
+            stmt = (
+                insert(PumpProfile)
+                .values(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    profile_name=profile_name,
+                    is_active=is_active,
+                    segments=segments,
+                    insulin_duration_min=insulin_duration,
+                    carb_entry_enabled=bool(carb_entry),
+                    max_bolus_units=float(max_bolus_raw) / 1000.0,
+                    cgm_high_alert_mgdl=cgm_high if is_active else None,
+                    cgm_low_alert_mgdl=cgm_low if is_active else None,
+                    synced_at=now,
+                )
+                .on_conflict_do_update(
+                    constraint="uq_pump_profile_user_name",
+                    set_={
+                        "is_active": is_active,
+                        "segments": segments,
+                        "insulin_duration_min": insulin_duration,
+                        "carb_entry_enabled": bool(carb_entry),
+                        "max_bolus_units": float(max_bolus_raw) / 1000.0,
+                        "cgm_high_alert_mgdl": cgm_high if is_active else None,
+                        "cgm_low_alert_mgdl": cgm_low if is_active else None,
+                        "synced_at": now,
+                    },
+                )
+            )
+            await db.execute(stmt)
+            profiles_stored += 1
+        except Exception:
+            skipped += 1
+            logger.warning(
+                "Failed to store pump profile (skipping)",
+                user_id=str(user_id),
+                exc_info=True,
+            )
+
+    logger.info(
+        "Stored pump profiles",
+        user_id=str(user_id),
+        profiles_stored=profiles_stored,
+        skipped=skipped,
+        active_idp=active_idp,
+    )
+    return profiles_stored
 
 
 async def sync_tandem_for_user(
@@ -628,7 +778,7 @@ async def sync_tandem_for_user(
     # Fetch events from Tandem with retry logic
     try:
         # Run synchronous API call in thread pool to avoid blocking
-        raw_events = await asyncio.to_thread(
+        raw_events, raw_settings = await asyncio.to_thread(
             fetch_with_retry, api, start_date, end_date
         )
     except ApiException as e:
@@ -652,6 +802,18 @@ async def sync_tandem_for_user(
         await db.commit()
         raise TandemSyncError(f"Failed to fetch events: {str(e)}") from e
 
+    # Store pump settings profiles (graceful degradation - failure doesn't block events)
+    profiles_stored = 0
+    if raw_settings:
+        try:
+            profiles_stored = await _store_pump_settings(db, user_id, raw_settings)
+        except Exception:
+            logger.warning(
+                "Failed to store pump settings profiles (non-fatal)",
+                user_id=str(user_id),
+                exc_info=True,
+            )
+
     # raw_events is a flat list of normalized dicts from fetch_with_retry
     events = raw_events or []
 
@@ -664,6 +826,7 @@ async def sync_tandem_for_user(
         return {
             "events_fetched": 0,
             "events_stored": 0,
+            "profiles_stored": profiles_stored,
             "last_event": None,
         }
 
@@ -798,12 +961,14 @@ async def sync_tandem_for_user(
         user_id=str(user_id),
         events_fetched=len(events),
         events_stored=stored_count,
+        profiles_stored=profiles_stored,
         last_event_type=last_event["event_type"] if last_event else None,
     )
 
     return {
         "events_fetched": len(events),
         "events_stored": stored_count,
+        "profiles_stored": profiles_stored,
         "last_event": last_event,
     }
 

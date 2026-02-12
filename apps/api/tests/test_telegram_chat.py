@@ -19,6 +19,7 @@ from src.services.telegram_chat import (
     _build_diabetes_context,
     _build_glucose_section,
     _build_iob_section,
+    _build_pump_profile_section,
     _build_pump_section,
     _build_settings_section,
     _build_system_prompt,
@@ -397,6 +398,46 @@ class TestBuildSettingsSection:
         assert "Onset: 15 minutes" in result
 
 
+def make_pump_profile(
+    profile_name: str = "Default",
+    is_active: bool = True,
+    segments: list[dict] | None = None,
+    insulin_duration_min: int = 300,
+    max_bolus_units: float = 30.0,
+    cgm_high_alert_mgdl: int | None = 240,
+    cgm_low_alert_mgdl: int | None = 70,
+) -> MagicMock:
+    """Create a mock PumpProfile."""
+    from src.models.pump_profile import PumpProfile
+
+    profile = MagicMock(spec=PumpProfile)
+    profile.profile_name = profile_name
+    profile.is_active = is_active
+    profile.segments = segments or [
+        {
+            "time": "12:00 AM",
+            "start_minutes": 0,
+            "basal_rate": 1.5,
+            "correction_factor": 31,
+            "carb_ratio": 8,
+            "target_bg": 110,
+        },
+        {
+            "time": "5:00 AM",
+            "start_minutes": 300,
+            "basal_rate": 1.65,
+            "correction_factor": 25,
+            "carb_ratio": 7,
+            "target_bg": 110,
+        },
+    ]
+    profile.insulin_duration_min = insulin_duration_min
+    profile.max_bolus_units = max_bolus_units
+    profile.cgm_high_alert_mgdl = cgm_high_alert_mgdl
+    profile.cgm_low_alert_mgdl = cgm_low_alert_mgdl
+    return profile
+
+
 def _mock_none_scalar() -> MagicMock:
     """Create a mock DB result that returns None for scalar_one_or_none."""
     result = MagicMock()
@@ -404,13 +445,110 @@ def _mock_none_scalar() -> MagicMock:
     return result
 
 
+def _mock_scalars_first(value: object) -> MagicMock:
+    """Create a mock DB result that returns value via scalars().first()."""
+    result = MagicMock()
+    scalars_mock = MagicMock()
+    scalars_mock.first.return_value = value
+    result.scalars.return_value = scalars_mock
+    return result
+
+
+# ---------------------------------------------------------------------------
+# _build_pump_profile_section tests (Story 15.8)
+# ---------------------------------------------------------------------------
+class TestBuildPumpProfileSection:
+    """Tests for _build_pump_profile_section."""
+
+    @pytest.mark.asyncio
+    async def test_no_profile_returns_none(self):
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(None))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_formats_active_profile(self):
+        profile = make_pump_profile()
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(profile))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+
+        assert result is not None
+        assert '[Pump Profile - "Default" (active)]' in result
+        assert "12:00 AM" in result
+        assert "Basal 1.500 u/hr" in result
+        assert "CF 1:31" in result
+        assert "CR 1:8" in result
+        assert "Target 110" in result
+        assert "5:00 AM" in result
+        assert "Basal 1.650 u/hr" in result
+
+    @pytest.mark.asyncio
+    async def test_includes_insulin_duration_and_max_bolus(self):
+        profile = make_pump_profile(insulin_duration_min=300, max_bolus_units=30.0)
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(profile))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+
+        assert "Insulin duration: 5hr" in result
+        assert "Max bolus: 30.0u" in result
+
+    @pytest.mark.asyncio
+    async def test_includes_cgm_alerts(self):
+        profile = make_pump_profile(cgm_high_alert_mgdl=240, cgm_low_alert_mgdl=70)
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(profile))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+
+        assert "CGM alerts:" in result
+        assert "High 240 mg/dL" in result
+        assert "Low 70 mg/dL" in result
+
+    @pytest.mark.asyncio
+    async def test_no_cgm_alerts_when_none(self):
+        profile = make_pump_profile(cgm_high_alert_mgdl=None, cgm_low_alert_mgdl=None)
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(profile))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+
+        assert "CGM alerts" not in result
+
+    @pytest.mark.asyncio
+    async def test_empty_segments(self):
+        profile = make_pump_profile(segments=[])
+
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_mock_scalars_first(profile))
+
+        result = await _build_pump_profile_section(db, uuid.uuid4())
+
+        assert result is not None
+        assert '[Pump Profile - "Default" (active)]' in result
+        # No segment lines, just header + extras
+        assert "Insulin duration" in result
+
+
 # ---------------------------------------------------------------------------
 # _build_diabetes_context tests (Story 15.7)
 # ---------------------------------------------------------------------------
 class TestBuildDiabetesContext:
-    """Tests for _build_diabetes_context with 5 section builders."""
+    """Tests for _build_diabetes_context with 6 section builders."""
 
     @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_chat._build_pump_profile_section",
+        new_callable=AsyncMock,
+    )
     @patch("src.services.telegram_chat._build_settings_section", new_callable=AsyncMock)
     @patch(
         "src.services.telegram_chat._build_control_iq_section", new_callable=AsyncMock
@@ -419,13 +557,16 @@ class TestBuildDiabetesContext:
     @patch("src.services.telegram_chat._build_iob_section", new_callable=AsyncMock)
     @patch("src.services.telegram_chat._build_glucose_section", new_callable=AsyncMock)
     async def test_assembles_all_sections(
-        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings
+        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings, mock_profile
     ):
         mock_glucose.return_value = "[Glucose - last 6h]\n- Current: 150 mg/dL"
         mock_iob.return_value = "[Insulin on Board]\n- Current IoB: 2.5 units"
         mock_pump.return_value = "[Pump Activity - last 6h]\n- Manual boluses: 3"
         mock_ciq.return_value = "[Control-IQ Activity - last 24h]\n- Total events: 50"
         mock_settings.return_value = "[User Settings]\n- Target range: 70-180 mg/dL"
+        mock_profile.return_value = (
+            '[Pump Profile - "Default" (active)]\n- 12:00 AM: Basal 1.500 u/hr'
+        )
 
         db = AsyncMock()
         context = await _build_diabetes_context(db, uuid.uuid4())
@@ -435,10 +576,15 @@ class TestBuildDiabetesContext:
         assert "[Pump Activity" in context
         assert "[Control-IQ Activity" in context
         assert "[User Settings]" in context
+        assert "[Pump Profile" in context
         # Sections separated by double newlines
         assert "\n\n" in context
 
     @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_chat._build_pump_profile_section",
+        new_callable=AsyncMock,
+    )
     @patch("src.services.telegram_chat._build_settings_section", new_callable=AsyncMock)
     @patch(
         "src.services.telegram_chat._build_control_iq_section", new_callable=AsyncMock
@@ -447,13 +593,14 @@ class TestBuildDiabetesContext:
     @patch("src.services.telegram_chat._build_iob_section", new_callable=AsyncMock)
     @patch("src.services.telegram_chat._build_glucose_section", new_callable=AsyncMock)
     async def test_skips_none_sections(
-        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings
+        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings, mock_profile
     ):
         mock_glucose.return_value = "[Glucose]\n- Current: 120 mg/dL"
         mock_iob.return_value = None  # No IoB data
         mock_pump.return_value = None  # No pump data
         mock_ciq.return_value = None  # No Control-IQ data
         mock_settings.return_value = "[User Settings]\n- Target: 70-180"
+        mock_profile.return_value = None  # No pump profile
 
         db = AsyncMock()
         context = await _build_diabetes_context(db, uuid.uuid4())
@@ -462,8 +609,13 @@ class TestBuildDiabetesContext:
         assert "[User Settings]" in context
         assert "[Insulin on Board]" not in context
         assert "[Pump Activity" not in context
+        assert "[Pump Profile" not in context
 
     @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_chat._build_pump_profile_section",
+        new_callable=AsyncMock,
+    )
     @patch("src.services.telegram_chat._build_settings_section", new_callable=AsyncMock)
     @patch(
         "src.services.telegram_chat._build_control_iq_section", new_callable=AsyncMock
@@ -472,13 +624,14 @@ class TestBuildDiabetesContext:
     @patch("src.services.telegram_chat._build_iob_section", new_callable=AsyncMock)
     @patch("src.services.telegram_chat._build_glucose_section", new_callable=AsyncMock)
     async def test_all_sections_none_returns_fallback(
-        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings
+        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings, mock_profile
     ):
         mock_glucose.return_value = None
         mock_iob.return_value = None
         mock_pump.return_value = None
         mock_ciq.return_value = None
         mock_settings.return_value = None
+        mock_profile.return_value = None
 
         db = AsyncMock()
         context = await _build_diabetes_context(db, uuid.uuid4())
@@ -486,6 +639,10 @@ class TestBuildDiabetesContext:
         assert "No data available" in context
 
     @pytest.mark.asyncio
+    @patch(
+        "src.services.telegram_chat._build_pump_profile_section",
+        new_callable=AsyncMock,
+    )
     @patch("src.services.telegram_chat._build_settings_section", new_callable=AsyncMock)
     @patch(
         "src.services.telegram_chat._build_control_iq_section", new_callable=AsyncMock
@@ -494,7 +651,7 @@ class TestBuildDiabetesContext:
     @patch("src.services.telegram_chat._build_iob_section", new_callable=AsyncMock)
     @patch("src.services.telegram_chat._build_glucose_section", new_callable=AsyncMock)
     async def test_section_error_doesnt_crash(
-        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings
+        self, mock_glucose, mock_iob, mock_pump, mock_ciq, mock_settings, mock_profile
     ):
         """Each section builder is independently resilient."""
         mock_glucose.return_value = "[Glucose]\n- Current: 120"
@@ -502,6 +659,7 @@ class TestBuildDiabetesContext:
         mock_pump.return_value = "[Pump Activity]\n- Boluses: 2"
         mock_ciq.side_effect = RuntimeError("Connection lost")  # This one too
         mock_settings.return_value = None
+        mock_profile.return_value = None
 
         db = AsyncMock()
         context = await _build_diabetes_context(db, uuid.uuid4())

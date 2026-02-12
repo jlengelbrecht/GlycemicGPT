@@ -279,15 +279,67 @@ async def _build_settings_section(
     return "[User Settings]\n" + "\n".join(parts)
 
 
+async def _build_pump_profile_section(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> str | None:
+    """Build pump profile section from the active Tandem pump profile."""
+    from src.models.pump_profile import PumpProfile
+
+    result = await db.execute(
+        select(PumpProfile).where(
+            PumpProfile.user_id == user_id,
+            PumpProfile.is_active == True,  # noqa: E712
+        )
+    )
+    profile = result.scalars().first()
+    if not profile:
+        return None
+
+    lines = [f'[Pump Profile - "{profile.profile_name}" (active)]']
+    for seg in profile.segments or []:
+        if not isinstance(seg, dict):
+            continue
+        time_str = seg.get("time") or "??"
+        basal = seg.get("basal_rate") or 0
+        cf = seg.get("correction_factor") or 0
+        cr = seg.get("carb_ratio") or 0
+        tgt = seg.get("target_bg") or 0
+        lines.append(
+            f"- {time_str}: Basal {basal:.3f} u/hr, CF 1:{cf}, CR 1:{cr}, Target {tgt}"
+        )
+
+    extras = []
+    if profile.insulin_duration_min:
+        hours = profile.insulin_duration_min // 60
+        mins = profile.insulin_duration_min % 60
+        dur_str = f"{hours}hr" + (f" {mins}min" if mins else "")
+        extras.append(f"Insulin duration: {dur_str}")
+    if profile.max_bolus_units:
+        extras.append(f"Max bolus: {profile.max_bolus_units:.1f}u")
+    if extras:
+        lines.append(f"- {', '.join(extras)}")
+
+    alert_parts = []
+    if profile.cgm_high_alert_mgdl:
+        alert_parts.append(f"High {profile.cgm_high_alert_mgdl} mg/dL")
+    if profile.cgm_low_alert_mgdl:
+        alert_parts.append(f"Low {profile.cgm_low_alert_mgdl} mg/dL")
+    if alert_parts:
+        lines.append(f"- CGM alerts: {', '.join(alert_parts)}")
+
+    return "\n".join(lines)
+
+
 async def _build_diabetes_context(
     db: AsyncSession,
     user_id: uuid.UUID,
 ) -> str:
     """Build comprehensive diabetes context from all available data.
 
-    Assembles 5 independent sections: glucose, IoB, pump activity,
-    Control-IQ summary, and user settings. Each section is independently
-    resilient -- if one fails, the others still populate.
+    Assembles 6 independent sections: glucose, IoB, pump activity,
+    Control-IQ summary, user settings, and pump profile. Each section
+    is independently resilient -- if one fails, the others still populate.
 
     Args:
         db: Database session.
@@ -303,6 +355,7 @@ async def _build_diabetes_context(
         ("pump", _build_pump_section),
         ("control_iq", _build_control_iq_section),
         ("settings", _build_settings_section),
+        ("pump_profile", _build_pump_profile_section),
     ]
 
     sections: list[str] = []
