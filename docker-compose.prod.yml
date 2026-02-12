@@ -4,6 +4,7 @@
 # Pull latest images:
 #   docker pull ghcr.io/jlengelbrecht/glycemicgpt-api:latest
 #   docker pull ghcr.io/jlengelbrecht/glycemicgpt-web:latest
+#   docker pull ghcr.io/jlengelbrecht/glycemicgpt-sidecar:latest
 #
 # Or use a specific version:
 #   IMAGE_TAG=0.1.2 docker compose -f docker-compose.prod.yml up -d
@@ -35,6 +36,22 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-sidecar:
+    image: ghcr.io/jlengelbrecht/glycemicgpt-sidecar:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - sidecar_auth:/home/sidecar/.config
+      - sidecar_codex:/home/sidecar/.codex
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3456/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   api:
     image: ghcr.io/jlengelbrecht/glycemicgpt-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -45,10 +62,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_FORMAT: ${LOG_FORMAT:-json}
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      AI_SIDECAR_URL: http://ai-sidecar:3456
+      AI_SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai-sidecar:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -72,3 +93,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  sidecar_auth:
+  sidecar_codex:
