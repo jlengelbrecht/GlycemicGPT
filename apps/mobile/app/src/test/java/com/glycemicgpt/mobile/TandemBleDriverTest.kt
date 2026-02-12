@@ -1,7 +1,12 @@
 package com.glycemicgpt.mobile
 
+import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
 import com.glycemicgpt.mobile.ble.connection.TandemBleDriver
 import com.glycemicgpt.mobile.domain.model.ConnectionState
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -10,7 +15,11 @@ import org.junit.Test
 
 class TandemBleDriverTest {
 
-    private val driver = TandemBleDriver()
+    private val connectionStateFlow = MutableStateFlow(ConnectionState.DISCONNECTED)
+    private val connectionManager = mockk<BleConnectionManager>(relaxed = true) {
+        every { connectionState } returns connectionStateFlow
+    }
+    private val driver = TandemBleDriver(connectionManager)
 
     @Test
     fun `initial connection state is disconnected`() = runTest {
@@ -19,9 +28,17 @@ class TandemBleDriverTest {
     }
 
     @Test
-    fun `connect returns not implemented until story 16_2`() = runTest {
+    fun `connect delegates to connection manager`() = runTest {
         val result = driver.connect("AA:BB:CC:DD:EE:FF")
-        assertTrue(result.isFailure)
+        assertTrue(result.isSuccess)
+        verify { connectionManager.connect("AA:BB:CC:DD:EE:FF", null) }
+    }
+
+    @Test
+    fun `disconnect delegates to connection manager`() = runTest {
+        val result = driver.disconnect()
+        assertTrue(result.isSuccess)
+        verify { connectionManager.disconnect() }
     }
 
     @Test
@@ -31,10 +48,9 @@ class TandemBleDriverTest {
     }
 
     @Test
-    fun `disconnect sets state to disconnected`() = runTest {
-        val result = driver.disconnect()
-        assertTrue(result.isSuccess)
+    fun `observeConnectionState returns manager state`() = runTest {
+        connectionStateFlow.value = ConnectionState.CONNECTED
         val state = driver.observeConnectionState().first()
-        assertEquals(ConnectionState.DISCONNECTED, state)
+        assertEquals(ConnectionState.CONNECTED, state)
     }
 }

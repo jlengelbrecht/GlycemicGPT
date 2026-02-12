@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.presentation.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
@@ -24,6 +25,7 @@ import androidx.navigation.compose.rememberNavController
 import com.glycemicgpt.mobile.presentation.alerts.AlertsScreen
 import com.glycemicgpt.mobile.presentation.chat.AiChatScreen
 import com.glycemicgpt.mobile.presentation.home.HomeScreen
+import com.glycemicgpt.mobile.presentation.pairing.PairingScreen
 import com.glycemicgpt.mobile.presentation.settings.SettingsScreen
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
@@ -31,6 +33,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object AiChat : Screen("ai_chat", "AI Chat", Icons.Default.Chat)
     data object Alerts : Screen("alerts", "Alerts", Icons.Default.Notifications)
     data object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+    data object Pairing : Screen("pairing", "Pairing", Icons.Default.Bluetooth)
 }
 
 private val bottomNavItems = listOf(Screen.Home, Screen.AiChat, Screen.Alerts, Screen.Settings)
@@ -71,7 +74,18 @@ fun GlycemicGptNavHost() {
             composable(Screen.Home.route) { HomeScreen() }
             composable(Screen.AiChat.route) { AiChatScreen() }
             composable(Screen.Alerts.route) { AlertsScreen() }
-            composable(Screen.Settings.route) { SettingsScreen() }
+            composable(Screen.Settings.route) {
+                SettingsScreen(
+                    onNavigateToPairing = {
+                        navController.navigate(Screen.Pairing.route)
+                    },
+                )
+            }
+            composable(Screen.Pairing.route) {
+                PairingScreen(
+                    onPaired = { navController.popBackStack() },
+                )
+            }
         }
     }
 }
