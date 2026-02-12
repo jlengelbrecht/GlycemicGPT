@@ -88,8 +88,10 @@ function messagesToPrompt(messages: ChatMessage[]): string {
 /**
  * Spawn the Claude CLI as a child process.
  * Prompt is passed via stdin (not as a CLI argument) to prevent injection.
+ *
+ * @param extraArgs Additional CLI flags (e.g. output format overrides).
  */
-function spawnClaude(prompt: string, model: string): ChildProcess {
+function spawnClaude(prompt: string, model: string, extraArgs: string[] = []): ChildProcess {
   const token = getToken();
   const env: Record<string, string> = { ...process.env } as Record<
     string,
@@ -101,10 +103,10 @@ function spawnClaude(prompt: string, model: string): ChildProcess {
     "claude",
     [
       "--print",
-      "--output-format",
-      "stream-json",
+      "--no-session-persistence",
       "--model",
       model, // Already validated by resolveModel()
+      ...extraArgs,
       "-", // Read prompt from stdin
     ],
     {
@@ -123,21 +125,39 @@ function spawnClaude(prompt: string, model: string): ChildProcess {
 /**
  * Parse a single line of Claude CLI stream-json output and return the
  * text delta (if any).
+ *
+ * Handles three output shapes from the CLI:
+ *   1. `stream_event` wrapping `content_block_delta` (--include-partial-messages)
+ *   2. `assistant` with `message.content` as an array of text blocks
+ *   3. `content_block_delta` at top level (legacy)
  */
 function extractTextDelta(line: string): string | null {
   try {
     const obj = JSON.parse(line);
-    if (obj?.type === "content_block_delta" && obj?.delta?.text) {
-      return obj.delta.text as string;
-    }
-    if (obj?.type === "assistant" && typeof obj?.message?.content === "string") {
-      return obj.message.content as string;
-    }
+
+    // Shape 1: streaming delta wrapped in stream_event
     if (obj?.type === "stream_event") {
       const inner = obj.event;
       if (inner?.type === "content_block_delta" && inner?.delta?.text) {
         return inner.delta.text as string;
       }
+    }
+
+    // Shape 2: full assistant message (content can be string or array)
+    if (obj?.type === "assistant" && obj?.message?.content) {
+      const content = obj.message.content;
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        return content
+          .filter((b: { type: string; text?: string }) => b.type === "text" && b.text)
+          .map((b: { type: string; text: string }) => b.text)
+          .join("");
+      }
+    }
+
+    // Shape 3: top-level content_block_delta (legacy)
+    if (obj?.type === "content_block_delta" && obj?.delta?.text) {
+      return obj.delta.text as string;
     }
   } catch {
     // Not valid JSON — skip
@@ -171,7 +191,9 @@ export class ClaudeProvider implements AIProvider {
     const cliModel = resolveModel(model);
 
     return new Promise((resolve, reject) => {
-      const child = spawnClaude(prompt, cliModel);
+      const child = spawnClaude(prompt, cliModel, [
+        "--output-format", "json",
+      ]);
       let stdout = "";
       let stdoutSize = 0;
       let stderrSize = 0;
@@ -210,14 +232,17 @@ export class ClaudeProvider implements AIProvider {
           return;
         }
 
-        const lines = stdout.split("\n").filter((l) => l.trim());
-        let content = "";
-        for (const line of lines) {
-          const delta = extractTextDelta(line);
-          if (delta) content += delta;
+        try {
+          const result = JSON.parse(stdout.trim());
+          if (result.is_error) {
+            reject(new Error(result.result || "AI provider returned an error"));
+            return;
+          }
+          resolve({ content: result.result || "", model: `claude-${cliModel}` });
+        } catch {
+          // Fallback: treat raw stdout as plain text if JSON parsing fails
+          resolve({ content: stdout.trim(), model: `claude-${cliModel}` });
         }
-
-        resolve({ content, model: `claude-${cliModel}` });
       });
     });
   }
@@ -231,7 +256,11 @@ export class ClaudeProvider implements AIProvider {
     const cliModel = resolveModel(model);
 
     return new Promise((resolve, reject) => {
-      const child = spawnClaude(prompt, cliModel);
+      const child = spawnClaude(prompt, cliModel, [
+        "--output-format", "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+      ]);
       let buffer = "";
       let content = "";
       let totalSize = 0;
