@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.65](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.64...v0.1.65) (2026-02-12)
+
+
+### ✨ Features
+
+* sidecar token-paste auth flow for subscription providers (Story 15.2) ([#149](https://github.com/jlengelbrecht/GlycemicGPT/issues/149)) ([4304818](https://github.com/jlengelbrecht/GlycemicGPT/commit/4304818a9fd2a193b2966bb7b98c507a2363f394))
+
 ## [0.1.64](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.63...v0.1.64) (2026-02-12)
 
 
