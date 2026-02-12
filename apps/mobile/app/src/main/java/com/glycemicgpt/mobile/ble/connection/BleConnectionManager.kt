@@ -17,6 +17,7 @@ import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,10 +27,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -66,6 +69,7 @@ class BleConnectionManager @Inject constructor(
 
     private var reconnectAttempt = 0
     private var reconnectJob: Job? = null
+    @Volatile
     private var autoReconnect = true
 
     // GATT operation queue -- only one GATT write at a time
@@ -78,6 +82,9 @@ class BleConnectionManager @Inject constructor(
     // Pending pairing code provided by the user during initial pairing
     @Volatile
     private var pendingPairingCode: String? = null
+
+    // Pending status read requests: txId -> deferred response cargo
+    private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<ByteArray>>()
 
     private sealed class GattOperation {
         data class WriteCharacteristic(
@@ -126,6 +133,7 @@ class BleConnectionManager @Inject constructor(
         reconnectJob = null
         operationQueue.clear()
         operationInFlight.set(false)
+        cancelPendingRequests()
         synchronized(gattLock) {
             gatt?.let {
                 Timber.d("Disconnecting from pump")
@@ -135,6 +143,17 @@ class BleConnectionManager @Inject constructor(
             gatt = null
         }
         _connectionState.value = ConnectionState.DISCONNECTED
+    }
+
+    private fun cancelPendingRequests() {
+        // Atomically drain: remove each entry individually to avoid
+        // race with concurrent sendStatusRequest insertions
+        val iter = pendingRequests.entries.iterator()
+        while (iter.hasNext()) {
+            val entry = iter.next()
+            iter.remove()
+            entry.value.cancel()
+        }
     }
 
     /** Unpair: clear credentials and disconnect. */
@@ -150,6 +169,48 @@ class BleConnectionManager @Inject constructor(
         val code = credentialStore.getPairingCode()
         autoReconnect = true
         connect(address, code)
+    }
+
+    /**
+     * Send a status read request and wait for the response cargo.
+     *
+     * @param opcode The read-only status request opcode.
+     * @param cargo Request payload (empty for most status reads).
+     * @param timeoutMs Maximum time to wait for a response.
+     * @return The response cargo bytes.
+     * @throws TimeoutException if no response within [timeoutMs].
+     * @throws IllegalStateException if not connected.
+     */
+    suspend fun sendStatusRequest(
+        opcode: Int,
+        cargo: ByteArray = ByteArray(0),
+        timeoutMs: Long = TandemProtocol.STATUS_READ_TIMEOUT_MS,
+    ): ByteArray {
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            throw IllegalStateException("Not connected to pump")
+        }
+
+        val id = nextTxId()
+        val deferred = CompletableDeferred<ByteArray>()
+
+        // Evict any stale deferred with the same txId (wraps at 256)
+        val evicted = pendingRequests.put(id, deferred)
+        if (evicted != null) {
+            Timber.w("Evicting stale pending request txId=%d", id)
+            evicted.cancel()
+        }
+
+        val chunks = Packetize.encode(opcode, id, cargo, TandemProtocol.CHUNK_SIZE_SHORT)
+        enqueueWrite(TandemProtocol.CURRENT_STATUS_UUID, chunks)
+
+        return try {
+            withTimeout(timeoutMs) {
+                deferred.await()
+            }
+        } finally {
+            // Always clean up -- whether completed, timed out, or cancelled
+            pendingRequests.remove(id, deferred)
+        }
     }
 
     private fun nextTxId(): Int = txId.getAndIncrement() and 0xFF
@@ -279,6 +340,7 @@ class BleConnectionManager @Inject constructor(
                     }
                     operationQueue.clear()
                     operationInFlight.set(false)
+                    cancelPendingRequests()
                     _connectionState.value = ConnectionState.DISCONNECTED
                     if (autoReconnect) scheduleReconnect()
                 }
@@ -362,10 +424,43 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun handleCharacteristicChanged(uuid: UUID, data: ByteArray) {
-        if (uuid == TandemProtocol.AUTHORIZATION_UUID) {
-            handleAuthNotification(data)
+        when (uuid) {
+            TandemProtocol.AUTHORIZATION_UUID -> handleAuthNotification(data)
+            TandemProtocol.CURRENT_STATUS_UUID -> handleStatusNotification(data)
         }
-        // Other characteristic notifications handled in Story 16.3
+    }
+
+    // Per-txId assemblers for status responses to handle interleaved
+    // multi-chunk notifications from concurrent requests
+    private val statusAssemblers = ConcurrentHashMap<Int, PacketAssembler>()
+
+    private fun handleStatusNotification(data: ByteArray) {
+        // Peek at the txId from the chunk header (byte 1) to route to
+        // the correct per-transaction assembler
+        if (data.size < 2) return
+        val chunkTxId = data[1].toInt() and 0xFF
+
+        val assembler = statusAssemblers.getOrPut(chunkTxId) { PacketAssembler() }
+        val raw: ByteArray
+        synchronized(assembler) {
+            if (!assembler.feed(data)) return
+            raw = assembler.assemble()
+            assembler.reset()
+        }
+        statusAssemblers.remove(chunkTxId)
+
+        val parsed = Packetize.parseHeader(raw) ?: run {
+            Timber.e("Failed to parse status notification txId=%d", chunkTxId)
+            return
+        }
+
+        val (_, responseTxId, cargo) = parsed
+        val deferred = pendingRequests.remove(responseTxId)
+        if (deferred != null) {
+            deferred.complete(cargo)
+        } else {
+            Timber.w("Received unsolicited status response txId=%d", responseTxId)
+        }
     }
 
     private fun startAuthentication() {

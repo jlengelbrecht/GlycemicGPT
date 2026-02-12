@@ -1,5 +1,7 @@
 package com.glycemicgpt.mobile.ble.connection
 
+import com.glycemicgpt.mobile.ble.messages.StatusResponseParser
+import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
@@ -16,8 +18,11 @@ import javax.inject.Singleton
 /**
  * Tandem t:slim X2 BLE driver implementing the PumpDriver interface.
  *
- * Delegates connection lifecycle to [BleConnectionManager].
- * Data read operations will be implemented in Story 16.3.
+ * Delegates connection lifecycle to [BleConnectionManager] and uses
+ * [StatusResponseParser] to decode pump responses into domain models.
+ *
+ * All data read methods are READ-ONLY status queries. No control
+ * operations are implemented or invocable through this class.
  */
 @Singleton
 class TandemBleDriver @Inject constructor(
@@ -42,36 +47,63 @@ class TandemBleDriver @Inject constructor(
         }
     }
 
-    override suspend fun getIoB(): Result<IoBReading> {
-        // Story 16.3: ControlIQIOBRequest (opcode 108)
-        return Result.failure(NotImplementedError("IoB read - Story 16.3"))
+    override suspend fun getIoB(): Result<IoBReading> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_CONTROL_IQ_IOB_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseIoBResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse IoB response")
     }
 
-    override suspend fun getBasalRate(): Result<BasalReading> {
-        // Story 16.3: CurrentBasalStatusRequest
-        return Result.failure(NotImplementedError("Basal read - Story 16.3"))
+    override suspend fun getBasalRate(): Result<BasalReading> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_CURRENT_BASAL_STATUS_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseBasalStatusResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse basal status response")
     }
 
-    override suspend fun getBolusHistory(since: Instant): Result<List<BolusEvent>> {
-        // Story 16.3: Bolus history request
-        return Result.failure(NotImplementedError("Bolus history - Story 16.3"))
+    override suspend fun getBolusHistory(since: Instant): Result<List<BolusEvent>> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_BOLUS_CALC_DATA_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseBolusHistoryResponse(cargo, since)
     }
 
-    override suspend fun getPumpSettings(): Result<PumpSettings> {
-        // Story 16.3: Pump settings request
-        return Result.failure(NotImplementedError("Pump settings - Story 16.3"))
+    override suspend fun getPumpSettings(): Result<PumpSettings> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_PUMP_SETTINGS_REQ,
+    ) { cargo ->
+        StatusResponseParser.parsePumpSettingsResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse pump settings response")
     }
 
-    override suspend fun getBatteryStatus(): Result<BatteryStatus> {
-        // Story 16.3: CurrentBatteryRequest
-        return Result.failure(NotImplementedError("Battery status - Story 16.3"))
+    override suspend fun getBatteryStatus(): Result<BatteryStatus> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseBatteryResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse battery response")
     }
 
-    override suspend fun getReservoirLevel(): Result<ReservoirReading> {
-        // Story 16.3: InsulinStatusRequest
-        return Result.failure(NotImplementedError("Reservoir level - Story 16.3"))
+    override suspend fun getReservoirLevel(): Result<ReservoirReading> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_INSULIN_STATUS_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseInsulinStatusResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse insulin status response")
     }
 
     override fun observeConnectionState(): Flow<ConnectionState> =
         connectionManager.connectionState
+
+    /**
+     * Send a status request and parse the response. Wraps the entire
+     * send-receive-parse cycle in a Result for safe error handling.
+     */
+    private suspend fun <T> runStatusRequest(
+        opcode: Int,
+        parser: (ByteArray) -> T,
+    ): Result<T> {
+        return try {
+            val responseCargo = connectionManager.sendStatusRequest(opcode)
+            Result.success(parser(responseCargo))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
