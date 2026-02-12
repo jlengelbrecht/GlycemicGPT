@@ -10,8 +10,10 @@ FROM node:22-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI and Codex CLI globally (pinned versions)
-RUN npm install -g @anthropic-ai/claude-code@1 @openai/codex@1 2>/dev/null || true
+# Install Claude Code CLI and Codex CLI globally
+# claude-code 2.x provides the `claude` binary for subscription proxy
+# codex 0.x provides the `codex` binary for ChatGPT subscription proxy
+RUN npm install -g @anthropic-ai/claude-code@latest @openai/codex@latest
 
 # Create non-root user
 RUN groupadd --gid 1001 sidecar && \
