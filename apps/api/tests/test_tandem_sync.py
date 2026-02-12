@@ -956,14 +956,14 @@ def _make_raw_settings(
                         "startTime": 0,
                         "basalRate": 1500,  # milliunits/hr -> 1.5 u/hr
                         "isf": 31,
-                        "carbRatio": 8,
+                        "carbRatio": 8000,  # milliunits -> 8.0
                         "targetBg": 110,
                     },
                     {
                         "startTime": 300,  # 5:00 AM
                         "basalRate": 1650,
                         "isf": 25,
-                        "carbRatio": 7,
+                        "carbRatio": 7000,  # milliunits -> 7.0
                         "targetBg": 110,
                     },
                 ],
@@ -1041,10 +1041,12 @@ class TestStorePumpSettings:
         params = stmt.compile().params
         # max_bolus should be 30.0 (30000 / 1000)
         assert params["max_bolus_units"] == 30.0
-        # Segments should have converted basal rates
+        # Segments should have converted basal rates and carb ratios
         segments = params["segments"]
         assert segments[0]["basal_rate"] == 1.5  # 1500 / 1000
         assert segments[1]["basal_rate"] == 1.65  # 1650 / 1000
+        assert segments[0]["carb_ratio"] == 8.0  # 8000 / 1000
+        assert segments[1]["carb_ratio"] == 7.0  # 7000 / 1000
 
     @pytest.mark.asyncio
     async def test_time_conversion(self):
@@ -1078,7 +1080,7 @@ class TestStorePumpSettings:
                         "startTime": 0,
                         "basalRate": 1000,
                         "isf": 30,
-                        "carbRatio": 8,
+                        "carbRatio": 8000,  # milliunits -> 8.0
                         "targetBg": 110,
                     },
                 ],
@@ -1094,7 +1096,7 @@ class TestStorePumpSettings:
                         "startTime": 0,
                         "basalRate": 800,
                         "isf": 35,
-                        "carbRatio": 10,
+                        "carbRatio": 10000,  # milliunits -> 10.0
                         "targetBg": 120,
                     },
                 ],
@@ -1138,7 +1140,7 @@ class TestStorePumpSettings:
                         "startTime": 0,
                         "basalRate": 1000,
                         "isf": 30,
-                        "carbRatio": 8,
+                        "carbRatio": 8000,  # milliunits -> 8.0
                         "targetBg": 110,
                     },
                 ],
@@ -1154,7 +1156,7 @@ class TestStorePumpSettings:
                         "startTime": 0,
                         "basalRate": 800,
                         "isf": 35,
-                        "carbRatio": 10,
+                        "carbRatio": 10000,  # milliunits -> 10.0
                         "targetBg": 120,
                     },
                 ],
