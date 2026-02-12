@@ -791,8 +791,8 @@ class TestNormalizePumpEvent:
         assert result["iob"] == 6.14
         assert result["bg"] == 257
 
-    def test_event_id_20_extracts_units(self):
-        """Event ID 20 (LidBolusCompleted) should extract units."""
+    def test_event_id_20_is_excluded(self):
+        """Event ID 20 (LidBolusCompleted) should be excluded to prevent duplication."""
         import arrow
 
         event = self._make_event(
@@ -803,25 +803,39 @@ class TestNormalizePumpEvent:
             }
         )
         result = _normalize_pump_event(event)
-        assert result is not None
-        assert result["type"] == "bolus"
-        assert result["units"] == 3.5
+        assert result is None
 
-    def test_event_id_280_extracts_units(self):
-        """Event ID 280 (LidBolusDelivery) should extract units."""
+    def test_event_id_280_completed_extracts_units(self):
+        """Event ID 280 (LidBolusDelivery) Completed should extract units."""
         import arrow
 
         event = self._make_event(
             {
                 "id": "280",
                 "eventTimestamp": arrow.now(),
-                "insulindelivered": "2.0",
+                "bolusDeliveryStatusRaw": "0",  # Completed
+                "deliveredTotal": "3000",  # milliunits
             }
         )
         result = _normalize_pump_event(event)
         assert result is not None
         assert result["type"] == "bolus"
-        assert result["units"] == 2.0
+        assert result["units"] == 3.0
+
+    def test_event_id_280_started_is_skipped(self):
+        """Event ID 280 (LidBolusDelivery) Started should be skipped."""
+        import arrow
+
+        event = self._make_event(
+            {
+                "id": "280",
+                "eventTimestamp": arrow.now(),
+                "bolusDeliveryStatusRaw": "1",  # Started
+                "deliveredTotal": "3000",
+            }
+        )
+        result = _normalize_pump_event(event)
+        assert result is None
 
     def test_unmapped_event_id_returns_none(self):
         """Unmapped event IDs should return None."""

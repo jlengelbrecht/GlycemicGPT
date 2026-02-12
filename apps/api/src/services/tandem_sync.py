@@ -268,7 +268,8 @@ def parse_control_iq_event(event_data: dict) -> ParsedEventData:
 _EVENT_ID_TYPE_MAP: dict[int, str] = {
     3: "basal",  # LidBasalRateChange
     16: "bg_reading",  # LidBgReadingTaken - has IoB and BG from pump
-    20: "bolus",  # LidBolusCompleted
+    # Event 20 (LidBolusCompleted) intentionally excluded — it duplicates
+    # event 280 (LidBolusDelivery) for the same physical bolus with less data.
     279: "basal",  # LidBasalDelivery
     280: "bolus",  # LidBolusDelivery
     # We skip CGM events (399: LidCgmDataG7) — glucose comes from Dexcom directly
@@ -344,6 +345,12 @@ def _normalize_pump_event(event, _seen_ids: set | None = None) -> dict | None:
 
     # Event 280 (LidBolusDelivery): deliveredTotal is in milliunits
     if event_id == 280:
+        # Skip "Bolus Started" (status 1) — only process "Bolus Completed" (status 0)
+        # to avoid duplicate records for the same physical bolus.
+        delivery_status = _int("bolusDeliveryStatusRaw")
+        if delivery_status == 1:
+            return None
+
         delivered_mu = _int("deliveredTotal")
         if delivered_mu is not None:
             d["units"] = delivered_mu / 1000.0
