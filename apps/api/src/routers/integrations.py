@@ -967,4 +967,5 @@ async def get_iob_projection_endpoint(
         minutes_since_confirmed=projection.minutes_since_confirmed,
         is_stale=projection.is_stale,
         stale_warning=projection.stale_warning,
+        is_estimated=projection.is_estimated,
     )

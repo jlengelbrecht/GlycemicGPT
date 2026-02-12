@@ -1,7 +1,8 @@
 """Story 3.7: Insulin on Board (IoB) Projection Engine.
 
-Provides projected IoB calculations based on last confirmed value and
-insulin decay curves for rapid-acting insulins (Novolog/Humalog).
+Provides projected IoB calculations based on pump-confirmed snapshots
+combined with dose-summation for insulin delivered after the snapshot.
+Uses decay curves for rapid-acting insulins (Novolog/Humalog).
 """
 
 import uuid
@@ -11,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.pump_data import PumpEvent
+from src.models.pump_data import PumpEvent, PumpEventType
 
 
 async def get_user_dia(db: AsyncSession, user_id: uuid.UUID) -> float:
@@ -55,6 +56,7 @@ class IoBProjection:
     minutes_since_confirmed: int
     is_stale: bool  # True if > 2 hours old
     stale_warning: str | None = None
+    is_estimated: bool = False  # True when no pump confirmation exists
 
 
 # Insulin activity profile constants for rapid-acting insulin (Novolog/Humalog)
@@ -204,15 +206,81 @@ async def get_last_iob(
     return None, None
 
 
+async def _fetch_insulin_doses(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    dia_hours: float,
+    reference_time: datetime,
+) -> list[tuple[datetime, float]]:
+    """Fetch all insulin-delivering events within the DIA window.
+
+    Returns bolus and correction events with their timestamps and units.
+    Basal events are excluded because their insulin contribution is already
+    captured in the pump's IoB snapshot.
+
+    Returns:
+        List of (event_timestamp, units) tuples.
+    """
+    cutoff = reference_time - timedelta(hours=dia_hours)
+    result = await db.execute(
+        select(PumpEvent.event_timestamp, PumpEvent.units)
+        .where(
+            PumpEvent.user_id == user_id,
+            PumpEvent.event_type.in_(
+                [
+                    PumpEventType.BOLUS,
+                    PumpEventType.CORRECTION,
+                ]
+            ),
+            PumpEvent.units.isnot(None),
+            PumpEvent.units > 0,
+            PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.event_timestamp <= reference_time,
+        )
+        .order_by(PumpEvent.event_timestamp)
+    )
+    return [(row[0], row[1]) for row in result.all()]
+
+
+def _sum_iob_from_doses(
+    doses: list[tuple[datetime, float]],
+    at_time: datetime,
+    dia_hours: float = INSULIN_DIA_HOURS,
+) -> float:
+    """Compute total IoB at a given time from a list of insulin doses.
+
+    For each dose, applies the decay curve based on elapsed time and sums
+    the remaining insulin across all doses.
+
+    Args:
+        doses: List of (event_timestamp, units) tuples.
+        at_time: Time to compute IoB at.
+        dia_hours: Duration of insulin action.
+
+    Returns:
+        Total remaining insulin in units.
+    """
+    total = 0.0
+    for event_time, units in doses:
+        elapsed = (at_time - event_time).total_seconds() / 3600
+        if elapsed < 0:
+            continue  # dose is in the future relative to at_time
+        remaining = calculate_insulin_remaining(elapsed, dia_hours)
+        total += units * remaining
+    return total
+
+
 async def get_iob_projection(
     db: AsyncSession,
     user_id: uuid.UUID,
     dia_hours: float = INSULIN_DIA_HOURS,
 ) -> IoBProjection | None:
-    """Get projected IoB for a user.
+    """Get projected IoB for a user using hybrid dose-summation.
 
-    Calculates current projected IoB based on last confirmed value,
-    plus projections for 30 and 60 minutes ahead.
+    Uses pump-confirmed IoB as an anchor (captures all historical insulin
+    including basal), then adds insulin from bolus/correction doses
+    delivered after the confirmation. This prevents the projection from
+    ignoring new doses that occurred after the pump's last IoB snapshot.
 
     Args:
         db: Database session
@@ -222,41 +290,67 @@ async def get_iob_projection(
     Returns:
         IoBProjection with confirmed and projected values, or None if no data
     """
-    # Get last known IoB
-    confirmed_iob, confirmed_at = await get_last_iob(db, user_id)
-
-    if confirmed_iob is None or confirmed_at is None:
-        return None
-
     now = datetime.now(UTC)
 
-    # Calculate time since confirmation
-    elapsed = now - confirmed_at
-    minutes_since = int(elapsed.total_seconds() / 60)
+    # Step 1: Get last pump-confirmed IoB (any age within DIA window)
+    last_confirmed_iob, last_confirmed_at = await get_last_iob(
+        db, user_id, max_hours=dia_hours
+    )
 
-    # Check staleness (> 2 hours)
+    # Step 2: Fetch all bolus/correction doses within DIA window
+    all_doses = await _fetch_insulin_doses(db, user_id, dia_hours, now)
+
+    # No data at all
+    if last_confirmed_iob is None and not all_doses:
+        return None
+
+    # Step 3: Pre-filter to only post-confirmation doses (avoids re-scanning per call)
+    if last_confirmed_at is not None:
+        post_doses = [(t, u) for t, u in all_doses if t > last_confirmed_at]
+    else:
+        post_doses = all_doses
+
+    # Step 4: Compute IoB at now, +30min, +60min
+    def _compute_at(at_time: datetime) -> float:
+        pump_component = 0.0
+        if last_confirmed_iob is not None and last_confirmed_at is not None:
+            pump_component = project_iob(
+                last_confirmed_iob, last_confirmed_at, at_time, dia_hours
+            )
+        post_component = _sum_iob_from_doses(post_doses, at_time, dia_hours)
+        return max(0.0, pump_component + post_component)
+
+    current_iob = _compute_at(now)
+    iob_30 = _compute_at(now + timedelta(minutes=30))
+    iob_60 = _compute_at(now + timedelta(minutes=60))
+
+    # Step 5: Determine if this is a fallback (no pump confirmation)
+    is_estimated = last_confirmed_at is None
+    if is_estimated:
+        last_confirmed_iob = round(current_iob, 2)
+        last_confirmed_at = now
+
+    # Step 6: Staleness check (based on last pump confirmation)
+    elapsed_since = now - last_confirmed_at
+    minutes_since = int(elapsed_since.total_seconds() / 60)
     is_stale = minutes_since > 120
     stale_warning = None
     if is_stale:
         stale_warning = "IoB projection may be unreliable - data is over 2 hours old"
-
-    # Calculate projections
-    projected_current = project_iob(confirmed_iob, confirmed_at, now, dia_hours)
-    projected_30 = project_iob(
-        confirmed_iob, confirmed_at, now + timedelta(minutes=30), dia_hours
-    )
-    projected_60 = project_iob(
-        confirmed_iob, confirmed_at, now + timedelta(minutes=60), dia_hours
-    )
+    elif is_estimated:
+        stale_warning = (
+            "IoB estimated from dose history only - no pump confirmation available"
+        )
 
     return IoBProjection(
-        confirmed_iob=confirmed_iob,
-        confirmed_at=confirmed_at,
-        projected_iob=round(projected_current, 2),
+        confirmed_iob=round(last_confirmed_iob, 2),
+        confirmed_at=last_confirmed_at,
+        projected_iob=round(current_iob, 2),
         projected_at=now,
-        projected_30min=round(projected_30, 2),
-        projected_60min=round(projected_60, 2),
+        projected_30min=round(iob_30, 2),
+        projected_60min=round(iob_60, 2),
         minutes_since_confirmed=minutes_since,
         is_stale=is_stale,
         stale_warning=stale_warning,
+        is_estimated=is_estimated,
     )
