@@ -26,6 +26,7 @@ from src.models.integration import (
 )
 from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
+from src.models.pump_profile import PumpProfile
 from src.models.safety_log import SafetyLog
 from src.models.suggestion_response import SuggestionResponse
 from src.models.target_glucose_range import TargetGlucoseRange
@@ -64,6 +65,7 @@ __all__ = [
     "NotificationStatus",
     "PumpEvent",
     "PumpEventType",
+    "PumpProfile",
     "SafetyLog",
     "SuggestionResponse",
     "TargetGlucoseRange",

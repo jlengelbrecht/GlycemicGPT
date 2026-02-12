@@ -1,9 +1,11 @@
-"""Story 3.4 & 3.5: Tests for Tandem pump data ingestion and Control-IQ parsing."""
+"""Story 3.4, 3.5, & 15.8: Tests for Tandem pump data ingestion, Control-IQ parsing,
+and pump profile sync."""
 
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.config import settings
@@ -11,6 +13,7 @@ from src.main import app
 from src.models.pump_data import ControlIQMode, PumpEventType
 from src.services.tandem_sync import (
     _normalize_pump_event,
+    _store_pump_settings,
     calculate_basal_adjustment,
     detect_control_iq_mode,
     map_event_type,
@@ -216,21 +219,24 @@ class TestTandemSyncEndpoints:
         mock_tandem_class.return_value = MagicMock()
 
         # Create mock normalized events (as returned by fetch_with_retry)
-        mock_fetch.return_value = [
-            {
-                "type": "bolus",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "units": 2.5,
-                "iob": 3.2,
-            },
-            {
-                "type": "autoBasal",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "units": 0.8,
-                "isAutomated": True,
-                "duration": 30,
-            },
-        ]
+        mock_fetch.return_value = (
+            [
+                {
+                    "type": "bolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 2.5,
+                    "iob": 3.2,
+                },
+                {
+                    "type": "autoBasal",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 0.8,
+                    "isAutomated": True,
+                    "duration": 30,
+                },
+            ],
+            None,
+        )
 
         email = unique_email("tandem_sync_mock")
         password = "SecurePass123"
@@ -285,16 +291,19 @@ class TestTandemSyncEndpoints:
         mock_tandem_class.return_value = MagicMock()
 
         # Create mock Control-IQ correction event
-        mock_fetch.return_value = [
-            {
-                "type": "correctionBolus",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "units": 0.5,
-                "isAutomated": True,
-                "iob": 2.1,
-                "bg": 180,
-            },
-        ]
+        mock_fetch.return_value = (
+            [
+                {
+                    "type": "correctionBolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 0.5,
+                    "isAutomated": True,
+                    "iob": 2.1,
+                    "bg": 180,
+                },
+            ],
+            None,
+        )
 
         email = unique_email("tandem_controliq")
         password = "SecurePass123"
@@ -348,7 +357,7 @@ class TestTandemSyncEndpoints:
         """Test Tandem sync with no events."""
         mock_validate.return_value = (True, None)
         mock_tandem_class.return_value = MagicMock()
-        mock_fetch.return_value = []
+        mock_fetch.return_value = ([], None)
 
         email = unique_email("tandem_empty")
         password = "SecurePass123"
@@ -402,13 +411,16 @@ class TestTandemSyncEndpoints:
         mock_validate.return_value = (True, None)
         mock_tandem_class.return_value = MagicMock()
 
-        mock_fetch.return_value = [
-            {
-                "type": "bolus",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "units": 3.0,
-            },
-        ]
+        mock_fetch.return_value = (
+            [
+                {
+                    "type": "bolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 3.0,
+                },
+            ],
+            None,
+        )
 
         email = unique_email("tandem_status_sync")
         password = "SecurePass123"
@@ -469,19 +481,22 @@ class TestTandemSyncEndpoints:
         mock_validate.return_value = (True, None)
         mock_tandem_class.return_value = MagicMock()
 
-        mock_fetch.return_value = [
-            {"type": "bolus", "units": 2.5},  # No timestamp - should skip
-            {
-                "type": "bolus",
-                "timestamp": "invalid-date",
-                "units": 1.0,
-            },  # Invalid - skip
-            {
-                "type": "bolus",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "units": 3.0,
-            },  # Valid
-        ]
+        mock_fetch.return_value = (
+            [
+                {"type": "bolus", "units": 2.5},  # No timestamp - should skip
+                {
+                    "type": "bolus",
+                    "timestamp": "invalid-date",
+                    "units": 1.0,
+                },  # Invalid - skip
+                {
+                    "type": "bolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 3.0,
+                },  # Valid
+            ],
+            None,
+        )
 
         email = unique_email("tandem_skip_invalid")
         password = "SecurePass123"
@@ -919,3 +934,454 @@ class TestControlIQActivityEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["hours_analyzed"] == 48
+
+
+# Story 15.8: Tests for pump profile sync
+
+
+def _make_raw_settings(
+    profiles: list[dict] | None = None,
+    active_idp: int = 1,
+    cgm_high: int = 240,
+    cgm_low: int = 70,
+) -> dict:
+    """Build a raw settings dict matching the structure of Tandem metadata."""
+    if profiles is None:
+        profiles = [
+            {
+                "name": "Default",
+                "idp": 1,
+                "tDependentSegs": [
+                    {
+                        "startTime": 0,
+                        "basalRate": 1500,  # milliunits/hr -> 1.5 u/hr
+                        "isf": 31,
+                        "carbRatio": 8,
+                        "targetBg": 110,
+                    },
+                    {
+                        "startTime": 300,  # 5:00 AM
+                        "basalRate": 1650,
+                        "isf": 25,
+                        "carbRatio": 7,
+                        "targetBg": 110,
+                    },
+                ],
+                "insulinDuration": 300,  # 5 hours
+                "carbEntry": 1,
+                "maxBolus": 30000,  # milliunits -> 30.0 units
+            },
+        ]
+    return {
+        "profiles": {
+            "activeIdp": active_idp,
+            "profile": profiles,
+        },
+        "cgmSettings": {
+            "highGlucoseAlert": {
+                "mgPerDl": cgm_high,
+                "enabled": 1,
+                "duration": 0,
+                "status": 0,
+            },
+            "lowGlucoseAlert": {
+                "mgPerDl": cgm_low,
+                "enabled": 1,
+                "duration": 0,
+                "status": 0,
+            },
+        },
+    }
+
+
+class TestStorePumpSettings:
+    """Tests for _store_pump_settings (Story 15.8)."""
+
+    @pytest.mark.asyncio
+    async def test_stores_single_profile(self):
+        """Test storing a single pump profile with segments."""
+        raw_settings = _make_raw_settings()
+        user_id = uuid.uuid4()
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute = AsyncMock(return_value=mock_result)
+
+        count = await _store_pump_settings(db, user_id, raw_settings)
+
+        assert count == 1
+        db.execute.assert_called_once()
+
+        # Inspect the upsert statement values
+        call_args = db.execute.call_args
+        stmt = call_args[0][0]
+        # The statement should be an insert with on_conflict_do_update
+        compiled = stmt.compile(compile_kwargs={"literal_binds": False})
+        sql = str(compiled)
+        assert "pump_profiles" in sql
+        assert "ON CONFLICT" in sql
+
+    @pytest.mark.asyncio
+    async def test_converts_milliunits_correctly(self):
+        """Test that milliunits are converted to units."""
+        raw_settings = _make_raw_settings()
+        user_id = uuid.uuid4()
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute = AsyncMock(return_value=mock_result)
+
+        await _store_pump_settings(db, user_id, raw_settings)
+
+        # Extract the values from the insert statement
+        call_args = db.execute.call_args
+        stmt = call_args[0][0]
+        params = stmt.compile().params
+        # max_bolus should be 30.0 (30000 / 1000)
+        assert params["max_bolus_units"] == 30.0
+        # Segments should have converted basal rates
+        segments = params["segments"]
+        assert segments[0]["basal_rate"] == 1.5  # 1500 / 1000
+        assert segments[1]["basal_rate"] == 1.65  # 1650 / 1000
+
+    @pytest.mark.asyncio
+    async def test_time_conversion(self):
+        """Test that startTime minutes are converted to HH:MM AM/PM."""
+        raw_settings = _make_raw_settings()
+        user_id = uuid.uuid4()
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute = AsyncMock(return_value=mock_result)
+
+        await _store_pump_settings(db, user_id, raw_settings)
+
+        call_args = db.execute.call_args
+        stmt = call_args[0][0]
+        params = stmt.compile().params
+        segments = params["segments"]
+        assert segments[0]["time"] == "12:00 AM"  # 0 minutes
+        assert segments[1]["time"] == "5:00 AM"  # 300 minutes
+
+    @pytest.mark.asyncio
+    async def test_multiple_profiles(self):
+        """Test storing multiple profiles with correct active flag."""
+        profiles = [
+            {
+                "name": "Default",
+                "idp": 1,
+                "tDependentSegs": [
+                    {
+                        "startTime": 0,
+                        "basalRate": 1000,
+                        "isf": 30,
+                        "carbRatio": 8,
+                        "targetBg": 110,
+                    },
+                ],
+                "insulinDuration": 300,
+                "carbEntry": 1,
+                "maxBolus": 25000,
+            },
+            {
+                "name": "Weekend",
+                "idp": 2,
+                "tDependentSegs": [
+                    {
+                        "startTime": 0,
+                        "basalRate": 800,
+                        "isf": 35,
+                        "carbRatio": 10,
+                        "targetBg": 120,
+                    },
+                ],
+                "insulinDuration": 300,
+                "carbEntry": 1,
+                "maxBolus": 20000,
+            },
+        ]
+        raw_settings = _make_raw_settings(profiles=profiles, active_idp=1)
+        user_id = uuid.uuid4()
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute = AsyncMock(return_value=mock_result)
+
+        count = await _store_pump_settings(db, user_id, raw_settings)
+
+        assert count == 2
+        assert db.execute.call_count == 2
+
+        # First call (Default, active) should have is_active=True
+        first_stmt = db.execute.call_args_list[0][0][0]
+        first_params = first_stmt.compile().params
+        assert first_params["is_active"] is True
+
+        # Second call (Weekend, inactive) should have is_active=False
+        second_stmt = db.execute.call_args_list[1][0][0]
+        second_params = second_stmt.compile().params
+        assert second_params["is_active"] is False
+
+    @pytest.mark.asyncio
+    async def test_cgm_alerts_only_on_active_profile(self):
+        """Test CGM alert thresholds only appear on the active profile."""
+        profiles = [
+            {
+                "name": "Default",
+                "idp": 1,
+                "tDependentSegs": [
+                    {
+                        "startTime": 0,
+                        "basalRate": 1000,
+                        "isf": 30,
+                        "carbRatio": 8,
+                        "targetBg": 110,
+                    },
+                ],
+                "insulinDuration": 300,
+                "carbEntry": 1,
+                "maxBolus": 25000,
+            },
+            {
+                "name": "Weekend",
+                "idp": 2,
+                "tDependentSegs": [
+                    {
+                        "startTime": 0,
+                        "basalRate": 800,
+                        "isf": 35,
+                        "carbRatio": 10,
+                        "targetBg": 120,
+                    },
+                ],
+                "insulinDuration": 300,
+                "carbEntry": 1,
+                "maxBolus": 20000,
+            },
+        ]
+        raw_settings = _make_raw_settings(
+            profiles=profiles, active_idp=1, cgm_high=240, cgm_low=70
+        )
+        user_id = uuid.uuid4()
+
+        db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.rowcount = 1
+        db.execute = AsyncMock(return_value=mock_result)
+
+        await _store_pump_settings(db, user_id, raw_settings)
+
+        # Active profile (idp=1) should have CGM alerts
+        first_stmt = db.execute.call_args_list[0][0][0]
+        first_params = first_stmt.compile().params
+        assert first_params["cgm_high_alert_mgdl"] == 240
+        assert first_params["cgm_low_alert_mgdl"] == 70
+
+        # Inactive profile should not
+        second_stmt = db.execute.call_args_list[1][0][0]
+        second_params = second_stmt.compile().params
+        assert second_params["cgm_high_alert_mgdl"] is None
+        assert second_params["cgm_low_alert_mgdl"] is None
+
+
+class TestFetchWithRetryReturnsSettings:
+    """Tests for fetch_with_retry returning settings alongside events."""
+
+    @patch("src.services.tandem_sync.TandemSourceApi")
+    def test_returns_settings_from_metadata(self, mock_api_class):
+        """Test that pump settings are extracted from metadata."""
+        from src.services.tandem_sync import fetch_with_retry
+
+        mock_api = MagicMock()
+        mock_api.pump_event_metadata.return_value = [
+            {
+                "tconnectDeviceId": "device-123",
+                "serialNumber": "12345678",
+                "lastUpload": {
+                    "settings": {"profiles": {"activeIdp": 1, "profile": []}},
+                },
+            }
+        ]
+        mock_api.pump_events.return_value = iter([])
+
+        events, settings_data = fetch_with_retry(
+            mock_api,
+            datetime.now(UTC),
+            datetime.now(UTC),
+        )
+
+        assert settings_data is not None
+        assert settings_data["profiles"]["activeIdp"] == 1
+
+    @patch("src.services.tandem_sync.TandemSourceApi")
+    def test_returns_none_when_no_settings(self, mock_api_class):
+        """Test that None is returned when metadata has no settings."""
+        from src.services.tandem_sync import fetch_with_retry
+
+        mock_api = MagicMock()
+        mock_api.pump_event_metadata.return_value = [
+            {
+                "tconnectDeviceId": "device-123",
+                "serialNumber": "12345678",
+            }
+        ]
+        mock_api.pump_events.return_value = iter([])
+
+        events, settings_data = fetch_with_retry(
+            mock_api,
+            datetime.now(UTC),
+            datetime.now(UTC),
+        )
+
+        assert settings_data is None
+
+    @patch("src.services.tandem_sync.TandemSourceApi")
+    def test_returns_none_when_last_upload_empty(self, mock_api_class):
+        """Test that None is returned when lastUpload has no settings."""
+        from src.services.tandem_sync import fetch_with_retry
+
+        mock_api = MagicMock()
+        mock_api.pump_event_metadata.return_value = [
+            {
+                "tconnectDeviceId": "device-123",
+                "serialNumber": "12345678",
+                "lastUpload": {},
+            }
+        ]
+        mock_api.pump_events.return_value = iter([])
+
+        events, settings_data = fetch_with_retry(
+            mock_api,
+            datetime.now(UTC),
+            datetime.now(UTC),
+        )
+
+        assert settings_data is None
+
+
+class TestSyncTandemProfilesIntegration:
+    """Integration tests for pump profile sync in sync_tandem_for_user."""
+
+    @patch("src.services.tandem_sync._store_pump_settings", new_callable=AsyncMock)
+    @patch("src.services.tandem_sync.fetch_with_retry")
+    @patch("src.services.tandem_sync.TandemSourceApi")
+    @patch("src.routers.integrations.validate_tandem_credentials")
+    async def test_sync_stores_profiles_alongside_events(
+        self, mock_validate, mock_tandem_class, mock_fetch, mock_store_settings
+    ):
+        """Test that sync_tandem_for_user calls _store_pump_settings."""
+        mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
+        mock_store_settings.return_value = 2  # 2 profiles stored
+
+        mock_fetch.return_value = (
+            [
+                {
+                    "type": "bolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 2.5,
+                },
+            ],
+            {"profiles": {"activeIdp": 1, "profile": []}},
+        )
+
+        email = unique_email("tandem_profile_sync")
+        password = "SecurePass123"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            await client.post(
+                "/api/auth/register",
+                json={"email": email, "password": password},
+            )
+            login_response = await client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+            session_cookie = login_response.cookies.get(settings.jwt_cookie_name)
+
+            await client.post(
+                "/api/integrations/tandem",
+                json={
+                    "username": "tandem@example.com",
+                    "password": "tandem_password",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            response = await client.post(
+                "/api/integrations/tandem/sync",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["events_stored"] == 1
+        assert data["profiles_stored"] == 2
+        mock_store_settings.assert_called_once()
+
+    @patch("src.services.tandem_sync._store_pump_settings", new_callable=AsyncMock)
+    @patch("src.services.tandem_sync.fetch_with_retry")
+    @patch("src.services.tandem_sync.TandemSourceApi")
+    @patch("src.routers.integrations.validate_tandem_credentials")
+    async def test_profile_failure_doesnt_block_event_sync(
+        self, mock_validate, mock_tandem_class, mock_fetch, mock_store_settings
+    ):
+        """Test that pump settings failure doesn't block event storage."""
+        mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
+        mock_store_settings.side_effect = RuntimeError("PumpSettings parse error")
+
+        mock_fetch.return_value = (
+            [
+                {
+                    "type": "bolus",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "units": 1.5,
+                },
+            ],
+            {"profiles": {"invalid": "data"}},
+        )
+
+        email = unique_email("tandem_profile_fail")
+        password = "SecurePass123"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            await client.post(
+                "/api/auth/register",
+                json={"email": email, "password": password},
+            )
+            login_response = await client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+            )
+            session_cookie = login_response.cookies.get(settings.jwt_cookie_name)
+
+            await client.post(
+                "/api/integrations/tandem",
+                json={
+                    "username": "tandem@example.com",
+                    "password": "tandem_password",
+                },
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+            response = await client.post(
+                "/api/integrations/tandem/sync",
+                cookies={settings.jwt_cookie_name: session_cookie},
+            )
+
+        # Event sync should still succeed
+        assert response.status_code == 200
+        data = response.json()
+        assert data["events_stored"] == 1
+        assert data["profiles_stored"] == 0
