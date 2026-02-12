@@ -19,6 +19,9 @@ services:
     ports:
       - "6380:6379"
 
+  ai-sidecar:
+    # Sidecar uses default config — no ports exposed to host
+
   api:
     ports:
       - "8001:8000"
@@ -30,6 +33,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai-sidecar:
         condition: service_healthy
 
   web:

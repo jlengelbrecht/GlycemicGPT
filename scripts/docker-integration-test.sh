@@ -131,7 +131,8 @@ while [ $WAITED -lt $MAX_WAIT ]; do
   fi
 
   if [ $((WAITED % 15)) -eq 0 ] && [ $WAITED -gt 0 ]; then
-    echo "  ... still waiting (${WAITED}s) - API=$API_READY WEB=$WEB_READY"
+    SIDECAR_READY=$($COMPOSE_CMD ps --status running ai-sidecar 2>/dev/null | grep -c "sidecar" || echo "0")
+    echo "  ... still waiting (${WAITED}s) - API=$API_READY WEB=$WEB_READY SIDECAR_RUNNING=$SIDECAR_READY"
   fi
 
   sleep 3
@@ -149,6 +150,9 @@ if [ $WAITED -ge $MAX_WAIT ]; then
   echo ""
   echo "  Web logs (last 30 lines):"
   $COMPOSE_CMD logs --tail=30 web 2>/dev/null || true
+  echo ""
+  echo "  Sidecar logs (last 30 lines):"
+  $COMPOSE_CMD logs --tail=30 ai-sidecar 2>/dev/null || true
   exit 1
 fi
 
@@ -160,8 +164,8 @@ echo ""
 echo "1. Container Health & Infrastructure"
 echo "---"
 
-# 1a-d. Container states (use docker compose ps with text output for portability)
-for SVC in db redis api web; do
+# 1a-e. Container states (use docker compose ps with text output for portability)
+for SVC in db redis ai-sidecar api web; do
   SVC_RUNNING=$($COMPOSE_CMD ps --status running "$SVC" 2>/dev/null | grep -c "$SVC" || echo "0")
   if [ "$SVC_RUNNING" -gt 0 ] 2>/dev/null; then
     pass "$SVC container running"
@@ -170,22 +174,22 @@ for SVC in db redis api web; do
   fi
 done
 
-# 1e. API health endpoint
+# 1f. API health endpoint
 BODY=$(api_get_body "/health")
 if echo "$BODY" | grep -q '"healthy"'; then pass "API /health: healthy"; else fail "API /health: $BODY"; fi
 
-# 1f. Database connected (via health response)
+# 1g. Database connected (via health response)
 if echo "$BODY" | grep -q '"connected"'; then pass "Database connected (via /health)"; else fail "Database not connected"; fi
 
-# 1g. Liveness probe
+# 1h. Liveness probe
 STATUS=$(api_get "/health/live")
 if [ "$STATUS" = "200" ]; then pass "Liveness probe (/health/live)"; else fail "Liveness probe (got $STATUS)"; fi
 
-# 1h. Readiness probe
+# 1i. Readiness probe
 STATUS=$(api_get "/health/ready")
 if [ "$STATUS" = "200" ]; then pass "Readiness probe (/health/ready)"; else fail "Readiness probe (got $STATUS)"; fi
 
-# 1i. Database migrations ran (alembic_version table exists)
+# 1j. Database migrations ran (alembic_version table exists)
 MIGRATION_CHECK=$($COMPOSE_CMD exec -T db psql -U glycemicgpt -d glycemicgpt -t -c "SELECT COUNT(*) FROM alembic_version;" 2>/dev/null | tr -d ' \n' || echo "0")
 if [ -n "$MIGRATION_CHECK" ] && [ "$MIGRATION_CHECK" != "0" ] 2>/dev/null; then
   pass "Database migrations applied (alembic_version populated)"
@@ -193,7 +197,7 @@ else
   fail "Database migrations not applied (count: ${MIGRATION_CHECK:-empty})"
 fi
 
-# 1j. Frontend reachable
+# 1k. Frontend reachable
 WEB_HTTP=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$WEB_URL" 2>/dev/null || echo "000")
 if [ "$WEB_HTTP" = "200" ]; then pass "Frontend reachable at $WEB_URL"; else fail "Frontend not reachable (got $WEB_HTTP)"; fi
 
@@ -308,9 +312,58 @@ if [ "$STATUS" = "200" ]; then pass "GET Tandem integration status (connected)";
 echo ""
 
 # -----------------------------------------------
-# 6. Caregiver Features
+# 6. AI Sidecar (Container Network)
 # -----------------------------------------------
-echo "6. Caregiver Features"
+echo "6. AI Sidecar"
+echo "---"
+
+# 6a. API can reach sidecar health endpoint (via internal network)
+SIDECAR_HEALTH=$($COMPOSE_CMD exec -T api curl -s --connect-timeout 5 --max-time 10 http://ai-sidecar:3456/health 2>/dev/null || echo "")
+if echo "$SIDECAR_HEALTH" | grep -q '"status"'; then
+  pass "API -> Sidecar connectivity (/health)"
+else
+  fail "API -> Sidecar connectivity (response: ${SIDECAR_HEALTH:-empty})"
+fi
+
+# 6b. Sidecar health shows auth state fields
+if echo "$SIDECAR_HEALTH" | grep -q '"claude_auth"'; then
+  pass "Sidecar reports claude_auth status"
+else
+  fail "Sidecar missing claude_auth in health response"
+fi
+
+if echo "$SIDECAR_HEALTH" | grep -q '"codex_auth"'; then
+  pass "Sidecar reports codex_auth status"
+else
+  fail "Sidecar missing codex_auth in health response"
+fi
+
+# 6c. Sidecar auth status endpoint reachable
+SIDECAR_AUTH=$($COMPOSE_CMD exec -T api curl -s --connect-timeout 5 --max-time 10 http://ai-sidecar:3456/auth/status 2>/dev/null || echo "")
+if echo "$SIDECAR_AUTH" | grep -q '"claude"'; then
+  pass "Sidecar /auth/status reachable"
+else
+  fail "Sidecar /auth/status unreachable (response: ${SIDECAR_AUTH:-empty})"
+fi
+
+# 6d. Sidecar not exposed to host (should fail to connect on host port 3456)
+SIDECAR_HOST=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 3 "http://localhost:3456/health" 2>/dev/null || echo "000")
+if [ "$SIDECAR_HOST" = "000" ]; then
+  pass "Sidecar NOT exposed to host network (expected)"
+else
+  fail "Sidecar unexpectedly reachable on host port 3456 (got $SIDECAR_HOST)"
+fi
+
+# 6e. Subscription auth status endpoint via API
+STATUS=$(api_get "/api/ai/subscription/auth/status")
+if [ "$STATUS" = "200" ]; then pass "GET subscription auth status via API"; else fail "GET subscription auth status (got $STATUS)"; fi
+
+echo ""
+
+# -----------------------------------------------
+# 7. Caregiver Features
+# -----------------------------------------------
+echo "7. Caregiver Features"
 echo "---"
 
 STATUS=$(api_get "/api/caregivers/linked")
@@ -322,9 +375,9 @@ if [ "$STATUS" = "200" ]; then pass "GET caregiver invitations"; else fail "GET 
 echo ""
 
 # -----------------------------------------------
-# 7. SSE / Real-Time (Container Network)
+# 8. SSE / Real-Time (Container Network)
 # -----------------------------------------------
-echo "7. SSE Real-Time Connection"
+echo "8. SSE Real-Time Connection"
 echo "---"
 
 # Test SSE endpoint by checking that it returns the correct Content-Type header
@@ -348,12 +401,12 @@ fi
 echo ""
 
 # -----------------------------------------------
-# 8. Cross-Service Communication
+# 9. Cross-Service Communication
 # -----------------------------------------------
-echo "8. Cross-Service Communication"
+echo "9. Cross-Service Communication"
 echo "---"
 
-# 8a. Web container can reach API (internal network)
+# 9a. Web container can reach API (internal network)
 INTERNAL_CHECK=$($COMPOSE_CMD exec -T web wget -q -O - --timeout=5 http://api:8000/health 2>/dev/null || echo "")
 if echo "$INTERNAL_CHECK" | grep -q "healthy"; then
   pass "Web -> API internal network connectivity"
@@ -367,7 +420,7 @@ else
   fi
 fi
 
-# 8b. API container can reach database (verified via health endpoint, which checks DB)
+# 9b. API container can reach database (verified via health endpoint, which checks DB)
 READY_BODY=$(api_get_body "/health/ready")
 if echo "$READY_BODY" | grep -q '"ready"'; then
   pass "API -> Database connectivity (verified via /health/ready)"
@@ -375,7 +428,9 @@ else
   fail "API -> Database connectivity check failed: $READY_BODY"
 fi
 
-# 8c. API container can reach Redis
+# 9c. API -> Sidecar covered in section 6a
+
+# 9c. API container can reach Redis
 REDIS_CHECK=$($COMPOSE_CMD exec -T api python -c "
 import redis
 r = redis.from_url('redis://redis:6379/0')
@@ -390,29 +445,37 @@ fi
 echo ""
 
 # -----------------------------------------------
-# 9. Container Image Checks
+# 10. Container Image Checks
 # -----------------------------------------------
-echo "9. Container Image Validation"
+echo "10. Container Image Validation"
 echo "---"
 
-# 9a. API image built
+# 10a. API image built
 API_IMAGE=$($COMPOSE_CMD images api 2>/dev/null | grep -c "api" || echo "0")
 if [ "$API_IMAGE" -gt 0 ] 2>/dev/null; then pass "API image built successfully"; else fail "API image not found"; fi
 
-# 9b. Web image built
+# 10b. Web image built
 WEB_IMAGE=$($COMPOSE_CMD images web 2>/dev/null | grep -c "web" || echo "0")
 if [ "$WEB_IMAGE" -gt 0 ] 2>/dev/null; then pass "Web image built successfully"; else fail "Web image not found"; fi
 
-# 9c. Web runs as non-root
+# 10c. Sidecar image built
+SIDECAR_IMAGE=$($COMPOSE_CMD images ai-sidecar 2>/dev/null | grep -c "sidecar" || echo "0")
+if [ "$SIDECAR_IMAGE" -gt 0 ] 2>/dev/null; then pass "Sidecar image built successfully"; else fail "Sidecar image not found"; fi
+
+# 10d. Web runs as non-root
 WEB_USER=$($COMPOSE_CMD exec -T web whoami 2>/dev/null || echo "unknown")
 if [ "$WEB_USER" = "nextjs" ]; then pass "Web container runs as non-root (nextjs)"; else skip "Web container user: $WEB_USER"; fi
+
+# 10e. Sidecar runs as non-root
+SIDECAR_USER=$($COMPOSE_CMD exec -T ai-sidecar whoami 2>/dev/null || echo "unknown")
+if [ "$SIDECAR_USER" = "sidecar" ]; then pass "Sidecar container runs as non-root (sidecar)"; else skip "Sidecar container user: $SIDECAR_USER"; fi
 
 echo ""
 
 # -----------------------------------------------
-# 10. Session Cleanup
+# 11. Session Cleanup
 # -----------------------------------------------
-echo "10. Session Cleanup"
+echo "11. Session Cleanup"
 echo "---"
 
 STATUS=$(api_post "/api/auth/logout" "{}")
@@ -440,6 +503,9 @@ if [ "$FAIL" -gt 0 ]; then
   echo ""
   echo "  --- Web logs (last 30 lines) ---"
   $COMPOSE_CMD logs --tail=30 web 2>/dev/null || true
+  echo ""
+  echo "  --- Sidecar logs (last 30 lines) ---"
+  $COMPOSE_CMD logs --tail=30 ai-sidecar 2>/dev/null || true
   echo ""
   echo "  Debug commands:"
   echo "    COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $COMPOSE_CMD logs api"

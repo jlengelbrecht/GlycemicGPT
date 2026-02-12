@@ -29,6 +29,25 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-sidecar:
+    build:
+      context: ./sidecar
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - sidecar_auth:/home/sidecar/.config
+      - sidecar_codex:/home/sidecar/.codex
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3456/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Not exposed to host — only reachable by api on the internal network
+
   api:
     build:
       context: ./apps/api
@@ -41,10 +60,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOG_FORMAT: ${LOG_FORMAT:-json}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      AI_SIDECAR_URL: http://ai-sidecar:3456
+      AI_SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai-sidecar:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -76,3 +99,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  sidecar_auth:
+  sidecar_codex:
