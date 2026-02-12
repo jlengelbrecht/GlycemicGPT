@@ -2,7 +2,12 @@
  * OAuth authentication routes for the sidecar.
  *
  * Story 15.1: Basic structure with status endpoint.
- * Story 15.2: Full browser popup OAuth flow (start, callback).
+ * Story 15.2: Token-based auth flow for subscription providers.
+ *
+ * Since Claude Code CLI and Codex CLI don't support standard OAuth
+ * device-code flows inside Docker containers, the sidecar uses a
+ * token-paste approach: users run the CLI on their host to obtain
+ * a token, then submit it via POST /auth/token.
  */
 
 import { Router, type Request, type Response } from "express";
@@ -11,11 +16,18 @@ import {
   readCodexAuth,
   revokeClaudeToken,
   revokeCodexAuth,
+  storeClaudeToken,
+  storeCodexAuth,
 } from "./token-store.js";
 
 export const authRouter = Router();
 
 const VALID_PROVIDERS = new Set(["claude", "codex"]);
+
+/** Maximum token length to accept (prevents abuse) */
+const MAX_TOKEN_LENGTH = 5000;
+/** Minimum token length for basic validation */
+const MIN_TOKEN_LENGTH = 10;
 
 /** GET /auth/status - Check current authentication state */
 authRouter.get("/status", (_req: Request, res: Response) => {
@@ -33,9 +45,11 @@ authRouter.get("/status", (_req: Request, res: Response) => {
 });
 
 /**
- * POST /auth/start - Initiate OAuth flow for a provider.
+ * POST /auth/start - Return auth method info for a provider.
  *
- * Stub for Story 15.1. Full implementation in Story 15.2.
+ * Instead of starting a true OAuth flow, returns instructions
+ * for the token-paste approach (the only method that works
+ * reliably inside Docker containers).
  */
 authRouter.post("/start", (req: Request, res: Response) => {
   const { provider } = req.body as { provider?: string };
@@ -47,22 +61,55 @@ authRouter.post("/start", (req: Request, res: Response) => {
     return;
   }
 
-  // Story 15.2 will implement the actual OAuth flow here.
-  res.status(501).json({
-    error: "OAuth flow not yet implemented. Use token-based auth for now.",
+  const instructions = provider === "claude"
+    ? "Run 'npx @anthropic-ai/claude-code setup-token' on your host machine to obtain a token."
+    : "Run 'npx @openai/codex login' on your host machine to obtain a token.";
+
+  res.json({
     provider,
+    auth_method: "token_paste",
+    instructions,
   });
 });
 
 /**
- * GET /auth/callback - OAuth callback receiver.
+ * POST /auth/token - Accept a token submission.
  *
- * Stub for Story 15.1. Full implementation in Story 15.2.
+ * The frontend collects the token from the user and forwards it
+ * here (via the backend API) for storage.
  */
-authRouter.get("/callback", (_req: Request, res: Response) => {
-  res.status(501).json({
-    error: "OAuth callback not yet implemented.",
-  });
+authRouter.post("/token", (req: Request, res: Response) => {
+  const { provider, token } = req.body as { provider?: string; token?: string };
+
+  if (!provider || !VALID_PROVIDERS.has(provider)) {
+    res.status(400).json({ error: "Invalid provider. Must be 'claude' or 'codex'." });
+    return;
+  }
+
+  if (!token || typeof token !== "string") {
+    res.status(400).json({ error: "Token is required and must be a string." });
+    return;
+  }
+
+  const trimmed = token.trim();
+
+  if (trimmed.length < MIN_TOKEN_LENGTH || trimmed.length > MAX_TOKEN_LENGTH) {
+    res.status(400).json({
+      error: `Token must be between ${MIN_TOKEN_LENGTH} and ${MAX_TOKEN_LENGTH} characters.`,
+    });
+    return;
+  }
+
+  try {
+    if (provider === "claude") {
+      storeClaudeToken(trimmed);
+    } else {
+      storeCodexAuth({ accessToken: trimmed });
+    }
+    res.json({ success: true, provider });
+  } catch {
+    res.status(500).json({ error: "Failed to store token." });
+  }
 });
 
 /**
@@ -78,11 +125,14 @@ authRouter.post("/revoke", (req: Request, res: Response) => {
     return;
   }
 
-  if (provider === "claude") {
-    revokeClaudeToken();
-  } else {
-    revokeCodexAuth();
+  try {
+    if (provider === "claude") {
+      revokeClaudeToken();
+    } else {
+      revokeCodexAuth();
+    }
+    res.json({ revoked: true, provider });
+  } catch {
+    res.status(500).json({ error: "Failed to revoke token." });
   }
-
-  res.json({ revoked: true, provider });
 });

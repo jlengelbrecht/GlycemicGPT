@@ -45,11 +45,18 @@ vi.mock("../src/providers/index.js", () => ({
 }));
 
 // Mock the token store for auth routes
+const mockStoreClaudeToken = vi.fn();
+const mockStoreCodexAuth = vi.fn();
+const mockReadClaudeToken = vi.fn().mockReturnValue(null);
+const mockReadCodexAuth = vi.fn().mockReturnValue(null);
+
 vi.mock("../src/auth/token-store.js", () => ({
-  readClaudeToken: vi.fn().mockReturnValue(null),
-  readCodexAuth: vi.fn().mockReturnValue(null),
+  readClaudeToken: mockReadClaudeToken,
+  readCodexAuth: mockReadCodexAuth,
   revokeClaudeToken: vi.fn(),
   revokeCodexAuth: vi.fn(),
+  storeClaudeToken: mockStoreClaudeToken,
+  storeCodexAuth: mockStoreCodexAuth,
 }));
 
 // Test helper: invoke Express app without HTTP
@@ -65,7 +72,8 @@ async function injectRequest(
       url: path,
       path,
       ip: "127.0.0.1",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", host: "localhost:3456" },
+      params: {},
       body,
       get: () => undefined,
     } as unknown as express.Request;
@@ -83,6 +91,9 @@ async function injectRequest(
       write: (data: string) => { chunks.push(data); },
       end: () => {
         resolve({ status: statusCode, body: chunks.join(""), headers });
+      },
+      send: (data: unknown) => {
+        resolve({ status: statusCode, body: data, headers });
       },
       sendStatus: (code: number) => {
         resolve({ status: code, body: null, headers });
@@ -198,15 +209,110 @@ describe("Server endpoints", () => {
   });
 
   describe("POST /auth/start", () => {
-    it("returns 501 for unimplemented OAuth flow", async () => {
+    it("returns auth method info for claude", async () => {
       const result = await injectRequest(app, "post", "/auth/start", {
         provider: "claude",
       });
-      expect(result.status).toBe(501);
+      expect(result.status).toBe(200);
+      const body = result.body as { provider: string; auth_method: string; instructions: string };
+      expect(body.provider).toBe("claude");
+      expect(body.auth_method).toBe("token_paste");
+      expect(body.instructions).toContain("claude-code");
+    });
+
+    it("returns auth method info for codex", async () => {
+      const result = await injectRequest(app, "post", "/auth/start", {
+        provider: "codex",
+      });
+      expect(result.status).toBe(200);
+      const body = result.body as { provider: string; auth_method: string; instructions: string };
+      expect(body.provider).toBe("codex");
+      expect(body.auth_method).toBe("token_paste");
+      expect(body.instructions).toContain("codex");
     });
 
     it("rejects invalid provider", async () => {
       const result = await injectRequest(app, "post", "/auth/start", {
+        provider: "invalid",
+      });
+      expect(result.status).toBe(400);
+    });
+  });
+
+  describe("POST /auth/token", () => {
+    it("stores claude token", async () => {
+      const result = await injectRequest(app, "post", "/auth/token", {
+        provider: "claude",
+        token: "test-claude-token-dummy-value-long-enough",
+      });
+      expect(result.status).toBe(200);
+      const body = result.body as { success: boolean; provider: string };
+      expect(body.success).toBe(true);
+      expect(body.provider).toBe("claude");
+      expect(mockStoreClaudeToken).toHaveBeenCalledWith("test-claude-token-dummy-value-long-enough");
+    });
+
+    it("stores codex token", async () => {
+      const result = await injectRequest(app, "post", "/auth/token", {
+        provider: "codex",
+        token: "test-codex-token-dummy-value-long-enough",
+      });
+      expect(result.status).toBe(200);
+      const body = result.body as { success: boolean; provider: string };
+      expect(body.success).toBe(true);
+      expect(body.provider).toBe("codex");
+      expect(mockStoreCodexAuth).toHaveBeenCalledWith({
+        accessToken: "test-codex-token-dummy-value-long-enough",
+      });
+    });
+
+    it("rejects missing token", async () => {
+      const result = await injectRequest(app, "post", "/auth/token", {
+        provider: "claude",
+      });
+      expect(result.status).toBe(400);
+    });
+
+    it("rejects token that is too short", async () => {
+      const result = await injectRequest(app, "post", "/auth/token", {
+        provider: "claude",
+        token: "short",
+      });
+      expect(result.status).toBe(400);
+    });
+
+    it("rejects invalid provider", async () => {
+      const result = await injectRequest(app, "post", "/auth/token", {
+        provider: "invalid",
+        token: "test-token-dummy-value-long-enough",
+      });
+      expect(result.status).toBe(400);
+    });
+  });
+
+  describe("POST /auth/revoke", () => {
+    it("revokes claude auth", async () => {
+      const result = await injectRequest(app, "post", "/auth/revoke", {
+        provider: "claude",
+      });
+      expect(result.status).toBe(200);
+      const body = result.body as { revoked: boolean; provider: string };
+      expect(body.revoked).toBe(true);
+      expect(body.provider).toBe("claude");
+    });
+
+    it("revokes codex auth", async () => {
+      const result = await injectRequest(app, "post", "/auth/revoke", {
+        provider: "codex",
+      });
+      expect(result.status).toBe(200);
+      const body = result.body as { revoked: boolean; provider: string };
+      expect(body.revoked).toBe(true);
+      expect(body.provider).toBe("codex");
+    });
+
+    it("rejects invalid provider", async () => {
+      const result = await injectRequest(app, "post", "/auth/revoke", {
         provider: "invalid",
       });
       expect(result.status).toBe(400);

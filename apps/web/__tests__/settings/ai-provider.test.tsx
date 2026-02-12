@@ -52,6 +52,11 @@ const mockGetAIProvider = jest.fn();
 const mockConfigureAIProvider = jest.fn();
 const mockTestAIProvider = jest.fn();
 const mockDeleteAIProvider = jest.fn();
+const mockStartSubscriptionAuth = jest.fn();
+const mockSubmitSubscriptionToken = jest.fn();
+const mockGetSubscriptionAuthStatus = jest.fn();
+const mockRevokeSubscriptionAuth = jest.fn();
+const mockGetSidecarHealth = jest.fn();
 
 jest.mock("../../src/lib/api", () => ({
   __esModule: true,
@@ -60,6 +65,11 @@ jest.mock("../../src/lib/api", () => ({
     mockConfigureAIProvider(...args),
   testAIProvider: (...args: unknown[]) => mockTestAIProvider(...args),
   deleteAIProvider: (...args: unknown[]) => mockDeleteAIProvider(...args),
+  startSubscriptionAuth: (...args: unknown[]) => mockStartSubscriptionAuth(...args),
+  submitSubscriptionToken: (...args: unknown[]) => mockSubmitSubscriptionToken(...args),
+  getSubscriptionAuthStatus: (...args: unknown[]) => mockGetSubscriptionAuthStatus(...args),
+  revokeSubscriptionAuth: (...args: unknown[]) => mockRevokeSubscriptionAuth(...args),
+  getSidecarHealth: (...args: unknown[]) => mockGetSidecarHealth(...args),
 }));
 
 import AIProviderPage from "../../src/app/dashboard/settings/ai-provider/page";
@@ -70,6 +80,14 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
     mockConfigureAIProvider.mockReset();
     mockTestAIProvider.mockReset();
     mockDeleteAIProvider.mockReset();
+    mockStartSubscriptionAuth.mockReset();
+    mockSubmitSubscriptionToken.mockReset();
+    mockGetSubscriptionAuthStatus.mockReset();
+    mockRevokeSubscriptionAuth.mockReset();
+    mockGetSidecarHealth.mockReset();
+    // Default: sidecar unavailable (most tests don't need it)
+    mockGetSidecarHealth.mockRejectedValue(new Error("unavailable"));
+    mockGetSubscriptionAuthStatus.mockRejectedValue(new Error("unavailable"));
   });
 
   describe("page header and navigation", () => {
@@ -287,7 +305,10 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("shows base URL field when subscription provider is selected", async () => {
+    it("shows sidecar auth UI when subscription provider is selected", async () => {
+      mockGetSidecarHealth.mockResolvedValue({ available: false, status: "unreachable" });
+      mockGetSubscriptionAuthStatus.mockResolvedValue({ sidecar_available: false });
+
       render(<AIProviderPage />);
 
       await waitFor(() => {
@@ -296,8 +317,8 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
         ).toBeInTheDocument();
       });
 
-      // Default is claude_api - no base URL field
-      expect(document.getElementById("base-url")).not.toBeInTheDocument();
+      // Default is claude_api - no sidecar status indicator
+      expect(screen.queryByText(/ai sidecar:/i)).not.toBeInTheDocument();
 
       // Switch to Claude Subscription
       await act(async () => {
@@ -306,10 +327,19 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
         );
       });
 
-      expect(document.getElementById("base-url")).toBeInTheDocument();
+      // Should show sidecar status indicator (with colon: "AI Sidecar:")
+      await waitFor(() => {
+        expect(screen.getByText(/ai sidecar:/i)).toBeInTheDocument();
+      });
+
+      // Should NOT show base-url field (subscription uses sidecar, not manual URL)
+      expect(document.getElementById("base-url")).not.toBeInTheDocument();
     });
 
-    it("requires base URL for subscription providers", async () => {
+    it("hides Save button for subscription providers", async () => {
+      mockGetSidecarHealth.mockResolvedValue({ available: false, status: "unreachable" });
+      mockGetSubscriptionAuthStatus.mockResolvedValue({ sidecar_available: false });
+
       render(<AIProviderPage />);
 
       await waitFor(() => {
@@ -325,22 +355,12 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
         );
       });
 
-      // Save button should be disabled without base_url
-      expect(
-        screen.getByRole("button", { name: /save and validate/i })
-      ).toBeDisabled();
-
-      // Enter base URL
-      await act(async () => {
-        fireEvent.change(document.getElementById("base-url")!, {
-          target: { value: "http://localhost:3456/v1" },
-        });
+      // Save & Validate button should not be shown for subscription providers
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("button", { name: /save and validate/i })
+        ).not.toBeInTheDocument();
       });
-
-      // Now enabled (API key not required for subscription providers)
-      expect(
-        screen.getByRole("button", { name: /save and validate/i })
-      ).toBeEnabled();
     });
   });
 
@@ -536,17 +556,12 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
       });
     });
 
-    it("calls configureAIProvider with base_url for subscription provider", async () => {
-      mockConfigureAIProvider.mockResolvedValue({
-        provider_type: "claude_subscription",
-        status: "connected",
-        model_name: null,
-        base_url: "http://proxy:3456/v1",
-        masked_api_key: "...eded",
-        last_validated_at: "2026-01-15T12:00:00Z",
-        last_error: null,
-        created_at: "2026-01-15T12:00:00Z",
-        updated_at: "2026-01-15T12:00:00Z",
+    it("shows Sign in button for subscription provider when sidecar is available", async () => {
+      mockGetSidecarHealth.mockResolvedValue({ available: true, status: "ok" });
+      mockGetSubscriptionAuthStatus.mockResolvedValue({
+        sidecar_available: true,
+        claude: { authenticated: false },
+        codex: { authenticated: false },
       });
 
       render(<AIProviderPage />);
@@ -564,26 +579,11 @@ describe("Story 14.3: AI Provider Configuration Page", () => {
         );
       });
 
-      // Enter base URL
-      await act(async () => {
-        fireEvent.change(document.getElementById("base-url")!, {
-          target: { value: "http://proxy:3456/v1" },
-        });
-      });
-
-      await act(async () => {
-        fireEvent.click(
-          screen.getByRole("button", { name: /save and validate/i })
-        );
-      });
-
+      // Should show Sign in button
       await waitFor(() => {
-        expect(mockConfigureAIProvider).toHaveBeenCalledWith({
-          provider_type: "claude_subscription",
-          api_key: "not-needed",
-          model_name: null,
-          base_url: "http://proxy:3456/v1",
-        });
+        expect(
+          screen.getByRole("button", { name: /sign in with claude/i })
+        ).toBeInTheDocument();
       });
     });
 
