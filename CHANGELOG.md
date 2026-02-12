@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.64](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.63...v0.1.64) (2026-02-12)
+
+
+### ✨ Features
+
+* add AI sidecar container image (Story 15.1) ([#147](https://github.com/jlengelbrecht/GlycemicGPT/issues/147)) ([c3014df](https://github.com/jlengelbrecht/GlycemicGPT/commit/c3014df4ebe65ff8c621dff1fa81c29309a5af57))
+
 ## [0.1.63](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.62...v0.1.63) (2026-02-12)
 
 
