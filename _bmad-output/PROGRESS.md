@@ -20,13 +20,13 @@
 | 12 | Integration & Communication Config | 4/4 | **Complete** |
 | 13 | E2E Testing & Real Data Verification | 3/3 | **Complete** |
 | 14 | Expanded AI Provider Support | 0/4 | **In Progress** |
-| 15 | Frontend Auth UI & Route Protection | 0/6 | **Pending** |
+| 15 | Frontend Auth UI & Route Protection | 6/8 | **In Progress** |
 
 **MVP Stories:** 54/54 complete (100%)
 **Post-MVP Fix Stories:** 13/13 complete (100%)
 **Epic 14 (AI Provider Expansion):** 0/4 in progress
-**Epic 15 (Frontend Auth UI):** 0/6 pending
-**Overall Progress:** 67/77 stories complete (87%)
+**Epic 15 (Frontend Auth UI):** 6/8 in progress
+**Overall Progress:** 73/79 stories complete (92%)
 
 ---
 
@@ -288,9 +288,11 @@ All 5 stories completed:
 
 **Epic Details:** [epic-15-frontend-auth-ui.md](planning-artifacts/epic-15-frontend-auth-ui.md)
 
-- [ ] Story 15.1: Login Page
-- [ ] Story 15.2: Registration Page
-- [ ] Story 15.3: Next.js Auth Middleware & Route Protection
-- [ ] Story 15.4: Logout, Auth State & Global 401 Handling
-- [ ] Story 15.5: Post-Login Disclaimer Enforcement
-- [ ] Story 15.6: Landing Page & Auth Navigation Polish
+- [x] Story 15.1: Login Page - [PR #147](https://github.com/jlengelbrecht/GlycemicGPT/pull/147)
+- [x] Story 15.2: Registration Page - [PR #149](https://github.com/jlengelbrecht/GlycemicGPT/pull/149)
+- [x] Story 15.3: Next.js Auth Middleware & Route Protection - [PR #151](https://github.com/jlengelbrecht/GlycemicGPT/pull/151)
+- [x] Story 15.4: Logout, Auth State & Global 401 Handling - [PR #153](https://github.com/jlengelbrecht/GlycemicGPT/pull/153)
+- [x] Story 15.5: Post-Login Disclaimer Enforcement - [PR #157](https://github.com/jlengelbrecht/GlycemicGPT/pull/157)
+- [x] Story 15.6: Landing Page & Auth Navigation Polish (implemented in prior stories)
+- [ ] Story 15.7: Enhance AI Chat with Comprehensive Pump Data Context
+- [ ] Story 15.8: Sync Pump Settings & Therapy Data from Tandem APIs

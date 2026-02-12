@@ -341,6 +341,39 @@ def _normalize_pump_event(event, _seen_ids: set | None = None) -> dict | None:
             d["units"] = _float(units_key)
             break
 
+    # Event 280 (LidBolusDelivery): deliveredTotal is in milliunits
+    if event_id == 280:
+        delivered_mu = _int("deliveredTotal")
+        if delivered_mu is not None:
+            d["units"] = delivered_mu / 1000.0
+        # Detect Control-IQ correction bolus
+        bolus_source = _int("bolusSourceRaw")
+        bolus_type = _int("bolusTypeRaw")
+        if bolus_source == 7:  # Algorithm (Control-IQ)
+            d["isAutomated"] = True
+        if bolus_type is not None and (bolus_type & 0x08):  # Correction bit
+            d["isAutomated"] = True
+            d["type"] = "correction"
+        # Store correction portion separately if present
+        correction_mu = _int("correction")
+        if correction_mu and correction_mu > 0:
+            d["correction_units"] = correction_mu / 1000.0
+
+    # Event 279 (LidBasalDelivery): rates are in milliunits/hr
+    if event_id == 279:
+        commanded_mu = _int("commandedRate")
+        profile_mu = _int("profileBasalRate")
+        if commanded_mu is not None:
+            d["actualRate"] = commanded_mu / 1000.0
+        if profile_mu is not None:
+            d["profileRate"] = profile_mu / 1000.0
+        # Detect Control-IQ automation via commandedRateSource
+        rate_source = _int("commandedRateSourceRaw")
+        if rate_source in (0, 3, 4):  # Suspended, Algorithm, TempRate+Algorithm
+            d["isAutomated"] = True
+        if rate_source == 0:
+            d["type"] = "suspend"
+
     # Normalize IoB (uppercase in tconnectsync, present in event ID 16)
     if "IOB" in d:
         d["iob"] = _float("IOB")
@@ -349,13 +382,13 @@ def _normalize_pump_event(event, _seen_ids: set | None = None) -> dict | None:
     if "BG" in d:
         d["bg"] = _int("BG")
 
-    # Normalize basal rates for adjustment calculation
+    # Normalize basal rates for adjustment calculation (event ID 3)
     if "commandedbasalrate" in d:
         d["actualRate"] = _float("commandedbasalrate")
     if "basebasalrate" in d:
         d["profileRate"] = _float("basebasalrate")
 
-    # Detect automation for basal rate changes
+    # Detect automation for basal rate changes (event ID 3)
     if event_id == 3:
         changetype = _int("changetypeRaw") or 0
         d["isAutomated"] = changetype in _AUTOMATED_BASAL_CHANGE_TYPES
