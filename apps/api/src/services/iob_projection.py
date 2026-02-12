@@ -14,6 +14,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.pump_data import PumpEvent
 
 
+async def get_user_dia(db: AsyncSession, user_id: uuid.UUID) -> float:
+    """Get the user's configured DIA, or the default 4.0 hours.
+
+    Args:
+        db: Database session
+        user_id: User ID to look up
+
+    Returns:
+        DIA in hours
+    """
+    from src.models.insulin_config import InsulinConfig
+
+    result = await db.execute(
+        select(InsulinConfig).where(InsulinConfig.user_id == user_id)
+    )
+    config = result.scalar_one_or_none()
+    if config is not None:
+        return config.dia_hours
+    return INSULIN_DIA_HOURS
+
+
 @dataclass
 class IoBProjection:
     """Projected IoB values at different time points."""

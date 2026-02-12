@@ -1367,6 +1367,95 @@ export async function updateTargetGlucoseRange(
 }
 
 /**
+ * Insulin Configuration API types
+ */
+export interface InsulinConfigResponse {
+  id: string;
+  insulin_type: string;
+  dia_hours: number;
+  onset_minutes: number;
+  updated_at: string;
+}
+
+export interface InsulinConfigUpdate {
+  insulin_type?: string;
+  dia_hours?: number;
+  onset_minutes?: number;
+}
+
+export interface InsulinPresets {
+  [key: string]: { dia_hours: number; onset_minutes: number };
+}
+
+export interface InsulinConfigDefaults {
+  insulin_type: string;
+  dia_hours: number;
+  onset_minutes: number;
+  presets: InsulinPresets;
+}
+
+/**
+ * Fetch current insulin configuration
+ */
+export async function getInsulinConfig(): Promise<InsulinConfigResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/insulin-config`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch insulin config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update insulin configuration
+ */
+export async function updateInsulinConfig(
+  updates: InsulinConfigUpdate
+): Promise<InsulinConfigResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/insulin-config`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to update insulin config: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch insulin config defaults and presets
+ */
+export async function getInsulinConfigDefaults(): Promise<InsulinConfigDefaults> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/settings/insulin-config/defaults`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch insulin defaults: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
  * Brief Delivery Config API types (Story 9.2)
  */
 export interface BriefDeliveryConfigResponse {

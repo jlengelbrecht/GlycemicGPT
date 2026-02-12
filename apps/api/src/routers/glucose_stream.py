@@ -17,7 +17,7 @@ from src.core.auth import DiabeticOrAdminUser
 from src.database import get_db_session
 from src.logging_config import get_logger
 from src.services.dexcom_sync import get_latest_glucose_reading
-from src.services.iob_projection import get_iob_projection
+from src.services.iob_projection import get_iob_projection, get_user_dia
 from src.services.predictive_alerts import get_active_alerts
 
 logger = get_logger(__name__)
@@ -107,7 +107,8 @@ async def generate_glucose_stream(
                             # Get IoB projection if available
                             iob_data = None
                             try:
-                                projection = await get_iob_projection(db, user_id)
+                                dia = await get_user_dia(db, user_id)
+                                projection = await get_iob_projection(db, user_id, dia_hours=dia)
                                 if projection:
                                     iob_data = {
                                         "current": projection.projected_iob,

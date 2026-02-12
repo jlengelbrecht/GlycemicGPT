@@ -52,10 +52,11 @@ class TestAlertDeduplication:
 
     @patch("src.routers.glucose_stream.get_active_alerts")
     @patch("src.routers.glucose_stream.get_latest_glucose_reading")
+    @patch("src.routers.glucose_stream.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.routers.glucose_stream.get_iob_projection")
     @patch("src.routers.glucose_stream.get_db_session")
     async def test_alert_not_sent_twice(
-        self, mock_db_session, mock_iob, mock_glucose, mock_alerts
+        self, mock_db_session, mock_iob, mock_dia, mock_glucose, mock_alerts
     ):
         """Test that the same alert is not sent twice per connection."""
         from enum import Enum
@@ -123,10 +124,11 @@ class TestAlertDeduplication:
 
     @patch("src.routers.glucose_stream.get_active_alerts")
     @patch("src.routers.glucose_stream.get_latest_glucose_reading")
+    @patch("src.routers.glucose_stream.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.routers.glucose_stream.get_iob_projection")
     @patch("src.routers.glucose_stream.get_db_session")
     async def test_no_alert_events_when_no_alerts(
-        self, mock_db_session, mock_iob, mock_glucose, mock_alerts
+        self, mock_db_session, mock_iob, mock_dia, mock_glucose, mock_alerts
     ):
         """Test that no alert events are emitted when there are no active alerts."""
         mock_alerts.return_value = []

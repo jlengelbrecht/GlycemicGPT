@@ -22,7 +22,7 @@ from src.models.user import User
 from src.schemas.ai_response import AIMessage
 from src.services.ai_client import get_ai_client
 from src.services.alert_notifier import trend_description
-from src.services.iob_projection import get_iob_projection
+from src.services.iob_projection import get_iob_projection, get_user_dia
 
 logger = get_logger(__name__)
 
@@ -109,7 +109,8 @@ async def _build_glucose_context(
     ]
 
     # Add IoB if available
-    iob = await get_iob_projection(db, user_id)
+    dia = await get_user_dia(db, user_id)
+    iob = await get_iob_projection(db, user_id, dia_hours=dia)
     if iob is not None:
         lines.append(f"- Insulin on Board: {iob.projected_iob:.1f} units")
         if iob.is_stale:

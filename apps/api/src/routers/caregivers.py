@@ -486,9 +486,10 @@ async def get_caregiver_patient_status(
     # IoB data (if permitted)
     # Note: current_iob is the decay-adjusted projected IoB, not the raw pump value
     if permissions.can_view_iob:
-        from src.services.iob_projection import get_iob_projection
+        from src.services.iob_projection import get_iob_projection, get_user_dia
 
-        projection = await get_iob_projection(db, patient_id)
+        dia = await get_user_dia(db, patient_id)
+        projection = await get_iob_projection(db, patient_id, dia_hours=dia)
         if projection is not None:
             now = datetime.now(UTC)
             delta = now - projection.confirmed_at

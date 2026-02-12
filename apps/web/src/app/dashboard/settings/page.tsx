@@ -8,7 +8,7 @@
  */
 
 import Link from "next/link";
-import { Settings, User, Bell, Database, Link2, Users, Radio, UserPlus, Target, Clock, Brain } from "lucide-react";
+import { Settings, User, Bell, Database, Link2, Users, Radio, UserPlus, Target, Clock, Brain, Syringe } from "lucide-react";
 import { useUserContext } from "@/providers";
 
 interface SettingsSection {
@@ -44,6 +44,12 @@ const settingsSections: SettingsSection[] = [
     description: "Set your target glucose range for dashboard and AI analysis",
     icon: Target,
     href: "/dashboard/settings/glucose-range",
+  },
+  {
+    title: "Insulin / Medications",
+    description: "Configure your insulin type for IoB calculations",
+    icon: Syringe,
+    href: "/dashboard/settings/insulin",
   },
   {
     title: "Daily Briefs",

@@ -10,6 +10,7 @@ from src.config import settings
 from src.main import app
 from src.models.pump_data import ControlIQMode, PumpEventType
 from src.services.tandem_sync import (
+    _normalize_pump_event,
     calculate_basal_adjustment,
     detect_control_iq_mode,
     map_event_type,
@@ -204,14 +205,18 @@ class TestTandemSyncEndpoints:
         assert data["integration_status"] == "not_configured"
         assert data["events_available"] == 0
 
+    @patch("src.services.tandem_sync.fetch_with_retry")
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
-    async def test_sync_tandem_with_mocked_data(self, mock_validate, mock_tandem_class):
+    async def test_sync_tandem_with_mocked_data(
+        self, mock_validate, mock_tandem_class, mock_fetch
+    ):
         """Test Tandem sync with mocked Tandem API."""
         mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
 
-        # Create mock events response
-        mock_events = [
+        # Create mock normalized events (as returned by fetch_with_retry)
+        mock_fetch.return_value = [
             {
                 "type": "bolus",
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -226,10 +231,6 @@ class TestTandemSyncEndpoints:
                 "duration": 30,
             },
         ]
-
-        mock_api = MagicMock()
-        mock_api.get_events.return_value = mock_events
-        mock_tandem_class.return_value = mock_api
 
         email = unique_email("tandem_sync_mock")
         password = "SecurePass123"
@@ -273,16 +274,18 @@ class TestTandemSyncEndpoints:
         assert data["events_fetched"] == 2
         assert data["events_stored"] == 2
 
+    @patch("src.services.tandem_sync.fetch_with_retry")
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
     async def test_sync_tandem_control_iq_flagging(
-        self, mock_validate, mock_tandem_class
+        self, mock_validate, mock_tandem_class, mock_fetch
     ):
         """Test that Control-IQ events are properly flagged as automated."""
         mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
 
         # Create mock Control-IQ correction event
-        mock_events = [
+        mock_fetch.return_value = [
             {
                 "type": "correctionBolus",
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -292,10 +295,6 @@ class TestTandemSyncEndpoints:
                 "bg": 180,
             },
         ]
-
-        mock_api = MagicMock()
-        mock_api.get_events.return_value = mock_events
-        mock_tandem_class.return_value = mock_api
 
         email = unique_email("tandem_controliq")
         password = "SecurePass123"
@@ -340,15 +339,16 @@ class TestTandemSyncEndpoints:
         assert data["last_event"]["is_automated"] is True
         assert data["last_event"]["event_type"] == "correction"
 
+    @patch("src.services.tandem_sync.fetch_with_retry")
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
-    async def test_sync_tandem_empty_response(self, mock_validate, mock_tandem_class):
+    async def test_sync_tandem_empty_response(
+        self, mock_validate, mock_tandem_class, mock_fetch
+    ):
         """Test Tandem sync with no events."""
         mock_validate.return_value = (True, None)
-
-        mock_api = MagicMock()
-        mock_api.get_events.return_value = []
-        mock_tandem_class.return_value = mock_api
+        mock_tandem_class.return_value = MagicMock()
+        mock_fetch.return_value = []
 
         email = unique_email("tandem_empty")
         password = "SecurePass123"
@@ -392,25 +392,23 @@ class TestTandemSyncEndpoints:
         assert data["events_stored"] == 0
         assert data["last_event"] is None
 
+    @patch("src.services.tandem_sync.fetch_with_retry")
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
     async def test_tandem_sync_status_after_sync(
-        self, mock_validate, mock_tandem_class
+        self, mock_validate, mock_tandem_class, mock_fetch
     ):
         """Test sync status after a successful sync."""
         mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
 
-        mock_events = [
+        mock_fetch.return_value = [
             {
                 "type": "bolus",
                 "timestamp": datetime.now(UTC).isoformat(),
                 "units": 3.0,
             },
         ]
-
-        mock_api = MagicMock()
-        mock_api.get_events.return_value = mock_events
-        mock_tandem_class.return_value = mock_api
 
         email = unique_email("tandem_status_sync")
         password = "SecurePass123"
@@ -461,15 +459,17 @@ class TestTandemSyncEndpoints:
         assert data["latest_event"] is not None
 
     # Issue #10: Test for skipping events without timestamp
+    @patch("src.services.tandem_sync.fetch_with_retry")
     @patch("src.services.tandem_sync.TandemSourceApi")
     @patch("src.routers.integrations.validate_tandem_credentials")
     async def test_sync_skips_events_without_timestamp(
-        self, mock_validate, mock_tandem_class
+        self, mock_validate, mock_tandem_class, mock_fetch
     ):
         """Test that events without valid timestamps are skipped."""
         mock_validate.return_value = (True, None)
+        mock_tandem_class.return_value = MagicMock()
 
-        mock_events = [
+        mock_fetch.return_value = [
             {"type": "bolus", "units": 2.5},  # No timestamp - should skip
             {
                 "type": "bolus",
@@ -482,10 +482,6 @@ class TestTandemSyncEndpoints:
                 "units": 3.0,
             },  # Valid
         ]
-
-        mock_api = MagicMock()
-        mock_api.get_events.return_value = mock_events
-        mock_tandem_class.return_value = mock_api
 
         email = unique_email("tandem_skip_invalid")
         password = "SecurePass123"
@@ -740,6 +736,103 @@ class TestParseControlIQEvent:
         assert parsed.event_type == PumpEventType.SUSPEND
         assert parsed.is_automated is True
         assert parsed.control_iq_reason == "suspend"
+
+
+class TestBgReadingEventType:
+    """Tests for bg_reading event type mapping."""
+
+    def test_map_bg_reading_event(self):
+        """Test mapping bg_reading event type returns BG_READING."""
+        event_type, is_automated, reason = map_event_type({"type": "bg_reading"})
+        assert event_type == PumpEventType.BG_READING
+        assert is_automated is False
+        assert reason is None
+
+
+class TestNormalizePumpEvent:
+    """Tests for _normalize_pump_event IoB and units extraction."""
+
+    def _make_event(self, data: dict):
+        """Create a mock event object with todict() returning data."""
+        mock = MagicMock()
+        mock.todict.return_value = data
+        return mock
+
+    def test_event_id_16_extracts_iob(self):
+        """Event ID 16 (LidBgReadingTaken) should extract IoB."""
+        import arrow
+
+        event = self._make_event({
+            "id": "16",
+            "eventTimestamp": arrow.now(),
+            "IOB": "6.14",
+            "BG": "257",
+        })
+        result = _normalize_pump_event(event)
+        assert result is not None
+        assert result["type"] == "bg_reading"
+        assert result["iob"] == 6.14
+        assert result["bg"] == 257
+
+    def test_event_id_20_extracts_units(self):
+        """Event ID 20 (LidBolusCompleted) should extract units."""
+        import arrow
+
+        event = self._make_event({
+            "id": "20",
+            "eventTimestamp": arrow.now(),
+            "InsulinDelivered": "3.5",
+        })
+        result = _normalize_pump_event(event)
+        assert result is not None
+        assert result["type"] == "bolus"
+        assert result["units"] == 3.5
+
+    def test_event_id_280_extracts_units(self):
+        """Event ID 280 (LidBolusDelivery) should extract units."""
+        import arrow
+
+        event = self._make_event({
+            "id": "280",
+            "eventTimestamp": arrow.now(),
+            "insulindelivered": "2.0",
+        })
+        result = _normalize_pump_event(event)
+        assert result is not None
+        assert result["type"] == "bolus"
+        assert result["units"] == 2.0
+
+    def test_unmapped_event_id_returns_none(self):
+        """Unmapped event IDs should return None."""
+        import arrow
+
+        event = self._make_event({
+            "id": "999",
+            "eventTimestamp": arrow.now(),
+        })
+        result = _normalize_pump_event(event)
+        assert result is None
+
+    def test_missing_timestamp_returns_none(self):
+        """Events without timestamps should return None."""
+        event = self._make_event({
+            "id": "16",
+        })
+        result = _normalize_pump_event(event)
+        assert result is None
+
+    def test_iob_none_when_not_present(self):
+        """Events without IOB field should not have iob key."""
+        import arrow
+
+        event = self._make_event({
+            "id": "3",
+            "eventTimestamp": arrow.now(),
+        })
+        result = _normalize_pump_event(event)
+        assert result is not None
+        assert result["type"] == "basal"
+        assert "iob" not in result
 
 
 class TestControlIQActivityEndpoint:

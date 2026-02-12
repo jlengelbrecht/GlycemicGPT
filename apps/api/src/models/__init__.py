@@ -18,6 +18,7 @@ from src.models.escalation_event import (
     NotificationStatus,
 )
 from src.models.glucose import GlucoseReading, TrendDirection
+from src.models.insulin_config import InsulinConfig
 from src.models.integration import (
     IntegrationCredential,
     IntegrationStatus,
@@ -54,6 +55,7 @@ __all__ = [
     "EscalationEvent",
     "EscalationTier",
     "GlucoseReading",
+    "InsulinConfig",
     "InvitationStatus",
     "IntegrationCredential",
     "IntegrationStatus",

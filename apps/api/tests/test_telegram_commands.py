@@ -177,8 +177,9 @@ class TestHandleStatus:
     """Tests for _handle_status."""
 
     @pytest.mark.asyncio
+    @patch("src.services.telegram_commands.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.services.telegram_commands.get_iob_projection", new_callable=AsyncMock)
-    async def test_with_glucose_and_iob(self, mock_iob):
+    async def test_with_glucose_and_iob(self, mock_iob, mock_dia):
         mock_iob.return_value = make_iob(projected_iob=2.5)
 
         reading = make_reading(value=120, trend_rate=0.5)
@@ -195,8 +196,9 @@ class TestHandleStatus:
         assert "2.5 units" in msg
 
     @pytest.mark.asyncio
+    @patch("src.services.telegram_commands.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.services.telegram_commands.get_iob_projection", new_callable=AsyncMock)
-    async def test_no_glucose_data(self, mock_iob):
+    async def test_no_glucose_data(self, mock_iob, mock_dia):
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
         db = AsyncMock()
@@ -208,8 +210,9 @@ class TestHandleStatus:
         mock_iob.assert_not_called()
 
     @pytest.mark.asyncio
+    @patch("src.services.telegram_commands.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.services.telegram_commands.get_iob_projection", new_callable=AsyncMock)
-    async def test_stale_iob_shows_warning(self, mock_iob):
+    async def test_stale_iob_shows_warning(self, mock_iob, mock_dia):
         mock_iob.return_value = make_iob(is_stale=True)
 
         reading = make_reading()
@@ -223,8 +226,9 @@ class TestHandleStatus:
         assert "stale" in msg.lower()
 
     @pytest.mark.asyncio
+    @patch("src.services.telegram_commands.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.services.telegram_commands.get_iob_projection", new_callable=AsyncMock)
-    async def test_no_iob_data(self, mock_iob):
+    async def test_no_iob_data(self, mock_iob, mock_dia):
         mock_iob.return_value = None
 
         reading = make_reading(value=95)
@@ -239,8 +243,9 @@ class TestHandleStatus:
         assert "IoB" not in msg
 
     @pytest.mark.asyncio
+    @patch("src.services.telegram_commands.get_user_dia", new_callable=AsyncMock, return_value=4.0)
     @patch("src.services.telegram_commands.get_iob_projection", new_callable=AsyncMock)
-    async def test_trend_description_included(self, mock_iob):
+    async def test_trend_description_included(self, mock_iob, mock_dia):
         mock_iob.return_value = None
 
         reading = make_reading(trend_rate=-2.0)
