@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.68](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.67...v0.1.68) (2026-02-12)
+
+
+### ✨ Features
+
+* refactor AI provider backend for sidecar auto-routing (Story 15.4) ([#155](https://github.com/jlengelbrecht/GlycemicGPT/issues/155)) ([2a8ccd9](https://github.com/jlengelbrecht/GlycemicGPT/commit/2a8ccd965f4c29d1c9f2fa8f67ac107d73dc91d3))
+
 ## [0.1.67](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.66...v0.1.67) (2026-02-12)
 
 
