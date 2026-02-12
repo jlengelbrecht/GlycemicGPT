@@ -173,6 +173,47 @@ class AIChatResponse(BaseModel):
     )
 
 
+# ── Story 15.4: Subscription Configuration ──
+
+# Subscription provider types that use the managed sidecar
+_SUBSCRIPTION_TYPES = {
+    AIProviderType.CLAUDE_SUBSCRIPTION,
+    AIProviderType.CHATGPT_SUBSCRIPTION,
+}
+
+# Map sidecar provider names to AIProviderType
+SIDECAR_PROVIDER_MAP: dict[str, AIProviderType] = {
+    "claude": AIProviderType.CLAUDE_SUBSCRIPTION,
+    "codex": AIProviderType.CHATGPT_SUBSCRIPTION,
+}
+
+
+class SubscriptionConfigureRequest(BaseModel):
+    """Request schema for configuring a subscription provider via sidecar.
+
+    Unlike AIProviderConfigRequest, this does not require api_key or base_url.
+    The sidecar handles authentication and the API auto-populates the base_url.
+    """
+
+    sidecar_provider: str = Field(
+        ..., description="Sidecar provider name: 'claude' or 'codex'"
+    )
+    model_name: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional model name override",
+    )
+
+    @model_validator(mode="after")
+    def validate_provider(self) -> "SubscriptionConfigureRequest":
+        if self.sidecar_provider not in SIDECAR_PROVIDER_MAP:
+            raise ValueError(
+                f"Invalid sidecar provider '{self.sidecar_provider}'. "
+                f"Must be one of: {', '.join(sorted(SIDECAR_PROVIDER_MAP))}."
+            )
+        return self
+
+
 # ── Story 15.2: Subscription Auth Schemas ──
 
 VALID_SIDECAR_PROVIDERS = {"claude", "codex"}

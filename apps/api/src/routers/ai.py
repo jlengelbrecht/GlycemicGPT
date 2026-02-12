@@ -1,10 +1,11 @@
-"""Story 5.1 / 14.2 / 15.2: AI provider configuration router.
+"""Story 5.1 / 14.2 / 15.2 / 15.4: AI provider configuration router.
 
 API endpoints for configuring AI provider with API key management.
 Supports 5 provider types: claude_api, openai_api, claude_subscription,
 chatgpt_subscription, and openai_compatible.
 
 Story 15.2: Subscription auth endpoints for sidecar token management.
+Story 15.4: Subscription configure endpoint (no API key needed).
 """
 
 import asyncio
@@ -20,6 +21,7 @@ from src.database import get_db
 from src.logging_config import get_logger
 from src.models.ai_provider import AIProviderConfig, AIProviderStatus
 from src.schemas.ai_provider import (
+    SIDECAR_PROVIDER_MAP,
     AIChatRequest,
     AIChatResponse,
     AIProviderConfigRequest,
@@ -32,6 +34,7 @@ from src.schemas.ai_provider import (
     SubscriptionAuthStatusResponse,
     SubscriptionAuthTokenRequest,
     SubscriptionAuthTokenResponse,
+    SubscriptionConfigureRequest,
 )
 from src.schemas.auth import ErrorResponse
 from src.services.ai_provider import mask_api_key, validate_ai_api_key
@@ -41,6 +44,7 @@ from src.services.sidecar import (
     revoke_sidecar_auth,
     start_sidecar_auth,
     submit_sidecar_token,
+    validate_sidecar_connection,
 )
 from src.services.telegram_chat import handle_chat_web
 
@@ -231,6 +235,16 @@ async def delete_ai_provider(
             detail="No AI provider configured",
         )
 
+    # Revoke sidecar auth if this was a sidecar-managed provider
+    if config.sidecar_provider:
+        revoke_result = await revoke_sidecar_auth(config.sidecar_provider)
+        if revoke_result is None:
+            logger.warning(
+                "Sidecar auth revocation failed during provider deletion (sidecar unreachable)",
+                user_id=str(current_user.id),
+                sidecar_provider=config.sidecar_provider,
+            )
+
     await db.delete(config)
     await db.commit()
 
@@ -274,12 +288,41 @@ async def test_ai_provider(
         )
 
     # Subscription types using sidecar OAuth have no stored API key;
-    # their health is checked via the sidecar /health endpoint instead.
+    # validate by checking sidecar health + auth status instead.
     if not config.encrypted_api_key:
+        if config.sidecar_provider:
+            is_valid, error_message = await validate_sidecar_connection(
+                config.sidecar_provider
+            )
+            now = datetime.now(UTC)
+            if is_valid:
+                config.status = AIProviderStatus.CONNECTED
+                config.last_validated_at = now
+                config.last_error = None
+                config.updated_at = now
+                await db.commit()
+                return AIProviderTestResponse(
+                    success=True,
+                    message="Sidecar connection verified successfully.",
+                )
+            else:
+                config.status = AIProviderStatus.ERROR
+                config.last_error = error_message
+                config.updated_at = now
+                await db.commit()
+                return AIProviderTestResponse(
+                    success=False,
+                    message=error_message or "Sidecar validation failed",
+                )
+        now = datetime.now(UTC)
+        config.status = AIProviderStatus.ERROR
+        config.last_error = "No API key and no sidecar configuration"
+        config.updated_at = now
+        await db.commit()
         return AIProviderTestResponse(
-            success=True,
-            message="Subscription provider uses sidecar authentication. "
-            "Check sidecar health endpoint for detailed status.",
+            success=False,
+            message="Provider has no API key and no sidecar configuration. "
+            "Please reconfigure your AI provider.",
         )
 
     # Decrypt and test the key (run in thread to avoid blocking event loop)
@@ -344,6 +387,101 @@ async def ai_chat(
         response=response_text,
         disclaimer="Not medical advice. Consult your healthcare provider.",
     )
+
+
+# ── Story 15.4: Subscription Configure Endpoint ──
+
+
+@router.post(
+    "/subscription/configure",
+    response_model=AIProviderConfigResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Subscription provider configured via sidecar"},
+        400: {"model": ErrorResponse, "description": "Sidecar not authenticated"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+        502: {"model": ErrorResponse, "description": "Sidecar unreachable"},
+    },
+)
+async def configure_subscription_provider(
+    request: SubscriptionConfigureRequest,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> AIProviderConfigResponse:
+    """Configure a subscription provider via the managed sidecar.
+
+    No API key or base_url required. The sidecar handles authentication
+    and the API auto-populates the base_url from AI_SIDECAR_URL.
+    Requires the sidecar to be running and authenticated for the provider.
+    """
+    provider_type = SIDECAR_PROVIDER_MAP[request.sidecar_provider]
+
+    # Validate sidecar is healthy and authenticated
+    is_valid, error_message = await validate_sidecar_connection(
+        request.sidecar_provider
+    )
+    if not is_valid:
+        logger.warning(
+            "Subscription provider configuration failed",
+            user_id=str(current_user.id),
+            provider=request.sidecar_provider,
+            provider_type=provider_type.value,
+            error=error_message,
+        )
+        # Distinguish between sidecar unreachable (502) vs other errors (400)
+        error_msg = error_message or "Sidecar validation failed"
+        is_unreachable = "not reachable" in error_msg
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY
+            if is_unreachable
+            else status.HTTP_400_BAD_REQUEST,
+            detail=error_msg,
+        )
+
+    # Check if configuration already exists
+    result = await db.execute(
+        select(AIProviderConfig).where(AIProviderConfig.user_id == current_user.id)
+    )
+    existing = result.scalar_one_or_none()
+
+    now = datetime.now(UTC)
+
+    if existing:
+        existing.provider_type = provider_type
+        existing.encrypted_api_key = None  # Sidecar handles auth
+        existing.model_name = request.model_name
+        existing.base_url = None  # Auto-routed via AI_SIDECAR_URL
+        existing.sidecar_provider = request.sidecar_provider
+        existing.status = AIProviderStatus.CONNECTED
+        existing.last_validated_at = now
+        existing.last_error = None
+        existing.updated_at = now
+        config = existing
+    else:
+        config = AIProviderConfig(
+            user_id=current_user.id,
+            provider_type=provider_type,
+            encrypted_api_key=None,
+            model_name=request.model_name,
+            base_url=None,
+            sidecar_provider=request.sidecar_provider,
+            status=AIProviderStatus.CONNECTED,
+            last_validated_at=now,
+        )
+        db.add(config)
+
+    await db.commit()
+    await db.refresh(config)
+
+    logger.info(
+        "Subscription provider configured via sidecar",
+        user_id=str(current_user.id),
+        provider=request.sidecar_provider,
+        provider_type=provider_type.value,
+    )
+
+    return _build_response(config, "sidecar-managed")
 
 
 # ── Story 15.2: Subscription Auth Endpoints ──

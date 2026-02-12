@@ -1,8 +1,10 @@
-"""Story 15.2: Sidecar communication service.
+"""Story 15.2 / 15.4: Sidecar communication service.
 
 Handles all HTTP communication between the FastAPI backend and the
 AI sidecar container.  The sidecar is only reachable on the Docker
 internal network (http://ai-sidecar:3456 by default).
+
+Story 15.4: Added validate_sidecar_connection for subscription provider validation.
 """
 
 import httpx
@@ -110,6 +112,48 @@ async def submit_sidecar_token(provider: str, token: str) -> dict | None:
             "Sidecar token submission failed", provider=provider, error=str(exc)
         )
         return None
+
+
+_VALID_SIDECAR_PROVIDERS = {"claude", "codex"}
+
+
+async def validate_sidecar_connection(provider: str) -> tuple[bool, str | None]:
+    """Validate that the sidecar is healthy and authenticated for a provider.
+
+    Checks sidecar health and auth status. Used when configuring or testing
+    subscription providers.
+
+    Args:
+        provider: Sidecar provider name ("claude" or "codex").
+
+    Returns:
+        Tuple of (success, error_message).
+    """
+    if provider not in _VALID_SIDECAR_PROVIDERS:
+        return (
+            False,
+            f"Unknown sidecar provider '{provider}'. Must be one of: {', '.join(sorted(_VALID_SIDECAR_PROVIDERS))}.",
+        )
+
+    health = await get_sidecar_health()
+    if health is None:
+        return (
+            False,
+            "AI sidecar is not reachable. Ensure the sidecar container is running.",
+        )
+
+    if health.get("status") != "ok":
+        return False, f"AI sidecar reported unhealthy status: {health.get('status')}"
+
+    auth_key = f"{provider}_auth"
+    if not health.get(auth_key, False):
+        return (
+            False,
+            f"Sidecar is running but not authenticated for {provider}. "
+            "Please submit a token first.",
+        )
+
+    return True, None
 
 
 async def revoke_sidecar_auth(provider: str) -> dict | None:
