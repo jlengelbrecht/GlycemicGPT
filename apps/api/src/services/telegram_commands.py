@@ -29,7 +29,7 @@ from src.models.user import User, UserRole
 from src.services.alert_notifier import trend_description
 from src.services.brief_notifier import format_brief_message
 from src.services.daily_brief import list_briefs
-from src.services.iob_projection import get_iob_projection
+from src.services.iob_projection import get_iob_projection, get_user_dia
 from src.services.predictive_alerts import acknowledge_alert, get_active_alerts
 
 logger = get_logger(__name__)
@@ -120,7 +120,8 @@ async def _handle_status(db: AsyncSession, user_id: uuid.UUID) -> str:
     ]
 
     # IoB projection
-    iob = await get_iob_projection(db, user_id)
+    dia = await get_user_dia(db, user_id)
+    iob = await get_iob_projection(db, user_id, dia_hours=dia)
     if iob is not None:
         lines.append(f"\U0001f489 <b>IoB:</b> {iob.projected_iob:.1f} units")
         if iob.is_stale:

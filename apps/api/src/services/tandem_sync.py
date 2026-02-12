@@ -175,6 +175,10 @@ def map_event_type(event_data: dict) -> tuple[PumpEventType, bool, str | None]:
     """
     event_type_str = (event_data.get("type") or "").lower()
 
+    # BG reading events are informational (IoB snapshot, not insulin delivery)
+    if event_type_str == "bg_reading":
+        return PumpEventType.BG_READING, False, None
+
     # Check automation flags from tconnectsync
     is_automated = (
         event_data.get("isAutomated", False)
@@ -258,13 +262,117 @@ def parse_control_iq_event(event_data: dict) -> ParsedEventData:
     )
 
 
+# Map tconnectsync event IDs to our event type strings.
+# See tconnectsync/eventparser/events.py for the full list.
+_EVENT_ID_TYPE_MAP: dict[int, str] = {
+    3: "basal",  # LidBasalRateChange
+    16: "bg_reading",  # LidBgReadingTaken - has IoB and BG from pump
+    20: "bolus",  # LidBolusCompleted
+    279: "basal",  # LidBasalDelivery
+    280: "bolus",  # LidBolusDelivery
+    # We skip CGM events (399: LidCgmDataG7) — glucose comes from Dexcom directly
+}
+
+# LidBasalRateChange changetype values that indicate Control-IQ automation.
+_AUTOMATED_BASAL_CHANGE_TYPES = {2, 3, 4, 5}
+
+
+def _normalize_pump_event(event, _seen_ids: set | None = None) -> dict | None:
+    """Convert a tconnectsync event object into a dict for storage.
+
+    Maps tconnectsync field names to the names expected by our parsing layer
+    (map_event_type, parse_control_iq_event, and the storage loop).
+
+    Returns None for unsupported event types that should be skipped.
+    """
+    try:
+        d = event.todict()
+    except (AttributeError, TypeError):
+        return None
+
+    # tconnectsync uses "id" (string) for the event type ID
+    raw_id = d.get("id") or d.get("eventId") or d.get("event_id")
+    try:
+        event_id = int(raw_id) if raw_id is not None else None
+    except (ValueError, TypeError):
+        event_id = None
+    event_type = _EVENT_ID_TYPE_MAP.get(event_id)
+    if not event_type:
+        # Track unmapped event IDs for the caller's summary log
+        if _seen_ids is not None:
+            _seen_ids.add(event_id)
+        return None
+
+    # Normalize timestamp — may be Arrow, datetime, or ISO string
+    ts = d.get("eventTimestamp")
+    if ts is None:
+        return None
+    try:
+        d["timestamp"] = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+    except Exception:
+        return None
+    # Also set eventDateTime for the storage loop's timestamp lookup
+    d["eventDateTime"] = d["timestamp"]
+
+    d["type"] = event_type
+
+    # Helper: tconnectsync values may come as strings
+    def _float(key: str) -> float | None:
+        v = d.get(key)
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (ValueError, TypeError):
+            return None
+
+    def _int(key: str) -> int | None:
+        v = d.get(key)
+        if v is None:
+            return None
+        try:
+            return int(float(v))
+        except (ValueError, TypeError):
+            return None
+
+    # Normalize insulin delivery (bolus events)
+    for units_key in ("insulindelivered", "InsulinDelivered"):
+        if units_key in d:
+            d["units"] = _float(units_key)
+            break
+
+    # Normalize IoB (uppercase in tconnectsync, present in event ID 16)
+    if "IOB" in d:
+        d["iob"] = _float("IOB")
+
+    # Normalize BG from pump (event ID 16: LidBgReadingTaken)
+    if "BG" in d:
+        d["bg"] = _int("BG")
+
+    # Normalize basal rates for adjustment calculation
+    if "commandedbasalrate" in d:
+        d["actualRate"] = _float("commandedbasalrate")
+    if "basebasalrate" in d:
+        d["profileRate"] = _float("basebasalrate")
+
+    # Detect automation for basal rate changes
+    if event_id == 3:
+        changetype = _int("changetypeRaw") or 0
+        d["isAutomated"] = changetype in _AUTOMATED_BASAL_CHANGE_TYPES
+
+    return d
+
+
 def fetch_with_retry(
     api: TandemSourceApi,
     start_date: datetime,
     end_date: datetime,
     max_retries: int = MAX_RETRIES,
-):
-    """Fetch events with retry logic for transient failures.
+) -> list[dict]:
+    """Fetch pump events with retry logic for transient failures.
+
+    Gets pump metadata to find device IDs, then fetches events via
+    the pump_events() method and normalizes them into dicts.
 
     Args:
         api: TandemSourceApi instance
@@ -273,30 +381,100 @@ def fetch_with_retry(
         max_retries: Maximum retry attempts
 
     Returns:
-        Raw events from API
+        List of normalized event dicts
 
     Raises:
         ApiException: If all retries fail
     """
     import time
 
-    last_error = None
-    for attempt in range(max_retries):
-        try:
-            return api.get_events(start_date, end_date)
-        except ApiException as e:
-            last_error = e
-            if attempt < max_retries - 1:
-                logger.warning(
-                    "Tandem API call failed, retrying",
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    error=str(e),
-                )
-                time.sleep(RETRY_DELAY * (attempt + 1))
+    # Get pump metadata to discover device IDs
+    metadata = api.pump_event_metadata()
+    if not metadata:
+        logger.warning("No pumps found in Tandem account")
+        return []
+
+    # Handle both list and dict response structures
+    if isinstance(metadata, dict):
+        if "tconnectDeviceId" in metadata:
+            metadata = [metadata]
+        else:
+            # Try common wrapper keys
+            for key in ("pumps", "devices", "data"):
+                if key in metadata and isinstance(metadata[key], list):
+                    metadata = metadata[key]
+                    break
             else:
-                raise
-    raise last_error
+                logger.warning(
+                    "Unexpected pump_event_metadata structure",
+                    keys=list(metadata.keys()),
+                )
+                return []
+
+    # Format dates as YYYY-MM-DD strings (required by tconnectsync API)
+    min_date_str = start_date.strftime("%Y-%m-%d")
+    max_date_str = end_date.strftime("%Y-%m-%d")
+
+    all_events: list[dict] = []
+
+    for pump_info in metadata:
+        device_id = pump_info.get("tconnectDeviceId")
+        if not device_id:
+            continue
+
+        serial = pump_info.get("serialNumber", "")
+        redacted_serial = f"***{serial[-4:]}" if len(serial) >= 4 else "***"
+        logger.info(
+            "Fetching events for pump",
+            device_id=device_id,
+            serial=redacted_serial,
+            min_date=min_date_str,
+            max_date=max_date_str,
+        )
+
+        seen_ids: set = set()
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                events_gen = api.pump_events(
+                    device_id,
+                    min_date=min_date_str,
+                    max_date=max_date_str,
+                    fetch_all_event_types=True,
+                )
+                # Consume generator and normalize events
+                raw_count = 0
+                for event in events_gen:
+                    raw_count += 1
+                    normalized = _normalize_pump_event(event, _seen_ids=seen_ids)
+                    if normalized:
+                        all_events.append(normalized)
+                logger.info(
+                    "Processed pump events",
+                    device_id=device_id,
+                    raw_events=raw_count,
+                    normalized_events=len(all_events),
+                    skipped_event_ids=sorted(seen_ids - set(_EVENT_ID_TYPE_MAP.keys())),
+                )
+                break  # Success for this pump
+            except ApiException as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Tandem API call failed, retrying",
+                        attempt=attempt + 1,
+                        max_retries=max_retries,
+                        device_id=device_id,
+                        error=str(e),
+                    )
+                    time.sleep(RETRY_DELAY * (attempt + 1))
+                else:
+                    raise
+        if last_error and not all_events:
+            raise last_error
+
+    logger.info("Fetched pump events", total_events=len(all_events))
+    return all_events
 
 
 async def sync_tandem_for_user(
@@ -441,19 +619,8 @@ async def sync_tandem_for_user(
         await db.commit()
         raise TandemSyncError(f"Failed to fetch events: {str(e)}") from e
 
-    # Parse and process events
-    events = []
-    if raw_events:
-        # Handle different response structures from tconnectsync
-        if isinstance(raw_events, dict):
-            # May contain separate event types
-            for event_type_key in ["basal", "bolus", "iob", "events"]:
-                if event_type_key in raw_events:
-                    items = raw_events[event_type_key]
-                    if isinstance(items, list):
-                        events.extend(items)
-        elif isinstance(raw_events, list):
-            events = raw_events
+    # raw_events is a flat list of normalized dicts from fetch_with_retry
+    events = raw_events or []
 
     if not events:
         logger.info("No new events from Tandem", user_id=str(user_id))

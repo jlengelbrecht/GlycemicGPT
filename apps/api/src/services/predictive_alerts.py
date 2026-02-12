@@ -18,7 +18,7 @@ from src.models.alert_threshold import AlertThreshold
 from src.models.glucose import GlucoseReading
 from src.services.alert_notifier import notify_user_of_alerts
 from src.services.alert_threshold import get_or_create_thresholds
-from src.services.iob_projection import get_iob_projection
+from src.services.iob_projection import get_iob_projection, get_user_dia
 
 logger = get_logger(__name__)
 
@@ -592,7 +592,8 @@ async def evaluate_alerts_for_user(
     # Get IoB projection
     iob_value = None
     try:
-        iob_projection = await get_iob_projection(db, user_id)
+        dia = await get_user_dia(db, user_id)
+        iob_projection = await get_iob_projection(db, user_id, dia_hours=dia)
         if iob_projection and not iob_projection.is_stale:
             iob_value = iob_projection.projected_iob
     except Exception as e:

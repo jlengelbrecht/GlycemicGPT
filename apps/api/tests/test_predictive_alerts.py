@@ -344,6 +344,11 @@ class TestEvaluateAlertsForUser:
                 new_callable=AsyncMock,
                 return_value=None,
             ),
+            patch(
+                "src.services.predictive_alerts.get_user_dia",
+                new_callable=AsyncMock,
+                return_value=4.0,
+            ),
         ):
             result = await evaluate_alerts_for_user(mock_db, user_id)
 
