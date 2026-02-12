@@ -1,26 +1,114 @@
 package com.glycemicgpt.mobile.ble.protocol
 
+import android.os.ParcelUuid
+import java.util.UUID
+
 /**
- * Tandem BLE protocol constants and message framing.
+ * Tandem BLE protocol constants.
  *
- * This is our own Kotlin implementation of the Tandem t:slim X2 BLE protocol,
- * informed by research from jwoglom/pumpX2 (MIT licensed). We do not import
- * or depend on pumpX2 at runtime.
- *
- * Protocol overview:
- * - Communication happens over BLE GATT characteristics
- * - Messages are framed with opcode, length, payload, and checksum
- * - Authentication uses a challenge-response handshake
- * - Only READ-ONLY status request opcodes are implemented here
- *
- * Implementation will be completed in Story 16.2 (pairing) and Story 16.3 (data reads).
+ * UUIDs and message format derived from studying jwoglom/pumpX2 (MIT licensed).
+ * We do not depend on pumpX2 at runtime.
  */
 object TandemProtocol {
-    // Tandem BLE service and characteristic UUIDs (to be populated from pumpX2 research)
-    // const val SERVICE_UUID = "..."
-    // const val CHARACTERISTIC_UUID = "..."
 
-    // Read-only status request opcodes
+    // -- GATT Service UUIDs ------------------------------------------------
+
+    val PUMP_SERVICE_UUID: UUID =
+        UUID.fromString("0000fdfb-0000-1000-8000-00805f9b34fb")
+
+    val PUMP_SERVICE_PARCEL: ParcelUuid = ParcelUuid(PUMP_SERVICE_UUID)
+
+    val DIS_SERVICE_UUID: UUID =
+        UUID.fromString("0000180A-0000-1000-8000-00805f9b34fb")
+
+    // -- GATT Characteristic UUIDs -----------------------------------------
+
+    /** Unsigned status reads (IoB, basal, battery, reservoir, etc.) */
+    val CURRENT_STATUS_UUID: UUID =
+        UUID.fromString("7B83FFF6-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** Qualifying events / alerts */
+    val QUALIFYING_EVENTS_UUID: UUID =
+        UUID.fromString("7B83FFF7-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** History log streaming */
+    val HISTORY_LOG_UUID: UUID =
+        UUID.fromString("7B83FFF8-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** Authentication handshake messages */
+    val AUTHORIZATION_UUID: UUID =
+        UUID.fromString("7B83FFF9-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** Signed control messages */
+    val CONTROL_UUID: UUID =
+        UUID.fromString("7B83FFFC-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** Signed control stream */
+    val CONTROL_STREAM_UUID: UUID =
+        UUID.fromString("7B83FFFD-9F77-4E5C-8064-AAE2C24838B9")
+
+    /** Client Characteristic Configuration Descriptor */
+    val CCCD_UUID: UUID =
+        UUID.fromString("00002902-0000-1000-8000-00805F9B34FB")
+
+    // -- Device Information Service characteristics ------------------------
+
+    val MANUFACTURER_NAME_UUID: UUID =
+        UUID.fromString("00002A29-0000-1000-8000-00805f9b34fb")
+
+    val MODEL_NUMBER_UUID: UUID =
+        UUID.fromString("00002A24-0000-1000-8000-00805f9b34fb")
+
+    val SERIAL_NUMBER_UUID: UUID =
+        UUID.fromString("00002a25-0000-1000-8000-00805f9b34fb")
+
+    val SOFTWARE_REV_UUID: UUID =
+        UUID.fromString("00002a28-0000-1000-8000-00805f9b34fb")
+
+    // -- All characteristics that need notification subscription -----------
+
+    val NOTIFICATION_CHARACTERISTICS: List<UUID> = listOf(
+        CURRENT_STATUS_UUID,
+        QUALIFYING_EVENTS_UUID,
+        HISTORY_LOG_UUID,
+        AUTHORIZATION_UUID,
+        CONTROL_UUID,
+        CONTROL_STREAM_UUID,
+    )
+
+    // -- Read-only status request opcodes ----------------------------------
+
     const val OPCODE_CONTROL_IQ_IOB = 108
-    // Additional opcodes will be added in Story 16.3
+    const val OPCODE_CURRENT_BASAL_STATUS = 114
+    const val OPCODE_INSULIN_STATUS = 41
+    const val OPCODE_CURRENT_BATTERY = 57
+    const val OPCODE_PUMP_SETTINGS = 90
+    const val OPCODE_BOLUS_CALC_DATA = 75
+
+    // -- Authentication opcodes --------------------------------------------
+
+    const val OPCODE_CENTRAL_CHALLENGE_REQ = 16
+    const val OPCODE_CENTRAL_CHALLENGE_RESP = 17
+    const val OPCODE_PUMP_CHALLENGE_REQ = 18
+    const val OPCODE_PUMP_CHALLENGE_RESP = 19
+
+    // -- Post-auth baseline opcodes ----------------------------------------
+
+    const val OPCODE_API_VERSION_REQ = 32
+    const val OPCODE_API_VERSION_RESP = 33
+    const val OPCODE_PUMP_VERSION_REQ = 78
+    const val OPCODE_PUMP_VERSION_RESP = 79
+    const val OPCODE_TIME_SINCE_RESET_REQ = 80
+    const val OPCODE_TIME_SINCE_RESET_RESP = 81
+
+    // -- Connection parameters ---------------------------------------------
+
+    /** Minimum MTU for Tandem long packets */
+    const val REQUIRED_MTU = 185
+
+    /** Max chunk size for current status / auth characteristics */
+    const val CHUNK_SIZE_SHORT = 18
+
+    /** Max chunk size for control characteristics */
+    const val CHUNK_SIZE_LONG = 40
 }
