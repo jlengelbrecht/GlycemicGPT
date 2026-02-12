@@ -56,5 +56,8 @@ jobs:
           echo "=== Web Logs ==="
           docker compose -f docker-compose.yml -f docker-compose.test.yml logs web
           echo ""
+          echo "=== Sidecar Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs ai-sidecar
+          echo ""
           echo "=== DB Logs ==="
           docker compose -f docker-compose.yml -f docker-compose.test.yml logs db
