@@ -1,0 +1,99 @@
+package com.glycemicgpt.mobile.presentation.pairing
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
+import com.glycemicgpt.mobile.ble.connection.BleScanner
+import com.glycemicgpt.mobile.data.local.PumpCredentialStore
+import com.glycemicgpt.mobile.domain.model.ConnectionState
+import com.glycemicgpt.mobile.domain.model.DiscoveredPump
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+@HiltViewModel
+class PairingViewModel @Inject constructor(
+    private val bleScanner: BleScanner,
+    private val connectionManager: BleConnectionManager,
+    private val credentialStore: PumpCredentialStore,
+) : ViewModel() {
+
+    private val _discoveredPumps = MutableStateFlow<List<DiscoveredPump>>(emptyList())
+    val discoveredPumps: StateFlow<List<DiscoveredPump>> = _discoveredPumps.asStateFlow()
+
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
+    private val _pairingCode = MutableStateFlow("")
+    val pairingCode: StateFlow<String> = _pairingCode.asStateFlow()
+
+    private val _selectedPump = MutableStateFlow<DiscoveredPump?>(null)
+    val selectedPump: StateFlow<DiscoveredPump?> = _selectedPump.asStateFlow()
+
+    val connectionState: StateFlow<ConnectionState> = connectionManager.connectionState
+
+    val isPaired: Boolean get() = credentialStore.isPaired()
+    val pairedAddress: String? get() = credentialStore.getPairedAddress()
+
+    private var scanJob: Job? = null
+
+    fun startScan() {
+        stopScan()
+        _discoveredPumps.value = emptyList()
+        _isScanning.value = true
+
+        scanJob = viewModelScope.launch {
+            try {
+                bleScanner.scan().collect { pump ->
+                    _discoveredPumps.value = _discoveredPumps.value + pump
+                }
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    fun stopScan() {
+        scanJob?.cancel()
+        scanJob = null
+        _isScanning.value = false
+    }
+
+    fun selectPump(pump: DiscoveredPump) {
+        _selectedPump.value = pump
+        stopScan()
+    }
+
+    fun clearSelection() {
+        _selectedPump.value = null
+        _pairingCode.value = ""
+    }
+
+    fun updatePairingCode(code: String) {
+        // Allow up to 16 chars for legacy, 6 digits for modern
+        _pairingCode.value = code.take(16)
+    }
+
+    fun pair() {
+        val pump = _selectedPump.value ?: return
+        val code = _pairingCode.value
+        if (code.isEmpty()) return
+
+        connectionManager.connect(pump.address, code)
+    }
+
+    fun unpair() {
+        connectionManager.unpair()
+        _selectedPump.value = null
+        _pairingCode.value = ""
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopScan()
+    }
+}

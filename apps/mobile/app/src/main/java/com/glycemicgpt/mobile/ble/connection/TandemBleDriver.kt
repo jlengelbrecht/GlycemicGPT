@@ -9,30 +9,37 @@ import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.Instant
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Tandem t:slim X2 BLE driver implementing the PumpDriver interface.
  *
- * Uses our own BLE protocol implementation (not pumpX2) to communicate
- * with the pump. Only read-only status requests are implemented.
- *
- * Full implementation in Story 16.2 (pairing/connection) and Story 16.3 (data reads).
+ * Delegates connection lifecycle to [BleConnectionManager].
+ * Data read operations will be implemented in Story 16.3.
  */
-class TandemBleDriver @Inject constructor() : PumpDriver {
-
-    private val connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+@Singleton
+class TandemBleDriver @Inject constructor(
+    private val connectionManager: BleConnectionManager,
+) : PumpDriver {
 
     override suspend fun connect(deviceAddress: String): Result<Unit> {
-        // Story 16.2: BLE pairing and connection
-        return Result.failure(NotImplementedError("BLE connection - Story 16.2"))
+        return try {
+            connectionManager.connect(deviceAddress)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun disconnect(): Result<Unit> {
-        connectionState.value = ConnectionState.DISCONNECTED
-        return Result.success(Unit)
+        return try {
+            connectionManager.disconnect()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun getIoB(): Result<IoBReading> {
@@ -65,5 +72,6 @@ class TandemBleDriver @Inject constructor() : PumpDriver {
         return Result.failure(NotImplementedError("Reservoir level - Story 16.3"))
     }
 
-    override fun observeConnectionState(): Flow<ConnectionState> = connectionState
+    override fun observeConnectionState(): Flow<ConnectionState> =
+        connectionManager.connectionState
 }
