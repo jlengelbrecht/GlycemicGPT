@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.76](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.75...v0.1.76) (2026-02-13)
+
+
+### ✨ Features
+
+* backend sync -- push real-time pump data to API (Story 16.5) ([#175](https://github.com/jlengelbrecht/GlycemicGPT/issues/175)) ([f24f980](https://github.com/jlengelbrecht/GlycemicGPT/commit/f24f980115a39894b77d640321667bf170197ea6))
+
 ## [0.1.75](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.74...v0.1.75) (2026-02-13)
 
 
