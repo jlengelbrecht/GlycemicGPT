@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.80](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.79...v0.1.80) (2026-02-13)
+
+
+### 🐛 Bug Fixes
+
+* remove CLAUDE.md and _bmad-output from repo ([#183](https://github.com/jlengelbrecht/GlycemicGPT/issues/183)) ([6b6c0a1](https://github.com/jlengelbrecht/GlycemicGPT/commit/6b6c0a1bf20b059b36dcdf1028ad52c67c4dcc98))
+
 ## [0.1.79](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.78...v0.1.79) (2026-02-13)
 
 
