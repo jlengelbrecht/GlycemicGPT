@@ -44,6 +44,27 @@ data class ReservoirReading(
     val timestamp: Instant,
 )
 
+data class HistoryLogRecord(
+    val sequenceNumber: Int,
+    val rawBytesB64: String,
+    val eventTypeId: Int,
+    val pumpTimeSeconds: Long,
+)
+
+data class PumpHardwareInfo(
+    val serialNumber: Long,
+    val modelNumber: Long,
+    val partNumber: Long,
+    val pumpRev: String,
+    val armSwVer: Long,
+    val mspSwVer: Long,
+    val configABits: Long,
+    val configBBits: Long,
+    val pcbaSn: Long,
+    val pcbaRev: String,
+    val pumpFeatures: Map<String, Boolean>,
+)
+
 enum class ConnectionState {
     DISCONNECTED,
     SCANNING,

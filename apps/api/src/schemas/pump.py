@@ -155,11 +155,49 @@ class PumpEventPushItem(BaseModel):
         return v
 
 
+class PumpRawEventItem(BaseModel):
+    """A single raw BLE history log record from the pump."""
+
+    sequence_number: int = Field(..., ge=0, description="Pump event sequence index")
+    raw_bytes_b64: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Base64-encoded raw BLE bytes (18-byte record)",
+    )
+    event_type_id: int = Field(..., ge=0, description="Pump event type ID")
+    pump_time_seconds: int = Field(..., ge=0, description="Pump internal timestamp")
+
+
+class PumpHardwareInfoSchema(BaseModel):
+    """Hardware identification from the Tandem pump."""
+
+    serial_number: int = Field(..., gt=0)
+    model_number: int = Field(..., gt=0)
+    part_number: int = Field(..., gt=0)
+    pump_rev: str = Field(..., max_length=50)
+    arm_sw_ver: int = Field(..., ge=0)
+    msp_sw_ver: int = Field(..., ge=0)
+    config_a_bits: int = Field(..., ge=0)
+    config_b_bits: int = Field(..., ge=0)
+    pcba_sn: int = Field(..., ge=0)
+    pcba_rev: str = Field(..., max_length=50)
+    pump_features: dict = Field(
+        default_factory=dict, description="Feature flags (dexcomG5, controlIQ, etc.)"
+    )
+
+
 class PumpPushRequest(BaseModel):
     """Batch of pump events pushed from a mobile client."""
 
     events: list[PumpEventPushItem] = Field(
         ..., min_length=1, max_length=100, description="Pump events to push (1-100)"
+    )
+    raw_events: list[PumpRawEventItem] | None = Field(
+        default=None, max_length=500, description="Raw BLE bytes for Tandem upload"
+    )
+    pump_info: PumpHardwareInfoSchema | None = Field(
+        default=None, description="Pump hardware identification"
     )
     source: str = Field(default="mobile", max_length=50)
 
@@ -169,3 +207,50 @@ class PumpPushResponse(BaseModel):
 
     accepted: int = Field(..., description="Number of new events stored")
     duplicates: int = Field(..., description="Number of duplicate events skipped")
+    raw_accepted: int = Field(
+        default=0, description="Number of raw events stored for Tandem upload"
+    )
+    raw_duplicates: int = Field(
+        default=0, description="Number of duplicate raw events skipped"
+    )
+
+
+# ============================================================================
+# Story 16.6: Tandem Cloud Upload Schemas
+# ============================================================================
+
+
+class TandemUploadStatusResponse(BaseModel):
+    """Status of Tandem cloud upload for the current user."""
+
+    enabled: bool
+    upload_interval_minutes: int
+    last_upload_at: datetime | None = None
+    last_upload_status: str | None = None
+    last_error: str | None = None
+    max_event_index_uploaded: int = 0
+    pending_raw_events: int = 0
+
+
+class TandemUploadSettingsRequest(BaseModel):
+    """Request to update Tandem cloud upload settings."""
+
+    enabled: bool
+    interval_minutes: int = Field(
+        default=15, description="Upload interval in minutes (5, 10, or 15)"
+    )
+
+    @field_validator("interval_minutes")
+    @classmethod
+    def validate_interval(cls, v: int) -> int:
+        if v not in (5, 10, 15):
+            raise ValueError("interval_minutes must be 5, 10, or 15")
+        return v
+
+
+class TandemUploadTriggerResponse(BaseModel):
+    """Response after triggering a manual Tandem upload."""
+
+    message: str
+    events_uploaded: int = 0
+    status: str = "pending"

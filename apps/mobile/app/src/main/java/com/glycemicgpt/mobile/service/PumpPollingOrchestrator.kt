@@ -1,5 +1,7 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
+import com.glycemicgpt.mobile.data.local.entity.RawHistoryLogEntity
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.ConnectionState
@@ -31,11 +33,20 @@ class PumpPollingOrchestrator @Inject constructor(
     private val pumpDriver: PumpDriver,
     private val repository: PumpDataRepository,
     private val syncEnqueuer: SyncQueueEnqueuer,
+    private val rawHistoryLogDao: RawHistoryLogDao,
 ) {
 
     /** Set by PumpConnectionService to trigger immediate sync after enqueue. */
     @Volatile
     var backendSyncManager: BackendSyncManager? = null
+
+    /** Track the last known raw event sequence number to fetch incrementally. */
+    @Volatile
+    private var lastSequenceNumber: Int = 0
+
+    /** Whether hardware info has been cached this session. */
+    @Volatile
+    private var hardwareInfoCached: Boolean = false
 
     companion object {
         const val INTERVAL_FAST_MS = 30_000L       // IoB + basal
@@ -63,6 +74,9 @@ class PumpPollingOrchestrator @Inject constructor(
         stop() // cancel any previous jobs
         synchronized(lock) {
             connectionWatcherJob = scope.launch {
+                // Restore last known sequence number from Room to avoid re-downloading
+                lastSequenceNumber = rawHistoryLogDao.getMaxSequenceNumber() ?: 0
+
                 pumpDriver.observeConnectionState().collectLatest { state ->
                     if (state == ConnectionState.CONNECTED) {
                         Timber.d("Pump connected, starting polling")
@@ -129,11 +143,13 @@ class PumpPollingOrchestrator @Inject constructor(
         }
     }
 
-    /** Slow loop: battery + reservoir every 15 min. */
+    /** Slow loop: battery + reservoir + raw history logs every 15 min. */
     private suspend fun pollSlowLoop() {
         while (true) {
             pollBattery()
             pollReservoir()
+            pollHistoryLogs()
+            cacheHardwareInfoOnce()
             delay(effectiveInterval(INTERVAL_SLOW_MS))
         }
     }
@@ -183,5 +199,37 @@ class PumpPollingOrchestrator @Inject constructor(
         pumpDriver.getReservoirLevel()
             .onSuccess { repository.saveReservoir(it) }
             .onFailure { Timber.w(it, "Failed to poll reservoir") }
+    }
+
+    private suspend fun pollHistoryLogs() {
+        pumpDriver.getHistoryLogs(sinceSequence = lastSequenceNumber)
+            .onSuccess { records ->
+                if (records.isNotEmpty()) {
+                    val entities = records.map { record ->
+                        RawHistoryLogEntity(
+                            sequenceNumber = record.sequenceNumber,
+                            rawBytesB64 = record.rawBytesB64,
+                            eventTypeId = record.eventTypeId,
+                            pumpTimeSeconds = record.pumpTimeSeconds,
+                        )
+                    }
+                    rawHistoryLogDao.insertAll(entities)
+                    lastSequenceNumber = records.maxOf { it.sequenceNumber }
+                    backendSyncManager?.triggerSync()
+                    Timber.d("Saved %d raw history log records", records.size)
+                }
+            }
+            .onFailure { Timber.w(it, "Failed to poll history logs") }
+    }
+
+    private suspend fun cacheHardwareInfoOnce() {
+        if (hardwareInfoCached) return
+        pumpDriver.getPumpHardwareInfo()
+            .onSuccess { info ->
+                backendSyncManager?.cachedHardwareInfo = info
+                hardwareInfoCached = true
+                Timber.d("Cached pump hardware info: serial=%d", info.serialNumber)
+            }
+            .onFailure { Timber.w(it, "Failed to get pump hardware info") }
     }
 }

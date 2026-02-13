@@ -111,6 +111,13 @@ object TandemProtocol {
     const val OPCODE_TIME_SINCE_RESET_REQ = 80
     const val OPCODE_TIME_SINCE_RESET_RESP = 81
 
+    // -- History log / hardware info opcodes --------------------------------
+
+    const val OPCODE_LOG_ENTRY_SEQ_REQ = 26
+    const val OPCODE_LOG_ENTRY_SEQ_RESP = 27
+    const val OPCODE_PUMP_GLOBALS_REQ = 88
+    const val OPCODE_PUMP_GLOBALS_RESP = 89
+
     // -- Connection parameters ---------------------------------------------
 
     /** Minimum MTU for Tandem long packets */

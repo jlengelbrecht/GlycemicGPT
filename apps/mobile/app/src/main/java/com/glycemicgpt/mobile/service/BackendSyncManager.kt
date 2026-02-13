@@ -2,10 +2,14 @@ package com.glycemicgpt.mobile.service
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.PumpEventDto
+import com.glycemicgpt.mobile.data.remote.dto.PumpHardwareInfoDto
 import com.glycemicgpt.mobile.data.remote.dto.PumpPushRequest
+import com.glycemicgpt.mobile.data.remote.dto.PumpRawEventDto
+import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
 import com.squareup.moshi.Moshi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -36,6 +40,7 @@ data class SyncStatus(
 @Singleton
 class BackendSyncManager @Inject constructor(
     private val syncDao: SyncDao,
+    private val rawHistoryLogDao: RawHistoryLogDao,
     private val api: GlycemicGptApi,
     private val authTokenStore: AuthTokenStore,
     private val moshi: Moshi,
@@ -44,8 +49,13 @@ class BackendSyncManager @Inject constructor(
     companion object {
         const val POLL_INTERVAL_MS = 3_000L
         const val BATCH_SIZE = 50
+        const val RAW_BATCH_SIZE = 100
         const val MAX_RETRIES = 5
     }
+
+    /** Cached pump hardware info, set by PumpPollingOrchestrator on first connect. */
+    @Volatile
+    var cachedHardwareInfo: PumpHardwareInfo? = null
 
     private val _syncStatus = MutableStateFlow(SyncStatus())
     val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
@@ -116,18 +126,57 @@ class BackendSyncManager @Inject constructor(
         val validIds = ids - failedParseIds.toSet()
         if (events.isEmpty()) return
 
+        // Collect unsent raw history logs to include in the push
+        val rawLogs = rawHistoryLogDao.getUnsent(limit = RAW_BATCH_SIZE)
+        val rawEventDtos = rawLogs.map { log ->
+            PumpRawEventDto(
+                sequenceNumber = log.sequenceNumber,
+                rawBytesB64 = log.rawBytesB64,
+                eventTypeId = log.eventTypeId,
+                pumpTimeSeconds = log.pumpTimeSeconds,
+            )
+        }
+
+        // Map cached hardware info to DTO
+        val hardwareDto = cachedHardwareInfo?.let { info ->
+            PumpHardwareInfoDto(
+                serialNumber = info.serialNumber,
+                modelNumber = info.modelNumber,
+                partNumber = info.partNumber,
+                pumpRev = info.pumpRev,
+                armSwVer = info.armSwVer,
+                mspSwVer = info.mspSwVer,
+                configABits = info.configABits,
+                configBBits = info.configBBits,
+                pcbaSn = info.pcbaSn,
+                pcbaRev = info.pcbaRev,
+                pumpFeatures = info.pumpFeatures,
+            )
+        }
+
         try {
-            val response = api.pushPumpEvents(PumpPushRequest(events = events))
+            val request = PumpPushRequest(
+                events = events,
+                rawEvents = rawEventDtos.ifEmpty { null },
+                pumpInfo = hardwareDto,
+            )
+            val response = api.pushPumpEvents(request)
             if (response.isSuccessful) {
                 syncDao.deleteSent(validIds.toList())
+                // Mark raw logs as sent on success
+                if (rawLogs.isNotEmpty()) {
+                    rawHistoryLogDao.markSent(rawLogs.map { it.id })
+                }
                 _syncStatus.value = _syncStatus.value.copy(
                     lastSyncAtMs = System.currentTimeMillis(),
                     lastError = null,
                 )
                 Timber.d(
-                    "Sync push: accepted=%d, duplicates=%d",
+                    "Sync push: accepted=%d, duplicates=%d, raw_accepted=%d, raw_duplicates=%d",
                     response.body()?.accepted ?: 0,
                     response.body()?.duplicates ?: 0,
+                    response.body()?.rawAccepted ?: 0,
+                    response.body()?.rawDuplicates ?: 0,
                 )
             } else {
                 val error = "HTTP ${response.code()}"

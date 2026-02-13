@@ -39,8 +39,33 @@ data class PumpEventDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class PumpRawEventDto(
+    @Json(name = "sequence_number") val sequenceNumber: Int,
+    @Json(name = "raw_bytes_b64") val rawBytesB64: String,
+    @Json(name = "event_type_id") val eventTypeId: Int,
+    @Json(name = "pump_time_seconds") val pumpTimeSeconds: Long,
+)
+
+@JsonClass(generateAdapter = true)
+data class PumpHardwareInfoDto(
+    @Json(name = "serial_number") val serialNumber: Long,
+    @Json(name = "model_number") val modelNumber: Long,
+    @Json(name = "part_number") val partNumber: Long,
+    @Json(name = "pump_rev") val pumpRev: String,
+    @Json(name = "arm_sw_ver") val armSwVer: Long,
+    @Json(name = "msp_sw_ver") val mspSwVer: Long,
+    @Json(name = "config_a_bits") val configABits: Long,
+    @Json(name = "config_b_bits") val configBBits: Long,
+    @Json(name = "pcba_sn") val pcbaSn: Long,
+    @Json(name = "pcba_rev") val pcbaRev: String,
+    @Json(name = "pump_features") val pumpFeatures: Map<String, Boolean>,
+)
+
+@JsonClass(generateAdapter = true)
 data class PumpPushRequest(
     val events: List<PumpEventDto>,
+    @Json(name = "raw_events") val rawEvents: List<PumpRawEventDto>? = null,
+    @Json(name = "pump_info") val pumpInfo: PumpHardwareInfoDto? = null,
     val source: String = "mobile",
 )
 
@@ -48,4 +73,29 @@ data class PumpPushRequest(
 data class PumpPushResponse(
     val accepted: Int,
     val duplicates: Int,
+    @Json(name = "raw_accepted") val rawAccepted: Int = 0,
+    @Json(name = "raw_duplicates") val rawDuplicates: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class TandemUploadStatus(
+    val enabled: Boolean,
+    @Json(name = "upload_interval_minutes") val uploadIntervalMinutes: Int,
+    @Json(name = "last_upload_at") val lastUploadAt: String?,
+    @Json(name = "last_upload_status") val lastUploadStatus: String?,
+    @Json(name = "last_error") val lastError: String?,
+    @Json(name = "pending_raw_events") val pendingEvents: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class TandemUploadTriggerResponse(
+    val message: String,
+    @Json(name = "events_uploaded") val eventsUploaded: Int = 0,
+    val status: String = "pending",
+)
+
+@JsonClass(generateAdapter = true)
+data class TandemUploadSettingsRequest(
+    val enabled: Boolean,
+    @Json(name = "interval_minutes") val intervalMinutes: Int,
 )
