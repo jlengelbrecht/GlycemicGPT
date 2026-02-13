@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.data.repository
 
+import com.glycemicgpt.mobile.data.local.dao.ChatDao
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
 import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
@@ -16,7 +17,9 @@ import retrofit2.Response
 class ChatRepositoryTest {
 
     private val api = mockk<GlycemicGptApi>()
-    private val repository = ChatRepository(api)
+    private val chatDao = mockk<ChatDao>(relaxed = true)
+    private val pumpContextBuilder = mockk<PumpContextBuilder>(relaxed = true)
+    private val repository = ChatRepository(api, chatDao, pumpContextBuilder)
 
     @Test
     fun `sendMessage returns success on 200`() = runTest {
@@ -65,5 +68,33 @@ class ChatRepositoryTest {
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()!!.message!!.contains("No route to host"))
+    }
+
+    @Test
+    fun `sendMessageWithContext prepends pump context and persists`() = runTest {
+        val pumpContext = PumpContext(
+            contextPrefix = "[Current pump context: IoB 2.50u]\n\n",
+            snapshot = "[Current pump context: IoB 2.50u]",
+        )
+        coEvery { pumpContextBuilder.buildContext() } returns pumpContext
+        coEvery { api.sendChatMessage(any()) } returns Response.success(
+            ChatResponse(response = "Looking good", disclaimer = "Disclaimer"),
+        )
+
+        val result = repository.sendMessageWithContext("How am I doing?")
+
+        assertTrue(result.isSuccess)
+        assertEquals("Looking good", result.getOrNull()!!.aiResponse)
+        assertEquals("How am I doing?", result.getOrNull()!!.userMessage)
+        assertEquals("[Current pump context: IoB 2.50u]", result.getOrNull()!!.pumpContext)
+
+        // Verify the API was called with the full prefixed message
+        coVerify {
+            api.sendChatMessage(
+                ChatRequest(message = "[Current pump context: IoB 2.50u]\n\nHow am I doing?"),
+            )
+        }
+        coVerify { chatDao.insert(any()) }
+        coVerify { chatDao.trimToLimit() }
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -121,6 +122,15 @@ fun SettingsScreen(
                 )
             },
             onUploadNow = { tandemCloudSyncViewModel.triggerUploadNow() },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // -- AI Chat Section --
+        SectionHeader(title = "AI Chat")
+        AiChatSection(
+            ttsEnabled = state.ttsEnabled,
+            onTtsToggle = settingsViewModel::setTtsEnabled,
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -957,6 +967,51 @@ private fun TandemCloudSyncCard(
                     text = state.errorMessage,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiChatSection(
+    ttsEnabled: Boolean,
+    onTtsToggle: (Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Text-to-Speech",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = "Speak AI responses aloud",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Switch(
+                    checked = ttsEnabled,
+                    onCheckedChange = onTtsToggle,
                 )
             }
         }

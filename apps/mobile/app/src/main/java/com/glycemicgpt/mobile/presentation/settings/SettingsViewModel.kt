@@ -70,6 +70,8 @@ data class SettingsUiState(
     // Watch
     val watchAppInstalled: Boolean? = null,
     val watchConnected: Boolean = false,
+    // AI Chat
+    val ttsEnabled: Boolean = true,
 )
 
 @HiltViewModel
@@ -99,6 +101,7 @@ class SettingsViewModel @Inject constructor(
             pairedPumpAddress = pumpCredentialStore.getPairedAddress(),
             backendSyncEnabled = appSettingsStore.backendSyncEnabled,
             dataRetentionDays = appSettingsStore.dataRetentionDays,
+            ttsEnabled = appSettingsStore.ttsEnabled,
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
         )
@@ -246,6 +249,11 @@ class SettingsViewModel @Inject constructor(
     fun setBackendSyncEnabled(enabled: Boolean) {
         appSettingsStore.backendSyncEnabled = enabled
         _uiState.value = _uiState.value.copy(backendSyncEnabled = enabled)
+    }
+
+    fun setTtsEnabled(enabled: Boolean) {
+        appSettingsStore.ttsEnabled = enabled
+        _uiState.value = _uiState.value.copy(ttsEnabled = enabled)
     }
 
     fun setDataRetentionDays(days: Int) {

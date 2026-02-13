@@ -31,9 +31,16 @@ class AppSettingsStore @Inject constructor(
             prefs.edit().putInt(KEY_DATA_RETENTION_DAYS, value.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS)).apply()
         }
 
+    var ttsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TTS_ENABLED, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_TTS_ENABLED, value).apply()
+        }
+
     companion object {
         private const val KEY_BACKEND_SYNC_ENABLED = "backend_sync_enabled"
         private const val KEY_DATA_RETENTION_DAYS = "data_retention_days"
+        private const val KEY_TTS_ENABLED = "tts_enabled"
         const val DEFAULT_RETENTION_DAYS = 7
         const val MIN_RETENTION_DAYS = 1
         const val MAX_RETENTION_DAYS = 30

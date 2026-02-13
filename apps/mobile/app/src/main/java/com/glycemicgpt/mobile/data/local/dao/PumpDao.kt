@@ -88,6 +88,9 @@ interface PumpDao {
     @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestCgm(): Flow<CgmReadingEntity?>
 
+    @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
+    suspend fun getLatestCgm(): CgmReadingEntity?
+
     @Query("DELETE FROM cgm_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteCgmBefore(beforeMs: Long): Int
 
