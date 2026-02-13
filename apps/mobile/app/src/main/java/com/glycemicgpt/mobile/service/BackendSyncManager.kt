@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.service
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
@@ -43,6 +44,7 @@ class BackendSyncManager @Inject constructor(
     private val rawHistoryLogDao: RawHistoryLogDao,
     private val api: GlycemicGptApi,
     private val authTokenStore: AuthTokenStore,
+    private val appSettingsStore: AppSettingsStore,
     private val moshi: Moshi,
 ) {
 
@@ -98,6 +100,7 @@ class BackendSyncManager @Inject constructor(
     }
 
     internal suspend fun processQueue() {
+        if (!appSettingsStore.backendSyncEnabled) return
         if (!authTokenStore.isLoggedIn()) return
 
         val batch = syncDao.getPendingBatch(limit = BATCH_SIZE, maxRetries = MAX_RETRIES)

@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
@@ -25,9 +26,12 @@ class BackendSyncManagerTest {
     private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
     private val api = mockk<GlycemicGptApi>()
     private val authTokenStore = mockk<AuthTokenStore>()
+    private val appSettingsStore = mockk<AppSettingsStore> {
+        every { backendSyncEnabled } returns true
+    }
     private val moshi = Moshi.Builder().add(InstantAdapter()).build()
 
-    private val manager = BackendSyncManager(syncDao, rawHistoryLogDao, api, authTokenStore, moshi)
+    private val manager = BackendSyncManager(syncDao, rawHistoryLogDao, api, authTokenStore, appSettingsStore, moshi)
 
     private fun sampleEntity(id: Long = 1L): SyncQueueEntity =
         SyncQueueEntity(
@@ -57,6 +61,16 @@ class BackendSyncManagerTest {
 
         manager.processQueue()
 
+        coVerify(exactly = 0) { syncDao.getPendingBatch(any(), any(), any()) }
+    }
+
+    @Test
+    fun `processQueue skips when backend sync disabled`() = runTest {
+        every { appSettingsStore.backendSyncEnabled } returns false
+
+        manager.processQueue()
+
+        coVerify(exactly = 0) { authTokenStore.isLoggedIn() }
         coVerify(exactly = 0) { syncDao.getPendingBatch(any(), any(), any()) }
     }
 

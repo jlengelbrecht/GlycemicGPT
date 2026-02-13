@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.data.remote.dto.TandemUploadSettingsRequest
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadStatus
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadTriggerResponse
 import retrofit2.Response
+import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -17,6 +18,9 @@ import retrofit2.http.PUT
  * Retrofit interface for the GlycemicGPT backend API.
  */
 interface GlycemicGptApi {
+
+    @GET("/health")
+    suspend fun healthCheck(): Response<HealthResponse>
 
     @POST("/api/auth/mobile/login")
     suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
