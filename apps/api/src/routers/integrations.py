@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydexcom import Dexcom
 from pydexcom import errors as dexcom_errors
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tconnectsync.api.common import ApiException
 from tconnectsync.api.tandemsource import TandemSourceApi
 
-from src.core.auth import DiabeticOrAdminUser
+from src.core.auth import CurrentUser, DiabeticOrAdminUser
 from src.core.encryption import encrypt_credential
 from src.database import get_db
 from src.logging_config import get_logger
@@ -44,6 +45,8 @@ from src.schemas.pump import (
     ControlIQActivityResponse,
     IoBProjectionResponse,
     PumpEventResponse,
+    PumpPushRequest,
+    PumpPushResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
 )
@@ -969,3 +972,73 @@ async def get_iob_projection_endpoint(
         stale_warning=projection.stale_warning,
         is_estimated=projection.is_estimated,
     )
+
+
+# ============================================================================
+# Story 16.5: Mobile Pump Push Endpoint
+# ============================================================================
+
+
+@router.post(
+    "/pump/push",
+    response_model=PumpPushResponse,
+    responses={
+        200: {"description": "Pump events processed"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def push_pump_events(
+    request: PumpPushRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> PumpPushResponse:
+    """Accept a batch of pump events from a mobile client.
+
+    Uses PostgreSQL ON CONFLICT DO NOTHING on the existing unique index
+    (user_id, event_timestamp, event_type) for idempotent inserts.
+    """
+    now = datetime.now(UTC)
+    rows = []
+    for item in request.events:
+        ts = item.event_timestamp
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        rows.append(
+            {
+                "user_id": current_user.id,
+                "event_type": item.event_type,
+                "event_timestamp": ts,
+                "units": item.units,
+                "duration_minutes": item.duration_minutes,
+                "is_automated": item.is_automated,
+                "control_iq_mode": item.control_iq_mode,
+                "basal_adjustment_pct": item.basal_adjustment_pct,
+                "iob_at_event": item.iob_at_event,
+                "bg_at_event": item.bg_at_event,
+                "received_at": now,
+                "source": request.source,
+            }
+        )
+
+    stmt = (
+        pg_insert(PumpEvent)
+        .values(rows)
+        .on_conflict_do_nothing(
+            index_elements=["user_id", "event_timestamp", "event_type"],
+        )
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+
+    accepted = max(result.rowcount, 0)
+    duplicates = len(rows) - accepted
+
+    logger.info(
+        "Mobile pump push",
+        user_id=str(current_user.id),
+        total=len(rows),
+        accepted=accepted,
+        duplicates=duplicates,
+    )
+
+    return PumpPushResponse(accepted=accepted, duplicates=duplicates)
