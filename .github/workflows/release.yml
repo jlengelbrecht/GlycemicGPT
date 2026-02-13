@@ -85,15 +85,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Decode signing keystore
-        if: secrets.RELEASE_KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > /tmp/release-keystore.jks
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > /tmp/release-keystore.jks
+            echo "RELEASE_KEYSTORE_FILE=/tmp/release-keystore.jks" >> "$GITHUB_ENV"
+          fi
 
       - name: Build release APK
         working-directory: apps/mobile
         run: ./gradlew assembleRelease
         env:
-          RELEASE_KEYSTORE_FILE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' && '/tmp/release-keystore.jks' || '' }}
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
