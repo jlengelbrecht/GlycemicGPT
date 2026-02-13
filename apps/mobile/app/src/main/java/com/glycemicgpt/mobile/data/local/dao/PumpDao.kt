@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BolusEventEntity
+import com.glycemicgpt.mobile.data.local.entity.CgmReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.IoBReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.ReservoirReadingEntity
 import kotlinx.coroutines.flow.Flow
@@ -79,6 +80,17 @@ interface PumpDao {
     @Query("DELETE FROM reservoir_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteReservoirBefore(beforeMs: Long): Int
 
+    // -- CGM ------------------------------------------------------------------
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCgm(reading: CgmReadingEntity)
+
+    @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
+    fun observeLatestCgm(): Flow<CgmReadingEntity?>
+
+    @Query("DELETE FROM cgm_readings WHERE timestampMs < :beforeMs")
+    suspend fun deleteCgmBefore(beforeMs: Long): Int
+
     // -- Transactional cleanup ------------------------------------------------
 
     @Transaction
@@ -89,6 +101,7 @@ interface PumpDao {
         total += deleteBolusBefore(beforeMs)
         total += deleteBatteryBefore(beforeMs)
         total += deleteReservoirBefore(beforeMs)
+        total += deleteCgmBefore(beforeMs)
         return total
     }
 }

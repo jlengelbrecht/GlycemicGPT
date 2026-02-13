@@ -5,6 +5,8 @@ import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
+import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -46,6 +48,9 @@ class PumpPollingOrchestratorTest {
         )
         coEvery { getReservoirLevel() } returns Result.success(
             ReservoirReading(unitsRemaining = 150f, timestamp = Instant.now()),
+        )
+        coEvery { getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 120, trendArrow = CgmTrend.FLAT, timestamp = Instant.now()),
         )
         coEvery { getBolusHistory(any()) } returns Result.success(emptyList())
         coEvery { getHistoryLogs(any()) } returns Result.success(emptyList())
@@ -98,6 +103,7 @@ class PumpPollingOrchestratorTest {
         coVerify(atLeast = 1) { repository.saveBasal(any()) }
         coVerify(atLeast = 1) { repository.saveBattery(any()) }
         coVerify(atLeast = 1) { repository.saveReservoir(any()) }
+        coVerify(atLeast = 1) { repository.saveCgm(any()) }
         orchestrator.stop()
     }
 
@@ -169,6 +175,20 @@ class PumpPollingOrchestratorTest {
                 (PumpPollingOrchestrator.LOW_BATTERY_MULTIPLIER - 1),
         )
         coVerify(exactly = 2) { pumpDriver.getIoB() }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `polls CGM in fast loop when connected`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(100) // initial poll
+        coVerify(exactly = 1) { pumpDriver.getCgmStatus() }
+
+        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
+        coVerify(exactly = 2) { pumpDriver.getCgmStatus() }
         orchestrator.stop()
     }
 

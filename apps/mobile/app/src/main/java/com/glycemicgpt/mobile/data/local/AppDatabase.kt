@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BolusEventEntity
+import com.glycemicgpt.mobile.data.local.entity.CgmReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.IoBReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.RawHistoryLogEntity
 import com.glycemicgpt.mobile.data.local.entity.ReservoirReadingEntity
@@ -22,8 +23,9 @@ import com.glycemicgpt.mobile.data.local.entity.SyncQueueEntity
         ReservoirReadingEntity::class,
         SyncQueueEntity::class,
         RawHistoryLogEntity::class,
+        CgmReadingEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

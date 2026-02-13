@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.presentation.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
@@ -19,22 +24,34 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
+import com.glycemicgpt.mobile.domain.model.ControlIqMode
+import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 import com.glycemicgpt.mobile.service.SyncStatus
+import kotlinx.coroutines.delay
+import java.time.Instant
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
@@ -44,114 +61,144 @@ fun HomeScreen(
     val basalRate by viewModel.basalRate.collectAsState()
     val battery by viewModel.battery.collectAsState()
     val reservoir by viewModel.reservoir.collectAsState()
+    val cgm by viewModel.cgm.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
 
     // Auto-refresh when newly connected (debounced to avoid rapid-fire
     // during fast CONNECTING -> CONNECTED -> DISCONNECTED transitions)
     LaunchedEffect(connectionState) {
         if (connectionState == ConnectionState.CONNECTED) {
-            kotlinx.coroutines.delay(300)
+            delay(300)
             viewModel.refreshData()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = { viewModel.refreshData() },
+        modifier = Modifier.fillMaxSize(),
     ) {
-        // Connection status banner
-        ConnectionStatusBanner(connectionState)
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Sync status banner
-        SyncStatusBanner(syncStatus)
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // IoB card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // Connection status banner
+            ConnectionStatusBanner(connectionState)
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Sync status banner
+            SyncStatusBanner(syncStatus)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // IoB card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
             ) {
-                Text(
-                    text = "Insulin on Board",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "Insulin on Board",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = iob?.let { "%.2f".format(it.iob) } ?: "--",
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "units",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    iob?.let {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        FreshnessLabel(it.timestamp)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Status cards row 1
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatusCard(
+                    title = "Basal Rate",
+                    value = basalRate?.let { "%.2f".format(it.rate) } ?: "--",
+                    unit = "u/hr",
+                    modifier = Modifier.weight(1f),
+                    timestamp = basalRate?.timestamp,
+                    badge = basalRate?.let {
+                        when (it.controlIqMode) {
+                            ControlIqMode.SLEEP -> "Sleep"
+                            ControlIqMode.EXERCISE -> "Exercise"
+                            ControlIqMode.STANDARD -> if (it.isAutomated) "Auto" else null
+                        }
+                    },
+                    badgeColor = when (basalRate?.controlIqMode) {
+                        ControlIqMode.SLEEP -> MaterialTheme.colorScheme.secondary
+                        ControlIqMode.EXERCISE -> GlucoseColors.High
+                        else -> MaterialTheme.colorScheme.primary
+                    },
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = iob?.let { "%.2f".format(it.iob) } ?: "--",
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                StatusCard(
+                    title = "Reservoir",
+                    value = reservoir?.let { "%.0f".format(it.unitsRemaining) } ?: "--",
+                    unit = "units",
+                    modifier = Modifier.weight(1f),
+                    timestamp = reservoir?.timestamp,
                 )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Status cards row 2
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatusCard(
+                    title = "Battery",
+                    value = battery?.let { "${it.percentage}" } ?: "--",
+                    unit = "%",
+                    modifier = Modifier.weight(1f),
+                    timestamp = battery?.timestamp,
+                )
+                StatusCard(
+                    title = "Last BG",
+                    value = cgm?.let { "${it.glucoseMgDl}" } ?: "--",
+                    unit = "mg/dL",
+                    modifier = Modifier.weight(1f),
+                    timestamp = cgm?.timestamp,
+                    badge = cgm?.let { trendArrowSymbol(it.trendArrow) },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            if (connectionState == ConnectionState.DISCONNECTED) {
                 Text(
-                    text = "units",
+                    text = "Pair your pump in Settings to start",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Status cards row 1
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            StatusCard(
-                title = "Basal Rate",
-                value = basalRate?.let { "%.2f".format(it.rate) } ?: "--",
-                unit = "u/hr",
-                modifier = Modifier.weight(1f),
-            )
-            StatusCard(
-                title = "Reservoir",
-                value = reservoir?.let { "%.0f".format(it.unitsRemaining) } ?: "--",
-                unit = "units",
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Status cards row 2
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            StatusCard(
-                title = "Battery",
-                value = battery?.let { "${it.percentage}" } ?: "--",
-                unit = "%",
-                modifier = Modifier.weight(1f),
-            )
-            StatusCard(
-                title = "Last BG",
-                value = "--",
-                unit = "mg/dL",
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (connectionState == ConnectionState.DISCONNECTED) {
-            Text(
-                text = "Pair your pump in Settings to start",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -197,8 +244,9 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
             tint = color,
             modifier = Modifier.size(20.dp),
         )
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = "  $text",
+            text = text,
             style = MaterialTheme.typography.bodyMedium,
             color = color,
         )
@@ -249,8 +297,9 @@ private fun SyncStatusBanner(status: SyncStatus) {
             tint = color,
             modifier = Modifier.size(16.dp),
         )
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = "  $text",
+            text = text,
             style = MaterialTheme.typography.bodySmall,
             color = color,
         )
@@ -263,6 +312,9 @@ private fun StatusCard(
     value: String,
     unit: String,
     modifier: Modifier = Modifier,
+    timestamp: Instant? = null,
+    badge: String? = null,
+    badgeColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     Card(
         modifier = modifier,
@@ -274,11 +326,38 @@ private fun StatusCard(
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Title row with optional Control-IQ mode badge
+            if (badge != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = badgeColor,
+                        modifier = Modifier
+                            .background(
+                                badgeColor.copy(alpha = 0.15f),
+                                RoundedCornerShape(4.dp),
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            } else {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
@@ -290,6 +369,55 @@ private fun StatusCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // Data freshness indicator
+            if (timestamp != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                FreshnessLabel(timestamp)
+            }
         }
     }
+}
+
+private fun trendArrowSymbol(trend: CgmTrend): String = when (trend) {
+    CgmTrend.DOUBLE_UP -> "\u21C8"
+    CgmTrend.SINGLE_UP -> "\u2191"
+    CgmTrend.FORTY_FIVE_UP -> "\u2197"
+    CgmTrend.FLAT -> "\u2192"
+    CgmTrend.FORTY_FIVE_DOWN -> "\u2198"
+    CgmTrend.SINGLE_DOWN -> "\u2193"
+    CgmTrend.DOUBLE_DOWN -> "\u21CA"
+    CgmTrend.UNKNOWN -> "?"
+}
+
+@Composable
+private fun FreshnessLabel(timestamp: Instant) {
+    // Re-compose every 30 seconds to keep "Xm ago" text up to date
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
+
+    val ageSeconds = (now - timestamp.toEpochMilli()) / 1000
+    val label = when {
+        ageSeconds < 60 -> "just now"
+        ageSeconds < 3600 -> "${ageSeconds / 60}m ago"
+        ageSeconds < 86400 -> "${ageSeconds / 3600}h ago"
+        else -> "stale"
+    }
+
+    val color = when {
+        ageSeconds < 120 -> GlucoseColors.InRange
+        ageSeconds < 600 -> GlucoseColors.High
+        else -> GlucoseColors.UrgentHigh
+    }
+
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+    )
 }
