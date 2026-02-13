@@ -82,6 +82,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
@@ -128,6 +132,8 @@ dependencies {
 
     // Background work
     implementation(libs.work.runtime)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.work.compiler)
 
     // Logging
     implementation(libs.timber)
