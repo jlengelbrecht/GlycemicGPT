@@ -31,15 +31,26 @@ class AuthTokenStore @Inject constructor(
         )
     }
 
-    fun saveCredentials(baseUrl: String, token: String, expiresAtMs: Long) {
+    fun saveCredentials(baseUrl: String, token: String, expiresAtMs: Long, email: String? = null) {
         prefs.edit()
             .putString(KEY_BASE_URL, baseUrl.trimEnd('/'))
             .putString(KEY_TOKEN, token)
             .putLong(KEY_EXPIRES_AT, expiresAtMs)
+            .apply {
+                if (email != null) putString(KEY_USER_EMAIL, email)
+            }
+            .apply()
+    }
+
+    fun saveBaseUrl(url: String) {
+        prefs.edit()
+            .putString(KEY_BASE_URL, url.trimEnd('/'))
             .apply()
     }
 
     fun getBaseUrl(): String? = prefs.getString(KEY_BASE_URL, null)
+
+    fun getUserEmail(): String? = prefs.getString(KEY_USER_EMAIL, null)
 
     fun getToken(): String? {
         val token = prefs.getString(KEY_TOKEN, null) ?: return null
@@ -57,6 +68,7 @@ class AuthTokenStore @Inject constructor(
         prefs.edit()
             .remove(KEY_TOKEN)
             .remove(KEY_EXPIRES_AT)
+            .remove(KEY_USER_EMAIL)
             .apply()
     }
 
@@ -68,5 +80,6 @@ class AuthTokenStore @Inject constructor(
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_TOKEN = "jwt_token"
         private const val KEY_EXPIRES_AT = "expires_at_ms"
+        private const val KEY_USER_EMAIL = "user_email"
     }
 }

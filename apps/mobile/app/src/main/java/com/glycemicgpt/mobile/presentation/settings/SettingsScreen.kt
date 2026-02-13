@@ -1,6 +1,5 @@
 package com.glycemicgpt.mobile.presentation.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,38 +11,54 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
     onNavigateToPairing: () -> Unit = {},
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
     tandemCloudSyncViewModel: TandemCloudSyncViewModel = hiltViewModel(),
 ) {
+    val state by settingsViewModel.uiState.collectAsState()
     val cloudSyncState by tandemCloudSyncViewModel.uiState.collectAsState()
 
     Column(
@@ -59,22 +74,405 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Pump Pairing card
-        Card(
+        // -- Account Section --
+        SectionHeader(title = "Account")
+        AccountSection(
+            state = state,
+            onSaveUrl = settingsViewModel::saveBaseUrl,
+            onTestConnection = settingsViewModel::testConnection,
+            onLogin = settingsViewModel::login,
+            onShowLogout = settingsViewModel::showLogoutConfirm,
+            onClearConnectionResult = settingsViewModel::clearConnectionTestResult,
+            onClearLoginError = settingsViewModel::clearLoginError,
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // -- Pump Section --
+        SectionHeader(title = "Pump")
+        PumpSection(
+            state = state,
+            onNavigateToPairing = onNavigateToPairing,
+            onShowUnpair = settingsViewModel::showUnpairConfirm,
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // -- Sync Section --
+        SectionHeader(title = "Sync")
+        SyncSection(
+            state = state,
+            cloudSyncState = cloudSyncState,
+            onBackendSyncToggle = settingsViewModel::setBackendSyncEnabled,
+            onRetentionChange = settingsViewModel::setDataRetentionDays,
+            onCloudSyncToggle = { enabled ->
+                tandemCloudSyncViewModel.updateSettings(
+                    enabled = enabled,
+                    intervalMinutes = cloudSyncState.intervalMinutes,
+                )
+            },
+            onCloudIntervalChange = { interval ->
+                tandemCloudSyncViewModel.updateSettings(
+                    enabled = cloudSyncState.enabled,
+                    intervalMinutes = interval,
+                )
+            },
+            onUploadNow = { tandemCloudSyncViewModel.triggerUploadNow() },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // -- About Section --
+        SectionHeader(title = "About")
+        AboutSection(state = state)
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+
+    // Dialogs
+    if (state.showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = settingsViewModel::dismissLogoutConfirm,
+            title = { Text("Sign Out") },
+            text = { Text("Are you sure you want to sign out? Pump data sync will pause until you sign in again.") },
+            confirmButton = {
+                TextButton(onClick = settingsViewModel::logout) {
+                    Text("Sign Out", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = settingsViewModel::dismissLogoutConfirm) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (state.showUnpairConfirm) {
+        AlertDialog(
+            onDismissRequest = settingsViewModel::dismissUnpairConfirm,
+            title = { Text("Unpair Pump") },
+            text = { Text("Are you sure you want to unpair this pump? You will need to re-pair to resume data collection.") },
+            confirmButton = {
+                TextButton(onClick = settingsViewModel::unpair) {
+                    Text("Unpair", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = settingsViewModel::dismissUnpairConfirm) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun AccountSection(
+    state: SettingsUiState,
+    onSaveUrl: (String) -> Unit,
+    onTestConnection: () -> Unit,
+    onLogin: (String, String) -> Unit,
+    onShowLogout: () -> Unit,
+    onClearConnectionResult: () -> Unit,
+    onClearLoginError: () -> Unit,
+) {
+    var urlInput by remember(state.baseUrl) { mutableStateOf(state.baseUrl) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onNavigateToPairing),
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Storage,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Server Connection",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = urlInput,
+                onValueChange = { urlInput = it },
+                label = { Text("Server URL") },
+                placeholder = { Text("https://your-server.com") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        onSaveUrl(urlInput)
+                        onTestConnection()
+                    },
+                    enabled = !state.isTestingConnection && urlInput.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (state.isTestingConnection) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (state.isTestingConnection) "Testing..." else "Test Connection")
+                }
+            }
+
+            state.connectionTestResult?.let { result ->
+                Spacer(modifier = Modifier.height(4.dp))
+                val isSuccess = result.contains("successfully")
+                Text(
+                    text = result,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSuccess) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            // Login / Auth section
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Authentication",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (state.isLoggedIn) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column {
+                        Text(
+                            text = state.userEmail ?: "Signed in",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Authenticated",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onShowLogout,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Text("Sign Out")
+                    }
+                }
+            } else {
+                var email by remember { mutableStateOf("") }
+                var password by remember { mutableStateOf("") }
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        onClearLoginError()
+                    },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        onClearLoginError()
+                    },
+                    label = { Text("Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                state.loginError?.let { error ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = { onLogin(email, password) },
+                    enabled = !state.isLoggingIn && email.isNotBlank() && password.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.isLoggingIn) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(if (state.isLoggingIn) "Signing in..." else "Sign In")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PumpSection(
+    state: SettingsUiState,
+    onNavigateToPairing: () -> Unit,
+    onShowUnpair: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (state.isPumpPaired) Icons.Default.Bluetooth else Icons.Default.BluetoothDisabled,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Tandem t:slim X2",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = if (state.isPumpPaired) {
+                            "Paired: ${state.pairedPumpAddress}"
+                        } else {
+                            "Not paired"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (state.isPumpPaired) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onNavigateToPairing,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Re-pair")
+                    }
+                    OutlinedButton(
+                        onClick = onShowUnpair,
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Unpair")
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onNavigateToPairing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Pair Pump")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncSection(
+    state: SettingsUiState,
+    cloudSyncState: TandemCloudSyncUiState,
+    onBackendSyncToggle: (Boolean) -> Unit,
+    onRetentionChange: (Int) -> Unit,
+    onCloudSyncToggle: (Boolean) -> Unit,
+    onCloudIntervalChange: (Int) -> Unit,
+    onUploadNow: () -> Unit,
+) {
+    // Backend Sync toggle
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Bluetooth,
+                        imageVector = Icons.Default.Sync,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp),
@@ -82,42 +480,153 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Pump Pairing",
+                            text = "Backend Sync",
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Text(
-                            text = "Connect to your Tandem t:slim X2",
+                            text = "Push pump events to GlycemicGPT server",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Navigate",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                Switch(
+                    checked = state.backendSyncEnabled,
+                    onCheckedChange = onBackendSyncToggle,
                 )
             }
         }
+    }
 
-        Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
-        // Tandem Cloud Sync card
-        TandemCloudSyncCard(
-            state = cloudSyncState,
-            onToggle = { enabled ->
-                tandemCloudSyncViewModel.updateSettings(
-                    enabled = enabled,
-                    intervalMinutes = cloudSyncState.intervalMinutes,
+    // Tandem Cloud Sync card (existing)
+    TandemCloudSyncCard(
+        state = cloudSyncState,
+        onToggle = onCloudSyncToggle,
+        onIntervalChange = onCloudIntervalChange,
+        onUploadNow = onUploadNow,
+    )
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // Data Retention
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            var sliderValue by remember(state.dataRetentionDays) {
+                mutableStateOf(state.dataRetentionDays.toFloat())
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
                 )
-            },
-            onIntervalChange = { interval ->
-                tandemCloudSyncViewModel.updateSettings(
-                    enabled = cloudSyncState.enabled,
-                    intervalMinutes = interval,
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Data Retention",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = "Keep local data for ${sliderValue.roundToInt()} days",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it },
+                onValueChangeFinished = { onRetentionChange(sliderValue.roundToInt()) },
+                valueRange = 1f..30f,
+                steps = 28,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "1 day",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            },
-            onUploadNow = { tandemCloudSyncViewModel.triggerUploadNow() },
+                Text(
+                    text = "30 days",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutSection(state: SettingsUiState) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "App Info",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            InfoRow(label = "Version", value = state.appVersion)
+            InfoRow(label = "Build", value = state.buildType)
+            InfoRow(label = "BLE Protocol", value = "pumpX2 v1.0")
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Open Source Licenses",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
         )
     }
 }
@@ -174,7 +683,6 @@ private fun TandemCloudSyncCard(
             if (state.enabled && !state.isLoading) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Interval selector
                 Text(
                     text = "Upload interval",
                     style = MaterialTheme.typography.labelMedium,
@@ -207,7 +715,6 @@ private fun TandemCloudSyncCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Status row
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val statusIcon = when (state.lastUploadStatus) {
                         "success" -> Icons.Default.CheckCircle
@@ -255,7 +762,6 @@ private fun TandemCloudSyncCard(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Upload Now button
                 Button(
                     onClick = onUploadNow,
                     enabled = !state.isTriggering && !state.isSaving,
