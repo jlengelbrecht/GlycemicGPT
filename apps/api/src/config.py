@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     telegram_polling_enabled: bool = True
     telegram_polling_interval_seconds: int = 5
 
+    # Tandem Cloud Upload (Story 16.6)
+    tandem_upload_enabled: bool = True
+    tandem_upload_check_interval_minutes: int = 1  # Check for due uploads every minute
+
     # AI Sidecar (Story 15.2)
     ai_sidecar_url: str = "http://ai-sidecar:3456"
     ai_sidecar_api_key: str = ""  # SIDECAR_API_KEY for inter-service auth

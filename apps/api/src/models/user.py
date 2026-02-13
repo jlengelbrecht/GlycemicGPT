@@ -207,6 +207,23 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         uselist=False,
     )
+    pump_raw_events = relationship(
+        "PumpRawEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    pump_hardware_info = relationship(
+        "PumpHardwareInfo",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    tandem_upload_state = relationship(
+        "TandemUploadState",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.email} ({self.role.value})>"

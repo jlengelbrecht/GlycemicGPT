@@ -25,6 +25,9 @@ from src.models.integration import (
     IntegrationType,
 )
 from src.models.pump_data import PumpEvent
+from src.models.pump_hardware_info import PumpHardwareInfo
+from src.models.pump_raw_event import PumpRawEvent
+from src.models.tandem_upload_state import TandemUploadState
 from src.schemas.auth import ErrorResponse
 from src.schemas.glucose import (
     CurrentGlucoseResponse,
@@ -49,6 +52,9 @@ from src.schemas.pump import (
     PumpPushResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
+    TandemUploadSettingsRequest,
+    TandemUploadStatusResponse,
+    TandemUploadTriggerResponse,
 )
 from src.services.dexcom_sync import (
     DexcomAuthError,
@@ -1028,10 +1034,74 @@ async def push_pump_events(
         )
     )
     result = await db.execute(stmt)
-    await db.commit()
 
     accepted = max(result.rowcount, 0)
     duplicates = len(rows) - accepted
+
+    # Store raw events for Tandem cloud upload (Story 16.6)
+    raw_accepted = 0
+    raw_duplicates = 0
+    if request.raw_events:
+        raw_rows = [
+            {
+                "user_id": current_user.id,
+                "sequence_number": item.sequence_number,
+                "raw_bytes_b64": item.raw_bytes_b64,
+                "event_type_id": item.event_type_id,
+                "pump_time_seconds": item.pump_time_seconds,
+            }
+            for item in request.raw_events
+        ]
+        raw_stmt = (
+            pg_insert(PumpRawEvent)
+            .values(raw_rows)
+            .on_conflict_do_nothing(
+                constraint="uq_pump_raw_event_user_seq",
+            )
+        )
+        raw_result = await db.execute(raw_stmt)
+        raw_accepted = max(raw_result.rowcount, 0)
+        raw_duplicates = len(raw_rows) - raw_accepted
+
+    # Upsert pump hardware info (Story 16.6)
+    if request.pump_info:
+        hw_stmt = (
+            pg_insert(PumpHardwareInfo)
+            .values(
+                user_id=current_user.id,
+                serial_number=request.pump_info.serial_number,
+                model_number=request.pump_info.model_number,
+                part_number=request.pump_info.part_number,
+                pump_rev=request.pump_info.pump_rev,
+                arm_sw_ver=request.pump_info.arm_sw_ver,
+                msp_sw_ver=request.pump_info.msp_sw_ver,
+                config_a_bits=request.pump_info.config_a_bits,
+                config_b_bits=request.pump_info.config_b_bits,
+                pcba_sn=request.pump_info.pcba_sn,
+                pcba_rev=request.pump_info.pcba_rev,
+                pump_features=request.pump_info.pump_features,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id"],
+                set_={
+                    "serial_number": request.pump_info.serial_number,
+                    "model_number": request.pump_info.model_number,
+                    "part_number": request.pump_info.part_number,
+                    "pump_rev": request.pump_info.pump_rev,
+                    "arm_sw_ver": request.pump_info.arm_sw_ver,
+                    "msp_sw_ver": request.pump_info.msp_sw_ver,
+                    "config_a_bits": request.pump_info.config_a_bits,
+                    "config_b_bits": request.pump_info.config_b_bits,
+                    "pcba_sn": request.pump_info.pcba_sn,
+                    "pcba_rev": request.pump_info.pcba_rev,
+                    "pump_features": request.pump_info.pump_features,
+                    "updated_at": now,
+                },
+            )
+        )
+        await db.execute(hw_stmt)
+
+    await db.commit()
 
     logger.info(
         "Mobile pump push",
@@ -1039,6 +1109,180 @@ async def push_pump_events(
         total=len(rows),
         accepted=accepted,
         duplicates=duplicates,
+        raw_accepted=raw_accepted,
+        raw_duplicates=raw_duplicates,
     )
 
-    return PumpPushResponse(accepted=accepted, duplicates=duplicates)
+    return PumpPushResponse(
+        accepted=accepted,
+        duplicates=duplicates,
+        raw_accepted=raw_accepted,
+        raw_duplicates=raw_duplicates,
+    )
+
+
+# ============================================================================
+# Story 16.6: Tandem Cloud Upload Endpoints
+# ============================================================================
+
+
+@router.get(
+    "/tandem/cloud-upload/status",
+    response_model=TandemUploadStatusResponse,
+    responses={
+        200: {"description": "Tandem upload status"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def get_tandem_upload_status(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> TandemUploadStatusResponse:
+    """Get the Tandem cloud upload status for the current user."""
+    result = await db.execute(
+        select(TandemUploadState).where(
+            TandemUploadState.user_id == current_user.id
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    # Count pending raw events
+    pending_result = await db.execute(
+        select(func.count(PumpRawEvent.id)).where(
+            PumpRawEvent.user_id == current_user.id,
+            PumpRawEvent.uploaded_to_tandem.is_(False),
+        )
+    )
+    pending_count = pending_result.scalar() or 0
+
+    if not state:
+        return TandemUploadStatusResponse(
+            enabled=False,
+            upload_interval_minutes=15,
+            pending_raw_events=pending_count,
+        )
+
+    return TandemUploadStatusResponse(
+        enabled=state.enabled,
+        upload_interval_minutes=state.upload_interval_minutes,
+        last_upload_at=state.last_upload_at,
+        last_upload_status=state.last_upload_status,
+        last_error=state.last_error,
+        max_event_index_uploaded=state.max_event_index_uploaded,
+        pending_raw_events=pending_count,
+    )
+
+
+@router.put(
+    "/tandem/cloud-upload/settings",
+    response_model=TandemUploadStatusResponse,
+    responses={
+        200: {"description": "Settings updated"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+    },
+)
+async def update_tandem_upload_settings(
+    request: TandemUploadSettingsRequest,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> TandemUploadStatusResponse:
+    """Enable/disable Tandem cloud upload and set interval."""
+    result = await db.execute(
+        select(TandemUploadState).where(
+            TandemUploadState.user_id == current_user.id
+        )
+    )
+    state = result.scalar_one_or_none()
+
+    if state:
+        state.enabled = request.enabled
+        state.upload_interval_minutes = request.interval_minutes
+    else:
+        state = TandemUploadState(
+            user_id=current_user.id,
+            enabled=request.enabled,
+            upload_interval_minutes=request.interval_minutes,
+        )
+        db.add(state)
+
+    await db.commit()
+    await db.refresh(state)
+
+    # Count pending raw events
+    pending_result = await db.execute(
+        select(func.count(PumpRawEvent.id)).where(
+            PumpRawEvent.user_id == current_user.id,
+            PumpRawEvent.uploaded_to_tandem.is_(False),
+        )
+    )
+    pending_count = pending_result.scalar() or 0
+
+    logger.info(
+        "Tandem upload settings updated",
+        user_id=str(current_user.id),
+        enabled=request.enabled,
+        interval=request.interval_minutes,
+    )
+
+    return TandemUploadStatusResponse(
+        enabled=state.enabled,
+        upload_interval_minutes=state.upload_interval_minutes,
+        last_upload_at=state.last_upload_at,
+        last_upload_status=state.last_upload_status,
+        last_error=state.last_error,
+        max_event_index_uploaded=state.max_event_index_uploaded,
+        pending_raw_events=pending_count,
+    )
+
+
+@router.post(
+    "/tandem/cloud-upload/trigger",
+    response_model=TandemUploadTriggerResponse,
+    responses={
+        200: {"description": "Upload triggered"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        404: {"model": ErrorResponse, "description": "Tandem not configured"},
+    },
+)
+async def trigger_tandem_upload(
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> TandemUploadTriggerResponse:
+    """Manually trigger a Tandem cloud upload.
+
+    Uploads pending raw events to the Tandem cloud immediately.
+    """
+    # Verify Tandem credentials exist
+    cred_result = await db.execute(
+        select(IntegrationCredential).where(
+            IntegrationCredential.user_id == current_user.id,
+            IntegrationCredential.integration_type == IntegrationType.TANDEM,
+        )
+    )
+    if not cred_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tandem integration not configured. Please connect your Tandem account first.",
+        )
+
+    # Import here to avoid circular imports
+    from src.services.tandem_upload import upload_to_tandem
+
+    try:
+        result = await upload_to_tandem(db, current_user.id)
+        return TandemUploadTriggerResponse(
+            message=result.get("message", "Upload complete"),
+            events_uploaded=result.get("events_uploaded", 0),
+            status=result.get("status", "success"),
+        )
+    except Exception as e:
+        logger.error(
+            "Tandem upload trigger failed",
+            user_id=str(current_user.id),
+            error=str(e),
+        )
+        return TandemUploadTriggerResponse(
+            message=f"Upload failed: {e!s}",
+            events_uploaded=0,
+            status="error",
+        )

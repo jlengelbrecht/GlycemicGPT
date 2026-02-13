@@ -477,6 +477,25 @@ def start_scheduler() -> AsyncIOScheduler:
             interval_hours=settings.data_retention_check_interval_hours,
         )
 
+    # Add Tandem cloud upload job if enabled (Story 16.6)
+    if settings.tandem_upload_enabled:
+        from src.services.tandem_upload_scheduler import run_tandem_cloud_uploads
+
+        scheduler.add_job(
+            run_tandem_cloud_uploads,
+            trigger=IntervalTrigger(
+                minutes=settings.tandem_upload_check_interval_minutes
+            ),
+            id="tandem_cloud_upload",
+            name="Tandem Cloud Upload",
+            replace_existing=True,
+            max_instances=1,
+        )
+        logger.info(
+            "Scheduled Tandem cloud upload job",
+            interval_minutes=settings.tandem_upload_check_interval_minutes,
+        )
+
     # Add Telegram polling job if enabled and token configured (Story 7.1)
     if settings.telegram_polling_enabled and settings.telegram_bot_token:
         scheduler.add_job(
