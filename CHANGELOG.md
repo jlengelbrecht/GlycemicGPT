@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.79](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.78...v0.1.79) (2026-02-13)
+
+
+### ✨ Features
+
+* complete home screen dashboard with CGM, freshness, pull-to-refresh (Story 16.7) ([#181](https://github.com/jlengelbrecht/GlycemicGPT/issues/181)) ([abd7d17](https://github.com/jlengelbrecht/GlycemicGPT/commit/abd7d17b652e536fd913103632f0543c548ba6f4))
+
 ## [0.1.78](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.77...v0.1.78) (2026-02-13)
 
 
