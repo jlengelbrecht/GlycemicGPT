@@ -21,6 +21,7 @@ from src.schemas.auth import (
     LoginRequest,
     LoginResponse,
     LogoutResponse,
+    MobileLoginResponse,
     PasswordChangeRequest,
     ProfileUpdateRequest,
     UserRegistrationRequest,
@@ -221,6 +222,77 @@ async def login(
         message="Login successful",
         user=UserResponse.model_validate(user),
         disclaimer_required=not user.disclaimer_acknowledged,
+    )
+
+
+@router.post(
+    "/mobile/login",
+    response_model=MobileLoginResponse,
+    responses={
+        200: {"description": "Mobile login successful"},
+        401: {"model": ErrorResponse, "description": "Invalid credentials"},
+    },
+)
+async def mobile_login(
+    request: LoginRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> MobileLoginResponse:
+    """Authenticate a mobile client and return a JWT in the response body.
+
+    Identical logic to the web login, but returns the token directly
+    instead of setting an httpOnly cookie.
+    """
+    client_ip = http_request.client.host if http_request.client else "unknown"
+
+    result = await db.execute(select(User).where(User.email == request.email.lower()))
+    user = result.scalar_one_or_none()
+
+    if not user or not verify_password(request.password, user.hashed_password):
+        logger.warning(
+            "Failed mobile login attempt",
+            email=request.email,
+            client_ip=client_ip,
+            reason="invalid_credentials",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    if not user.is_active:
+        logger.warning(
+            "Failed mobile login attempt",
+            email=request.email,
+            client_ip=client_ip,
+            reason="account_disabled",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+    )
+
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
+
+    logger.info(
+        "Mobile user logged in",
+        user_id=str(user.id),
+        email=user.email,
+        client_ip=client_ip,
+    )
+
+    return MobileLoginResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_in=settings.session_expire_hours * 3600,
+        user=UserResponse.model_validate(user),
     )
 
 

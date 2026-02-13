@@ -4,9 +4,9 @@ Pydantic schemas for pump event API requests and responses,
 including Control-IQ activity data.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.models.pump_data import PumpEventType
 
@@ -119,3 +119,53 @@ class IoBProjectionResponse(BaseModel):
     is_stale: bool
     stale_warning: str | None = None
     is_estimated: bool = False
+
+
+# ============================================================================
+# Story 16.5: Mobile Pump Push Schemas
+# ============================================================================
+
+
+class PumpEventPushItem(BaseModel):
+    """A single pump event pushed from a mobile client."""
+
+    event_type: PumpEventType
+    event_timestamp: datetime = Field(
+        ..., description="When the event occurred (ISO-8601 with timezone)"
+    )
+    units: float | None = None
+    duration_minutes: int | None = None
+    is_automated: bool = False
+    control_iq_mode: str | None = None
+    basal_adjustment_pct: float | None = None
+    iob_at_event: float | None = None
+    bg_at_event: int | None = None
+
+    @field_validator("event_timestamp")
+    @classmethod
+    def timestamp_not_in_future(cls, v: datetime) -> datetime:
+        """Reject timestamps more than 5 minutes in the future."""
+        now = datetime.now(UTC)
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=UTC)
+        if v > now + timedelta(minutes=5):
+            raise ValueError(
+                "event_timestamp cannot be more than 5 minutes in the future"
+            )
+        return v
+
+
+class PumpPushRequest(BaseModel):
+    """Batch of pump events pushed from a mobile client."""
+
+    events: list[PumpEventPushItem] = Field(
+        ..., min_length=1, max_length=100, description="Pump events to push (1-100)"
+    )
+    source: str = Field(default="mobile", max_length=50)
+
+
+class PumpPushResponse(BaseModel):
+    """Response after processing a pump push request."""
+
+    accepted: int = Field(..., description="Number of new events stored")
+    duplicates: int = Field(..., description="Number of duplicate events skipped")
