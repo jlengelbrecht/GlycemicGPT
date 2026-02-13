@@ -5,6 +5,11 @@ import com.squareup.moshi.JsonClass
 import java.time.Instant
 
 @JsonClass(generateAdapter = true)
+data class HealthResponse(
+    val status: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class LoginRequest(
     val email: String,
     val password: String,
