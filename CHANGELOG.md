@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.75](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.74...v0.1.75) (2026-02-13)
+
+
+### ✨ Features
+
+* add real-time data polling and local Room storage (Story 16.4) ([#173](https://github.com/jlengelbrecht/GlycemicGPT/issues/173)) ([e9f7c20](https://github.com/jlengelbrecht/GlycemicGPT/commit/e9f7c20229e6529d3afb84cdd523c084977e7719))
+
 ## [0.1.74](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.73...v0.1.74) (2026-02-13)
 
 
