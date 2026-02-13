@@ -7,13 +7,13 @@ plugins {
 }
 
 android {
-    namespace = "com.glycemicgpt.mobile"
+    namespace = "com.glycemicgpt.wear"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.glycemicgpt.mobile"
+        applicationId = "com.glycemicgpt.wear"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 34
 
         val appVersionName = "0.1.82" // x-release-please-version
         val parts = appVersionName.split(".")
@@ -50,7 +50,6 @@ android {
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
             )
             val ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
             signingConfig = if (ksFile != null) {
@@ -82,79 +81,45 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
-    // AndroidX Core
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.activity.compose)
+    // Wear OS Watch Face
+    implementation(libs.wear.watchface)
+    implementation(libs.wear.watchface.style)
+    implementation(libs.wear.complications.data.source.ktx)
 
-    // Compose
+    // Wear Compose (for IoB detail activity)
+    implementation(libs.wear.compose.material)
+    implementation(libs.wear.compose.foundation)
+
+    // Compose core
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons)
     debugImplementation(libs.compose.ui.tooling)
-    debugImplementation(libs.compose.ui.test.manifest)
 
-    // Navigation
-    implementation(libs.navigation.compose)
+    // Wearable Data Layer
+    implementation(libs.play.services.wearable)
+
+    // AndroidX
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
 
     // Hilt DI
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation(libs.hilt.navigation.compose)
-
-    // Room (local database)
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-
-    // DataStore (encrypted settings)
-    implementation(libs.datastore.preferences)
-
-    // Networking
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.moshi)
-    implementation(libs.moshi)
-    ksp(libs.moshi.codegen)
-
-    // Security
-    implementation(libs.security.crypto)
-
-    // Background work
-    implementation(libs.work.runtime)
-    implementation(libs.hilt.work)
-    ksp(libs.hilt.work.compiler)
-
-    // Logging
-    implementation(libs.timber)
-
-    // Wearable Data Layer (phone-to-watch sync)
-    implementation(libs.play.services.wearable)
-    implementation(libs.coroutines.play.services)
 
     // Coroutines
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
+    implementation(libs.coroutines.play.services)
+
+    // Logging
+    implementation(libs.timber)
 
     // Unit tests
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
-
-    // Android tests
-    androidTestImplementation(libs.junit.ext)
-    androidTestImplementation(libs.espresso)
-    androidTestImplementation(platform(libs.compose.bom))
-    androidTestImplementation(libs.compose.ui.test)
+    testImplementation("org.json:json:20231013")
 }

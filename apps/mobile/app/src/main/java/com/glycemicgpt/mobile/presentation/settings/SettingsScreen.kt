@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -120,6 +121,16 @@ fun SettingsScreen(
                 )
             },
             onUploadNow = { tandemCloudSyncViewModel.triggerUploadNow() },
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // -- Watch Section --
+        SectionHeader(title = "Watch")
+        WatchSection(
+            watchInstalled = state.watchAppInstalled,
+            watchConnected = state.watchConnected,
+            onCheckStatus = settingsViewModel::checkWatchStatus,
         )
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -947,6 +958,93 @@ private fun TandemCloudSyncCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchSection(
+    watchInstalled: Boolean?,
+    watchConnected: Boolean,
+    onCheckStatus: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Watch,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Wear OS Companion",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    val statusText = when {
+                        watchInstalled == null -> "Status unknown"
+                        watchConnected -> "Connected"
+                        watchInstalled -> "Installed (not nearby)"
+                        else -> "Not installed"
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            watchConnected -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (watchInstalled == true) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (watchConnected) Icons.Default.CheckCircle else Icons.Default.Info,
+                        contentDescription = null,
+                        tint = if (watchConnected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (watchConnected) {
+                            "Watch face receives BG, IoB, and alerts"
+                        } else {
+                            "Bring watch nearby to sync data"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else if (watchInstalled == false) {
+                Text(
+                    text = "Install the GlycemicGPT Wear app on your watch via sideloading. Download the Wear APK from GitHub Releases.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = onCheckStatus,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Check Watch Status")
             }
         }
     }

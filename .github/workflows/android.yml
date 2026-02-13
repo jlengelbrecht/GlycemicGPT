@@ -39,9 +39,11 @@ jobs:
         working-directory: apps/mobile
         run: ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
-          path: apps/mobile/app/build/outputs/apk/debug/*.apk
+          name: debug-apks
+          path: |
+            apps/mobile/app/build/outputs/apk/debug/*.apk
+            apps/mobile/wear/build/outputs/apk/debug/*.apk
           retention-days: 14

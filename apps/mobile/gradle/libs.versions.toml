@@ -22,6 +22,9 @@ espresso = "3.6.1"
 coroutines = "1.9.0"
 mockk = "1.13.13"
 turbine = "1.2.0"
+wear-compose = "1.4.0"
+wear-watchface = "1.2.1"
+play-services-wearable = "18.2.0"
 
 [libraries]
 # AndroidX Core
@@ -77,7 +80,16 @@ timber = { group = "com.jakewharton.timber", name = "timber", version.ref = "tim
 # Coroutines
 coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+
+# Wear OS
+wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version.ref = "wear-compose" }
+wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "wear-compose" }
+wear-watchface = { group = "androidx.wear.watchface", name = "watchface", version.ref = "wear-watchface" }
+wear-watchface-style = { group = "androidx.wear.watchface", name = "watchface-style", version.ref = "wear-watchface" }
+wear-complications-data-source-ktx = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wear-watchface" }
+play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "play-services-wearable" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

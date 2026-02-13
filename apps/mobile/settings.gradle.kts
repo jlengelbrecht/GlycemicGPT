@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "GlycemicGPT"
 include(":app")
+include(":wear")

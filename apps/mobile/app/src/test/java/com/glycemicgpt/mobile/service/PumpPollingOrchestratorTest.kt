@@ -12,6 +12,7 @@ import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
+import com.glycemicgpt.mobile.wear.WearDataSender
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -21,7 +22,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -61,8 +64,9 @@ class PumpPollingOrchestratorTest {
     }
     private val syncEnqueuer = mockk<SyncQueueEnqueuer>(relaxed = true)
     private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
+    private val wearDataSender = mockk<WearDataSender>(relaxed = true)
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender)
 
     @Test
     fun `does not poll when disconnected`() = runTest {
@@ -214,6 +218,117 @@ class PumpPollingOrchestratorTest {
         // Should continue polling despite IoB failure
         advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
         coVerify(exactly = 2) { pumpDriver.getIoB() }
+        orchestrator.stop()
+    }
+
+    // Alert threshold detection (pure function tests)
+
+    @Test
+    fun `detectAlertType returns urgent_low for 55 or below`() {
+        assertEquals("urgent_low", PumpPollingOrchestrator.detectAlertType(55))
+        assertEquals("urgent_low", PumpPollingOrchestrator.detectAlertType(40))
+    }
+
+    @Test
+    fun `detectAlertType returns low for 56 to 70`() {
+        assertEquals("low", PumpPollingOrchestrator.detectAlertType(70))
+        assertEquals("low", PumpPollingOrchestrator.detectAlertType(56))
+    }
+
+    @Test
+    fun `detectAlertType returns null for in-range values`() {
+        assertNull(PumpPollingOrchestrator.detectAlertType(71))
+        assertNull(PumpPollingOrchestrator.detectAlertType(120))
+        assertNull(PumpPollingOrchestrator.detectAlertType(179))
+    }
+
+    @Test
+    fun `detectAlertType returns high for 180 to 249`() {
+        assertEquals("high", PumpPollingOrchestrator.detectAlertType(180))
+        assertEquals("high", PumpPollingOrchestrator.detectAlertType(249))
+    }
+
+    @Test
+    fun `detectAlertType returns urgent_high for 250 or above`() {
+        assertEquals("urgent_high", PumpPollingOrchestrator.detectAlertType(250))
+        assertEquals("urgent_high", PumpPollingOrchestrator.detectAlertType(400))
+    }
+
+    @Test
+    fun `alertLabel returns correct labels`() {
+        assertEquals("URGENT LOW", PumpPollingOrchestrator.alertLabel("urgent_low"))
+        assertEquals("URGENT HIGH", PumpPollingOrchestrator.alertLabel("urgent_high"))
+        assertEquals("LOW", PumpPollingOrchestrator.alertLabel("low"))
+        assertEquals("HIGH", PumpPollingOrchestrator.alertLabel("high"))
+        assertEquals("", PumpPollingOrchestrator.alertLabel("unknown"))
+    }
+
+    @Test
+    fun `sends alert to watch when threshold crossed`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(100) // initial poll: 120 mg/dL = normal
+
+        // No alert for normal reading
+        coVerify(exactly = 0) { wearDataSender.sendAlert(any(), any(), any(), any()) }
+
+        // Change to low reading
+        coEvery { pumpDriver.getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 65, trendArrow = CgmTrend.SINGLE_DOWN, timestamp = Instant.now()),
+        )
+        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
+
+        coVerify(exactly = 1) { wearDataSender.sendAlert("low", 65, any(), any()) }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `clears alert when returning to normal range`() = runTest {
+        // Start with low reading
+        coEvery { pumpDriver.getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 65, trendArrow = CgmTrend.SINGLE_DOWN, timestamp = Instant.now()),
+        )
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(100) // initial poll: low alert
+
+        coVerify(exactly = 1) { wearDataSender.sendAlert("low", 65, any(), any()) }
+
+        // Return to normal
+        coEvery { pumpDriver.getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 120, trendArrow = CgmTrend.FLAT, timestamp = Instant.now()),
+        )
+        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
+
+        coVerify(exactly = 1) { wearDataSender.clearAlert() }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `does not resend same alert type`() = runTest {
+        coEvery { pumpDriver.getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 200, trendArrow = CgmTrend.SINGLE_UP, timestamp = Instant.now()),
+        )
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(100) // first high alert
+
+        coVerify(exactly = 1) { wearDataSender.sendAlert("high", 200, any(), any()) }
+
+        // Still high on next poll
+        coEvery { pumpDriver.getCgmStatus() } returns Result.success(
+            CgmReading(glucoseMgDl = 210, trendArrow = CgmTrend.SINGLE_UP, timestamp = Instant.now()),
+        )
+        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
+
+        // Should NOT send again for same type
+        coVerify(exactly = 1) { wearDataSender.sendAlert(eq("high"), any(), any(), any()) }
         orchestrator.stop()
     }
 }
