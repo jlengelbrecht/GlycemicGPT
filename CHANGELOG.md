@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.83](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.82...v0.1.83) (2026-02-13)
+
+
+### ✨ Features
+
+* add Wear OS watch face, alerts, and AI voice chat (Story 16.9) ([#189](https://github.com/jlengelbrecht/GlycemicGPT/issues/189)) ([08f9c18](https://github.com/jlengelbrecht/GlycemicGPT/commit/08f9c18a0ad19eeed21200a17fbe841a9781072f))
+
 ## [0.1.82](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.81...v0.1.82) (2026-02-13)
 
 
