@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.78](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.77...v0.1.78) (2026-02-13)
+
+
+### ✨ Features
+
+* implement Tandem cloud upload pipeline (Story 16.6) ([#179](https://github.com/jlengelbrecht/GlycemicGPT/issues/179)) ([a36133b](https://github.com/jlengelbrecht/GlycemicGPT/commit/a36133bc9782f89b2f0fac32c0dc519a95db3aea))
+
 ## [0.1.77](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.76...v0.1.77) (2026-02-13)
 
 
