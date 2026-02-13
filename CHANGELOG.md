@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.81](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.80...v0.1.81) (2026-02-13)
+
+
+### ✨ Features
+
+* implement app settings and configuration (Story 16.8) ([#185](https://github.com/jlengelbrecht/GlycemicGPT/issues/185)) ([31d31fc](https://github.com/jlengelbrecht/GlycemicGPT/commit/31d31fc8636b5046e90e375947a96e01d5b50f4d))
+
 ## [0.1.80](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.79...v0.1.80) (2026-02-13)
 
 
