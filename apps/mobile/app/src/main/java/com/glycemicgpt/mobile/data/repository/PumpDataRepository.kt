@@ -4,11 +4,14 @@ import com.glycemicgpt.mobile.data.local.dao.PumpDao
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BolusEventEntity
+import com.glycemicgpt.mobile.data.local.entity.CgmReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.IoBReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.ReservoirReadingEntity
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
@@ -116,6 +119,21 @@ class PumpDataRepository @Inject constructor(
     fun observeLatestReservoir(): Flow<ReservoirReading?> =
         pumpDao.observeLatestReservoir().map { it?.toDomain() }
 
+    // -- CGM ------------------------------------------------------------------
+
+    suspend fun saveCgm(reading: CgmReading) {
+        pumpDao.insertCgm(
+            CgmReadingEntity(
+                glucoseMgDl = reading.glucoseMgDl,
+                trendArrow = reading.trendArrow.name,
+                timestampMs = reading.timestamp.toEpochMilli(),
+            ),
+        )
+    }
+
+    fun observeLatestCgm(): Flow<CgmReading?> =
+        pumpDao.observeLatestCgm().map { it?.toDomain() }
+
     // -- Cleanup --------------------------------------------------------------
 
     /**
@@ -158,5 +176,15 @@ private fun BatteryReadingEntity.toDomain() = BatteryStatus(
 
 private fun ReservoirReadingEntity.toDomain() = ReservoirReading(
     unitsRemaining = unitsRemaining,
+    timestamp = Instant.ofEpochMilli(timestampMs),
+)
+
+private fun CgmReadingEntity.toDomain() = CgmReading(
+    glucoseMgDl = glucoseMgDl,
+    trendArrow = try {
+        CgmTrend.valueOf(trendArrow)
+    } catch (_: IllegalArgumentException) {
+        CgmTrend.UNKNOWN
+    },
     timestamp = Instant.ofEpochMilli(timestampMs),
 )

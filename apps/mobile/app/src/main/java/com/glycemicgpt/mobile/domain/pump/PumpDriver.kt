@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.domain.pump
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -32,6 +33,7 @@ interface PumpDriver {
     suspend fun getPumpSettings(): Result<PumpSettings>
     suspend fun getBatteryStatus(): Result<BatteryStatus>
     suspend fun getReservoirLevel(): Result<ReservoirReading>
+    suspend fun getCgmStatus(): Result<CgmReading>
     suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>>
     suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo>
     fun observeConnectionState(): Flow<ConnectionState>

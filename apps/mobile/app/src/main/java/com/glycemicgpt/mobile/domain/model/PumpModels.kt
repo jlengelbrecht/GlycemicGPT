@@ -44,6 +44,23 @@ data class ReservoirReading(
     val timestamp: Instant,
 )
 
+data class CgmReading(
+    val glucoseMgDl: Int,
+    val trendArrow: CgmTrend,
+    val timestamp: Instant,
+)
+
+enum class CgmTrend {
+    DOUBLE_UP,
+    SINGLE_UP,
+    FORTY_FIVE_UP,
+    FLAT,
+    FORTY_FIVE_DOWN,
+    SINGLE_DOWN,
+    DOUBLE_DOWN,
+    UNKNOWN,
+}
+
 data class HistoryLogRecord(
     val sequenceNumber: Int,
     val rawBytesB64: String,

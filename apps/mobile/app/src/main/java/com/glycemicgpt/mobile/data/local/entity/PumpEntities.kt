@@ -61,3 +61,14 @@ data class ReservoirReadingEntity(
     val unitsRemaining: Float,
     val timestampMs: Long,
 )
+
+@Entity(
+    tableName = "cgm_readings",
+    indices = [Index(value = ["timestampMs"])],
+)
+data class CgmReadingEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val glucoseMgDl: Int,
+    val trendArrow: String,
+    val timestampMs: Long,
+)
