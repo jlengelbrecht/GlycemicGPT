@@ -13,6 +13,9 @@
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
 
+# Tink (used by EncryptedSharedPreferences)
+-dontwarn com.google.errorprone.annotations.**
+
 # OkHttp
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.conscrypt.**
