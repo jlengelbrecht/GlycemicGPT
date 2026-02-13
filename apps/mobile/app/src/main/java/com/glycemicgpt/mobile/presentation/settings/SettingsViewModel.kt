@@ -8,6 +8,9 @@ import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
+import com.glycemicgpt.mobile.data.update.AppUpdateChecker
+import com.glycemicgpt.mobile.data.update.DownloadResult
+import com.glycemicgpt.mobile.data.update.UpdateCheckResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +18,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
+
+sealed class UpdateUiState {
+    object Idle : UpdateUiState()
+    object Checking : UpdateUiState()
+    data class Available(
+        val version: String,
+        val downloadUrl: String,
+        val releaseNotes: String?,
+        val sizeBytes: Long,
+    ) : UpdateUiState()
+    object UpToDate : UpdateUiState()
+    object Downloading : UpdateUiState()
+    data class ReadyToInstall(val apkFile: File) : UpdateUiState()
+    data class Error(val message: String) : UpdateUiState()
+}
 
 data class SettingsUiState(
     // Account
@@ -40,6 +59,8 @@ data class SettingsUiState(
     // Confirmation dialogs
     val showLogoutConfirm: Boolean = false,
     val showUnpairConfirm: Boolean = false,
+    // App update
+    val updateState: UpdateUiState = UpdateUiState.Idle,
 )
 
 @HiltViewModel
@@ -48,6 +69,7 @@ class SettingsViewModel @Inject constructor(
     private val pumpCredentialStore: PumpCredentialStore,
     private val appSettingsStore: AppSettingsStore,
     private val api: GlycemicGptApi,
+    private val appUpdateChecker: AppUpdateChecker,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -228,6 +250,63 @@ class SettingsViewModel @Inject constructor(
 
     fun clearLoginError() {
         _uiState.value = _uiState.value.copy(loginError = null)
+    }
+
+    fun checkForUpdate() {
+        if (_uiState.value.updateState is UpdateUiState.Checking) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Checking)
+            when (val result = appUpdateChecker.check(BuildConfig.VERSION_CODE)) {
+                is UpdateCheckResult.UpdateAvailable -> {
+                    _uiState.value = _uiState.value.copy(
+                        updateState = UpdateUiState.Available(
+                            version = result.info.latestVersion,
+                            downloadUrl = result.info.downloadUrl,
+                            releaseNotes = result.info.releaseNotes,
+                            sizeBytes = result.info.apkSizeBytes,
+                        ),
+                    )
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    _uiState.value = _uiState.value.copy(
+                        updateState = UpdateUiState.UpToDate,
+                    )
+                }
+                is UpdateCheckResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        updateState = UpdateUiState.Error(result.message),
+                    )
+                }
+            }
+        }
+    }
+
+    fun downloadAndInstallUpdate(url: String, expectedSize: Long) {
+        if (_uiState.value.updateState is UpdateUiState.Downloading) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Downloading)
+            val fileName = url.substringAfterLast("/")
+            when (val result = appUpdateChecker.downloadApk(url, fileName, expectedSize)) {
+                is DownloadResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        updateState = UpdateUiState.ReadyToInstall(result.apkFile),
+                    )
+                }
+                is DownloadResult.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        updateState = UpdateUiState.Error(result.message),
+                    )
+                }
+            }
+        }
+    }
+
+    fun getInstallIntent(apkFile: File): android.content.Intent {
+        return appUpdateChecker.createInstallIntent(apkFile)
+    }
+
+    fun dismissUpdateState() {
+        _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Idle)
     }
 
     private fun isValidUrl(url: String): Boolean {
