@@ -8,6 +8,10 @@ import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
 import com.glycemicgpt.mobile.data.remote.dto.UserDto
+import com.glycemicgpt.mobile.data.update.AppUpdateChecker
+import com.glycemicgpt.mobile.data.update.DownloadResult
+import com.glycemicgpt.mobile.data.update.UpdateCheckResult
+import com.glycemicgpt.mobile.data.update.UpdateInfo
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -28,6 +32,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Before
 import org.junit.Test
 import retrofit2.Response
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
@@ -47,6 +52,7 @@ class SettingsViewModelTest {
         every { dataRetentionDays } returns 7
     }
     private val api = mockk<GlycemicGptApi>()
+    private val appUpdateChecker = mockk<AppUpdateChecker>()
 
     @Before
     fun setup() {
@@ -59,7 +65,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(authTokenStore, pumpCredentialStore, appSettingsStore, api)
+        SettingsViewModel(authTokenStore, pumpCredentialStore, appSettingsStore, api, appUpdateChecker)
 
     @Test
     fun `loadState initializes from stores`() {
@@ -296,5 +302,81 @@ class SettingsViewModelTest {
 
         vm.dismissUnpairConfirm()
         assertFalse(vm.uiState.value.showUnpairConfirm)
+    }
+
+    @Test
+    fun `checkForUpdate shows available when newer version exists`() = runTest {
+        coEvery { appUpdateChecker.check(any()) } returns UpdateCheckResult.UpdateAvailable(
+            UpdateInfo(
+                latestVersion = "1.0.0",
+                latestVersionCode = 1_000_000,
+                downloadUrl = "https://github.com/releases/download/v1.0.0/GlycemicGPT-1.0.0-release.apk",
+                releaseNotes = "Bug fixes",
+                apkSizeBytes = 5_000_000,
+            ),
+        )
+        val vm = createViewModel()
+
+        vm.checkForUpdate()
+
+        val state = vm.uiState.value.updateState
+        assertTrue(state is UpdateUiState.Available)
+        assertEquals("1.0.0", (state as UpdateUiState.Available).version)
+    }
+
+    @Test
+    fun `checkForUpdate shows up to date`() = runTest {
+        coEvery { appUpdateChecker.check(any()) } returns UpdateCheckResult.UpToDate
+        val vm = createViewModel()
+
+        vm.checkForUpdate()
+
+        assertTrue(vm.uiState.value.updateState is UpdateUiState.UpToDate)
+    }
+
+    @Test
+    fun `checkForUpdate shows error on failure`() = runTest {
+        coEvery { appUpdateChecker.check(any()) } returns UpdateCheckResult.Error("Network error")
+        val vm = createViewModel()
+
+        vm.checkForUpdate()
+
+        val state = vm.uiState.value.updateState
+        assertTrue(state is UpdateUiState.Error)
+        assertEquals("Network error", (state as UpdateUiState.Error).message)
+    }
+
+    @Test
+    fun `downloadAndInstallUpdate transitions to ready on success`() = runTest {
+        val apkFile = File("/tmp/test.apk")
+        coEvery { appUpdateChecker.downloadApk(any(), any(), any()) } returns DownloadResult.Success(apkFile)
+        val vm = createViewModel()
+
+        vm.downloadAndInstallUpdate("https://example.com/test.apk", 5_000_000)
+
+        val state = vm.uiState.value.updateState
+        assertTrue(state is UpdateUiState.ReadyToInstall)
+        assertEquals(apkFile, (state as UpdateUiState.ReadyToInstall).apkFile)
+    }
+
+    @Test
+    fun `downloadAndInstallUpdate shows error on failure`() = runTest {
+        coEvery { appUpdateChecker.downloadApk(any(), any(), any()) } returns DownloadResult.Error("Download failed")
+        val vm = createViewModel()
+
+        vm.downloadAndInstallUpdate("https://example.com/test.apk", 5_000_000)
+
+        val state = vm.uiState.value.updateState
+        assertTrue(state is UpdateUiState.Error)
+        assertEquals("Download failed", (state as UpdateUiState.Error).message)
+    }
+
+    @Test
+    fun `dismissUpdateState resets to idle`() {
+        val vm = createViewModel()
+
+        vm.dismissUpdateState()
+
+        assertTrue(vm.uiState.value.updateState is UpdateUiState.Idle)
     }
 }
