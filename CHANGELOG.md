@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.82](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.81...v0.1.82) (2026-02-13)
+
+
+### ✨ Features
+
+* add GitHub self-update mechanism (Story 16.13) ([#187](https://github.com/jlengelbrecht/GlycemicGPT/issues/187)) ([ec0d369](https://github.com/jlengelbrecht/GlycemicGPT/commit/ec0d369428ec9acb796bfec5bbc9f6f28b76a4c0))
+
 ## [0.1.81](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.80...v0.1.81) (2026-02-13)
 
 
