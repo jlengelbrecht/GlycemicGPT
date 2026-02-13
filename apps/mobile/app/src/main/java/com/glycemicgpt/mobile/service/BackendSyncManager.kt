@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
@@ -31,6 +32,7 @@ data class SyncStatus(
  * Checks for pending items every [POLL_INTERVAL_MS] and can be triggered
  * immediately via [triggerSync].
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class BackendSyncManager @Inject constructor(
     private val syncDao: SyncDao,
