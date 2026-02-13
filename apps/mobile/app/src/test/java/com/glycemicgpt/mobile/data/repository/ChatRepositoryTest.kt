@@ -1,0 +1,69 @@
+package com.glycemicgpt.mobile.data.repository
+
+import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
+import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
+import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
+import kotlinx.coroutines.test.runTest
+import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import retrofit2.Response
+
+class ChatRepositoryTest {
+
+    private val api = mockk<GlycemicGptApi>()
+    private val repository = ChatRepository(api)
+
+    @Test
+    fun `sendMessage returns success on 200`() = runTest {
+        val chatResponse = ChatResponse(
+            response = "Your levels look stable.",
+            disclaimer = "Not medical advice.",
+        )
+        coEvery { api.sendChatMessage(any()) } returns Response.success(chatResponse)
+
+        val result = repository.sendMessage("How are my levels?")
+
+        assertTrue(result.isSuccess)
+        assertEquals("Your levels look stable.", result.getOrNull()!!.response)
+        assertEquals("Not medical advice.", result.getOrNull()!!.disclaimer)
+        coVerify { api.sendChatMessage(ChatRequest(message = "How are my levels?")) }
+    }
+
+    @Test
+    fun `sendMessage returns failure on HTTP error`() = runTest {
+        coEvery { api.sendChatMessage(any()) } returns Response.error(
+            500,
+            "Internal server error".toResponseBody(),
+        )
+
+        val result = repository.sendMessage("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("500"))
+    }
+
+    @Test
+    fun `sendMessage returns failure on null body`() = runTest {
+        coEvery { api.sendChatMessage(any()) } returns Response.success(null)
+
+        val result = repository.sendMessage("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("Empty response body"))
+    }
+
+    @Test
+    fun `sendMessage returns failure on network exception`() = runTest {
+        coEvery { api.sendChatMessage(any()) } throws java.io.IOException("No route to host")
+
+        val result = repository.sendMessage("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("No route to host"))
+    }
+}

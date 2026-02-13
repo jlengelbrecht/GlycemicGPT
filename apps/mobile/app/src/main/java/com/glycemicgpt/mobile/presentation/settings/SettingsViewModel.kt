@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.presentation.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.BuildConfig
@@ -11,11 +12,16 @@ import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
+import com.glycemicgpt.mobile.wear.WearDataContract
+import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import timber.log.Timber
 import java.io.File
@@ -61,10 +67,14 @@ data class SettingsUiState(
     val showUnpairConfirm: Boolean = false,
     // App update
     val updateState: UpdateUiState = UpdateUiState.Idle,
+    // Watch
+    val watchAppInstalled: Boolean? = null,
+    val watchConnected: Boolean = false,
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val authTokenStore: AuthTokenStore,
     private val pumpCredentialStore: PumpCredentialStore,
     private val appSettingsStore: AppSettingsStore,
@@ -307,6 +317,30 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissUpdateState() {
         _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Idle)
+    }
+
+    fun checkWatchStatus() {
+        viewModelScope.launch {
+            try {
+                val capInfo = Wearable.getCapabilityClient(appContext)
+                    .getCapability(
+                        WearDataContract.WATCH_APP_CAPABILITY,
+                        CapabilityClient.FILTER_ALL,
+                    )
+                    .await()
+                val reachable = capInfo.nodes.any { it.isNearby }
+                _uiState.value = _uiState.value.copy(
+                    watchAppInstalled = capInfo.nodes.isNotEmpty(),
+                    watchConnected = reachable,
+                )
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to check watch status")
+                _uiState.value = _uiState.value.copy(
+                    watchAppInstalled = null,
+                    watchConnected = false,
+                )
+            }
+        }
     }
 
     private fun isValidUrl(url: String): Boolean {

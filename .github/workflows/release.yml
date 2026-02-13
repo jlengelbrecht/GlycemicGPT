@@ -101,11 +101,17 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
-      - name: Rename APK with version
+      - name: Rename APKs with version
         run: |
-          APK_PATH=$(find apps/mobile/app/build/outputs/apk/release -name "*.apk" | head -1)
           VERSION="${{ needs.release-please.outputs.version }}"
-          cp "$APK_PATH" "GlycemicGPT-${VERSION}-release.apk"
+          APP_APK=$(find apps/mobile/app/build/outputs/apk/release -name "*.apk" | head -1)
+          cp "$APP_APK" "GlycemicGPT-${VERSION}-release.apk"
+          WEAR_APK=$(find apps/mobile/wear/build/outputs/apk/release -name "*.apk" | head -1)
+          if [ -n "$WEAR_APK" ]; then
+            cp "$WEAR_APK" "GlycemicGPT-Wear-${VERSION}-release.apk"
+          else
+            echo "::warning::Wear APK not found in build outputs"
+          fi
 
       - name: Upload APK to GitHub Release
         env:

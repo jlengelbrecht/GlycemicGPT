@@ -13,10 +13,11 @@ let
     platformVersions = [ "34" "35" ];
     buildToolsVersions = [ "34.0.0" "35.0.0" ];
 
-    # Emulator + system image for local UI testing
+    # Emulator + system images for local UI testing
+    # google_apis: phone emulator, android-wear: Wear OS emulator
     includeEmulator = true;
     includeSystemImages = true;
-    systemImageTypes = [ "google_apis" ];
+    systemImageTypes = [ "google_apis" "android-wear" ];
     abiVersions = [ "x86_64" ];
 
     # Extras
@@ -46,14 +47,15 @@ pkgs.mkShell {
     echo "Android development shell ready"
     echo "  ANDROID_HOME=$ANDROID_HOME"
     echo "  JAVA_HOME=$JAVA_HOME"
-    echo "  SDK platforms: 35"
-    echo "  Build tools: 35.0.0"
+    echo "  SDK platforms: 34, 35"
+    echo "  Build tools: 34.0.0, 35.0.0"
+    echo "  System images: google_apis (phone), android-wear (Wear OS)"
     echo ""
     echo "Available commands:"
-    echo "  ./gradlew assembleDebug   - Build debug APK"
-    echo "  ./gradlew test            - Run unit tests"
-    echo "  ./gradlew lint            - Run lint checks"
-    echo "  emulator -list-avds       - List AVDs"
+    echo "  ./gradlew assembleDebug          - Build phone + wear debug APKs"
+    echo "  ./gradlew testDebugUnitTest      - Run all unit tests"
+    echo "  ./gradlew lintDebug              - Run lint checks"
+    echo "  emulator -list-avds              - List AVDs"
     echo ""
   '';
 }
