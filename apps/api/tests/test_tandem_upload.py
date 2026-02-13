@@ -32,30 +32,36 @@ async def _register_and_mobile_login(
     return resp.json()["access_token"]
 
 
+_TEST_HMAC_KEY = b"test-hmac-key-for-unit-tests"
+
+
 class TestHMACSigning:
     """Test HMAC-SHA1 signing matches the Tandem protocol."""
 
     def test_sign_tdc_token_produces_valid_hmac(self):
         body = b'{"client":"mHealth","package":{"device":{}}}'
-        result = sign_tdc_token(body)
+        result = sign_tdc_token(body, hmac_key=_TEST_HMAC_KEY)
         # Verify it's valid base64
         decoded = base64.b64decode(result)
         assert len(decoded) == 20  # SHA1 produces 20 bytes
 
     def test_sign_tdc_token_is_deterministic(self):
         body = b'{"test":"data"}'
-        assert sign_tdc_token(body) == sign_tdc_token(body)
+        assert sign_tdc_token(body, hmac_key=_TEST_HMAC_KEY) == sign_tdc_token(
+            body, hmac_key=_TEST_HMAC_KEY
+        )
 
     def test_sign_tdc_token_matches_manual_computation(self):
         body = b'{"foo":"bar"}'
-        key = b"1hvigLmZyCUBMQxn37SO7Iwn9EoTB1rBUBQg1CFyxcU="
         expected = base64.b64encode(
-            hmac.new(key, body, hashlib.sha1).digest()
+            hmac.new(_TEST_HMAC_KEY, body, hashlib.sha1).digest()
         ).decode("ascii")
-        assert sign_tdc_token(body) == expected
+        assert sign_tdc_token(body, hmac_key=_TEST_HMAC_KEY) == expected
 
     def test_different_bodies_produce_different_signatures(self):
-        assert sign_tdc_token(b"body1") != sign_tdc_token(b"body2")
+        assert sign_tdc_token(b"body1", hmac_key=_TEST_HMAC_KEY) != sign_tdc_token(
+            b"body2", hmac_key=_TEST_HMAC_KEY
+        )
 
 
 class TestBuildUploadPayload:

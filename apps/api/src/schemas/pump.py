@@ -160,7 +160,10 @@ class PumpRawEventItem(BaseModel):
 
     sequence_number: int = Field(..., ge=0, description="Pump event sequence index")
     raw_bytes_b64: str = Field(
-        ..., min_length=1, max_length=100, description="Base64-encoded raw BLE bytes (18-byte record)"
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Base64-encoded raw BLE bytes (18-byte record)",
     )
     event_type_id: int = Field(..., ge=0, description="Pump event type ID")
     pump_time_seconds: int = Field(..., ge=0, description="Pump internal timestamp")

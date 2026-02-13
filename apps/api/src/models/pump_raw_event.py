@@ -33,7 +33,9 @@ class PumpRawEvent(Base, TimestampMixin):
     __tablename__ = "pump_raw_events"
 
     __table_args__ = (
-        UniqueConstraint("user_id", "sequence_number", name="uq_pump_raw_event_user_seq"),
+        UniqueConstraint(
+            "user_id", "sequence_number", name="uq_pump_raw_event_user_seq"
+        ),
         {"comment": "Raw BLE bytes from Tandem pump for cloud upload"},
     )
 

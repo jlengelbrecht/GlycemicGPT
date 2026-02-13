@@ -18,6 +18,7 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.core.encryption import decrypt_credential, encrypt_credential
 from src.logging_config import get_logger
 from src.models.integration import (
@@ -30,14 +31,21 @@ from src.models.tandem_upload_state import TandemUploadState
 
 logger = get_logger(__name__)
 
-# HMAC key from decompiled Tandem APK (ByteArrayExtension.kt)
-# Used as UTF-8 bytes directly (NOT base64-decoded)
-_HMAC_KEY = b"1hvigLmZyCUBMQxn37SO7Iwn9EoTB1rBUBQg1CFyxcU="
 
-# Tandem Okta constants from decompiled APK
-_TANDEM_SSO_BASE = "https://sso.tandemdiabetes.com"
-_TANDEM_CLIENT_ID = "0oa65kk4mvzOMqRcX4h7"
-_TANDEM_CONFIG_BASE = "https://assets.tandemdiabetes.com"
+def _get_hmac_key() -> bytes:
+    """Get the HMAC-SHA1 signing key from config.
+
+    The key is used as raw UTF-8 bytes (NOT base64-decoded).
+    Must be provided via TANDEM_UPLOAD_HMAC_KEY env var.
+    """
+    key = settings.tandem_upload_hmac_key
+    if not key:
+        raise RuntimeError(
+            "TANDEM_UPLOAD_HMAC_KEY not configured. "
+            "Set the env var to enable Tandem cloud uploads."
+        )
+    return key.encode("utf-8")
+
 
 # Upload limits
 _MAX_EVENTS_PER_UPLOAD = 500
@@ -48,13 +56,14 @@ _config_cache: dict[str, tuple[dict, datetime]] = {}
 _CONFIG_TTL = timedelta(hours=24)
 
 
-def sign_tdc_token(json_body_bytes: bytes) -> str:
+def sign_tdc_token(json_body_bytes: bytes, hmac_key: bytes | None = None) -> str:
     """Compute HMAC-SHA1 of the JSON body and return base64-encoded signature.
 
     This produces the value for the TDCToken header:
         TDCToken: token {return_value}
     """
-    signature = hmac.new(_HMAC_KEY, json_body_bytes, hashlib.sha1).digest()
+    key = hmac_key or _get_hmac_key()
+    signature = hmac.new(key, json_body_bytes, hashlib.sha1).digest()
     return base64.b64encode(signature).decode("ascii")
 
 
@@ -70,7 +79,8 @@ async def fetch_tandem_config(region: str = "US") -> dict:
     if cached and (now - cached[1]) < _CONFIG_TTL:
         return cached[0]
 
-    url = f"{_TANDEM_CONFIG_BASE}/configuration/mobile-urls/{region}.json"
+    config_base = settings.tandem_upload_config_base
+    url = f"{config_base}/configuration/mobile-urls/{region}.json"
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url)
         resp.raise_for_status()
@@ -147,9 +157,10 @@ async def _authenticate_tandem(
 async def _refresh_tandem_token(refresh_token: str) -> dict:
     """Refresh the Tandem access token using the refresh_token grant."""
     # Get the token endpoint from OpenID config
+    sso_base = settings.tandem_upload_sso_base
     async with httpx.AsyncClient(timeout=15) as client:
         oidc_resp = await client.get(
-            f"{_TANDEM_SSO_BASE}/oauth2/default/.well-known/openid-configuration"
+            f"{sso_base}/oauth2/default/.well-known/openid-configuration"
         )
         oidc_resp.raise_for_status()
         token_endpoint = oidc_resp.json()["token_endpoint"]
@@ -158,7 +169,7 @@ async def _refresh_tandem_token(refresh_token: str) -> dict:
             token_endpoint,
             data={
                 "grant_type": "refresh_token",
-                "client_id": _TANDEM_CLIENT_ID,
+                "client_id": settings.tandem_upload_client_id,
                 "refresh_token": refresh_token,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -167,9 +178,7 @@ async def _refresh_tandem_token(refresh_token: str) -> dict:
         return resp.json()
 
 
-async def _authenticate_fresh(
-    username: str, password: str, region: str
-) -> dict:
+async def _authenticate_fresh(username: str, password: str, region: str) -> dict:
     """Authenticate with Tandem using stored credentials.
 
     Uses tconnectsync's TandemSourceApi which handles the ROPC flow.

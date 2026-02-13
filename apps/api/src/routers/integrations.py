@@ -1140,9 +1140,7 @@ async def get_tandem_upload_status(
 ) -> TandemUploadStatusResponse:
     """Get the Tandem cloud upload status for the current user."""
     result = await db.execute(
-        select(TandemUploadState).where(
-            TandemUploadState.user_id == current_user.id
-        )
+        select(TandemUploadState).where(TandemUploadState.user_id == current_user.id)
     )
     state = result.scalar_one_or_none()
 
@@ -1188,9 +1186,7 @@ async def update_tandem_upload_settings(
 ) -> TandemUploadStatusResponse:
     """Enable/disable Tandem cloud upload and set interval."""
     result = await db.execute(
-        select(TandemUploadState).where(
-            TandemUploadState.user_id == current_user.id
-        )
+        select(TandemUploadState).where(TandemUploadState.user_id == current_user.id)
     )
     state = result.scalar_one_or_none()
 

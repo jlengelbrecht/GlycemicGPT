@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Tandem Cloud Upload (Story 16.6)
     tandem_upload_enabled: bool = True
     tandem_upload_check_interval_minutes: int = 1  # Check for due uploads every minute
+    tandem_upload_hmac_key: str = ""  # HMAC-SHA1 key for TDCToken signing
+    tandem_upload_client_id: str = ""  # Okta client ID for Tandem SSO
+    tandem_upload_sso_base: str = "https://sso.tandemdiabetes.com"
+    tandem_upload_config_base: str = "https://assets.tandemdiabetes.com"
 
     # AI Sidecar (Story 15.2)
     ai_sidecar_url: str = "http://ai-sidecar:3456"
