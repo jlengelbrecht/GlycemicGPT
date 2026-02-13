@@ -26,9 +26,12 @@ from src.models.integration import (
 )
 from src.models.meal_analysis import MealAnalysis
 from src.models.pump_data import PumpEvent, PumpEventType
+from src.models.pump_hardware_info import PumpHardwareInfo
 from src.models.pump_profile import PumpProfile
+from src.models.pump_raw_event import PumpRawEvent
 from src.models.safety_log import SafetyLog
 from src.models.suggestion_response import SuggestionResponse
+from src.models.tandem_upload_state import TandemUploadState
 from src.models.target_glucose_range import TargetGlucoseRange
 from src.models.telegram_link import TelegramLink
 from src.models.telegram_verification import TelegramVerificationCode
@@ -65,9 +68,12 @@ __all__ = [
     "NotificationStatus",
     "PumpEvent",
     "PumpEventType",
+    "PumpHardwareInfo",
     "PumpProfile",
+    "PumpRawEvent",
     "SafetyLog",
     "SuggestionResponse",
+    "TandemUploadState",
     "TargetGlucoseRange",
     "TelegramLink",
     "TelegramVerificationCode",

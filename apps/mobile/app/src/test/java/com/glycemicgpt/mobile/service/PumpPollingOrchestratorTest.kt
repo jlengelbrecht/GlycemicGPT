@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.BasalReading
@@ -47,13 +48,16 @@ class PumpPollingOrchestratorTest {
             ReservoirReading(unitsRemaining = 150f, timestamp = Instant.now()),
         )
         coEvery { getBolusHistory(any()) } returns Result.success(emptyList())
+        coEvery { getHistoryLogs(any()) } returns Result.success(emptyList())
+        coEvery { getPumpHardwareInfo() } returns Result.failure(RuntimeException("not connected"))
     }
     private val repository = mockk<PumpDataRepository>(relaxed = true) {
         coEvery { getLatestBolusTimestamp() } returns null
     }
     private val syncEnqueuer = mockk<SyncQueueEnqueuer>(relaxed = true)
+    private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao)
 
     @Test
     fun `does not poll when disconnected`() = runTest {

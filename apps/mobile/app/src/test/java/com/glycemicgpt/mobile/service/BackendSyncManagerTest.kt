@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.service
 
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import com.glycemicgpt.mobile.data.local.entity.SyncQueueEntity
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
@@ -21,11 +22,12 @@ import retrofit2.Response
 class BackendSyncManagerTest {
 
     private val syncDao = mockk<SyncDao>(relaxed = true)
+    private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
     private val api = mockk<GlycemicGptApi>()
     private val authTokenStore = mockk<AuthTokenStore>()
     private val moshi = Moshi.Builder().add(InstantAdapter()).build()
 
-    private val manager = BackendSyncManager(syncDao, api, authTokenStore, moshi)
+    private val manager = BackendSyncManager(syncDao, rawHistoryLogDao, api, authTokenStore, moshi)
 
     private fun sampleEntity(id: Long = 1L): SyncQueueEntity =
         SyncQueueEntity(

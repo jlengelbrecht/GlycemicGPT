@@ -6,7 +6,9 @@ import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.ConnectionState
+import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
 import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
@@ -86,6 +88,19 @@ class TandemBleDriver @Inject constructor(
     ) { cargo ->
         StatusResponseParser.parseInsulinStatusResponse(cargo)
             ?: throw IllegalStateException("Failed to parse insulin status response")
+    }
+
+    override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_LOG_ENTRY_SEQ_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseHistoryLogResponse(cargo, sinceSequence)
+    }
+
+    override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_PUMP_GLOBALS_REQ,
+    ) { cargo ->
+        StatusResponseParser.parsePumpGlobalsResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse pump globals response")
     }
 
     override fun observeConnectionState(): Flow<ConnectionState> =

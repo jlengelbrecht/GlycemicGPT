@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.glycemicgpt.mobile.data.local.AppDatabase
 import com.glycemicgpt.mobile.data.local.dao.PumpDao
+import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import dagger.Module
 import dagger.Provides
@@ -28,4 +29,7 @@ object DatabaseModule {
 
     @Provides
     fun provideSyncDao(db: AppDatabase): SyncDao = db.syncDao()
+
+    @Provides
+    fun provideRawHistoryLogDao(db: AppDatabase): RawHistoryLogDao = db.rawHistoryLogDao()
 }

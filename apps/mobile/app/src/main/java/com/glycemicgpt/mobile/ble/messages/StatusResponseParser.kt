@@ -1,10 +1,13 @@
 package com.glycemicgpt.mobile.ble.messages
 
+import android.util.Base64
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
+import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
 import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import java.nio.ByteBuffer
@@ -161,6 +164,114 @@ object StatusResponseParser {
             offset += recordSize
         }
         return events
+    }
+
+    /**
+     * Parse history log response (opcode 27).
+     *
+     * Cargo layout: repeated records, each 18 bytes:
+     *   bytes 0-3: sequence number (Int32 LE)
+     *   bytes 4-5: event type ID (UInt16 LE)
+     *   bytes 6-9: pump time in seconds (Int32 LE)
+     *   bytes 10-17: raw event payload (8 bytes, base64-encoded for storage)
+     *
+     * Returns only records with sequence > [sinceSequence].
+     */
+    fun parseHistoryLogResponse(cargo: ByteArray, sinceSequence: Int): List<HistoryLogRecord> {
+        val recordSize = 18
+        if (cargo.size < recordSize) return emptyList()
+
+        val records = mutableListOf<HistoryLogRecord>()
+        var offset = 0
+        while (offset + recordSize <= cargo.size) {
+            val buf = ByteBuffer.wrap(cargo, offset, recordSize).order(ByteOrder.LITTLE_ENDIAN)
+            val seqNum = buf.int
+            val eventTypeId = buf.short.toInt() and 0xFFFF
+            val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
+
+            if (seqNum > sinceSequence) {
+                // Encode the entire raw record as base64 for cloud upload
+                val rawBytes = cargo.copyOfRange(offset, offset + recordSize)
+                val rawB64 = Base64.encodeToString(rawBytes, Base64.NO_WRAP)
+                records.add(
+                    HistoryLogRecord(
+                        sequenceNumber = seqNum,
+                        rawBytesB64 = rawB64,
+                        eventTypeId = eventTypeId,
+                        pumpTimeSeconds = pumpTimeSec,
+                    ),
+                )
+            }
+            offset += recordSize
+        }
+        return records
+    }
+
+    /**
+     * Parse PumpGlobals response (opcode 89).
+     *
+     * Cargo layout (packed, little-endian):
+     *   bytes 0-7: serial number (Int64 LE)
+     *   bytes 8-15: model number (Int64 LE)
+     *   bytes 16-23: part number (Int64 LE)
+     *   bytes 24-27: pump_rev string length, then string bytes
+     *   followed by: arm_sw_ver (Int64), msp_sw_ver (Int64),
+     *   config_a_bits (Int64), config_b_bits (Int64),
+     *   pcba_sn (Int64), pcba_rev string (length-prefixed),
+     *   pump_features bitmap (1 byte)
+     */
+    fun parsePumpGlobalsResponse(cargo: ByteArray): PumpHardwareInfo? {
+        if (cargo.size < 24) return null
+        try {
+            val buf = ByteBuffer.wrap(cargo).order(ByteOrder.LITTLE_ENDIAN)
+            val serialNumber = buf.long
+            val modelNumber = buf.long
+            val partNumber = buf.long
+
+            var offset = 24
+            val (pumpRev, pumpRevLen) = readLengthPrefixedString(cargo, offset) ?: return null
+            offset += 4 + pumpRevLen
+
+            if (offset + 40 > cargo.size) return null
+            val buf2 = ByteBuffer.wrap(cargo, offset, 40).order(ByteOrder.LITTLE_ENDIAN)
+            val armSwVer = buf2.long
+            val mspSwVer = buf2.long
+            val configABits = buf2.long
+            val configBBits = buf2.long
+            val pcbaSn = buf2.long
+            offset += 40
+
+            val (pcbaRev, pcbaRevLen) = readLengthPrefixedString(cargo, offset) ?: ("A" to 0)
+            offset += 4 + pcbaRevLen
+
+            // Parse pump features bitmap if present
+            val featureNames = listOf("dexcomG5", "basalIQ", "dexcomG6", "controlIQ", "dexcomG7", "abbottFsl2")
+            val features = mutableMapOf<String, Boolean>()
+            if (offset < cargo.size) {
+                val bitmap = cargo[offset].toInt() and 0xFF
+                featureNames.forEachIndexed { index, name ->
+                    features[name] = (bitmap and (1 shl index)) != 0
+                }
+            } else {
+                featureNames.forEach { features[it] = false }
+            }
+
+            return PumpHardwareInfo(
+                serialNumber = serialNumber,
+                modelNumber = modelNumber,
+                partNumber = partNumber,
+                pumpRev = pumpRev,
+                armSwVer = armSwVer,
+                mspSwVer = mspSwVer,
+                configABits = configABits,
+                configBBits = configBBits,
+                pcbaSn = pcbaSn,
+                pcbaRev = pcbaRev,
+                pumpFeatures = features,
+            )
+        } catch (_: Exception) {
+            return null
+        }
     }
 
     /** Returns Pair(string, byteLength) or null on malformed data. */
