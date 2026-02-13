@@ -14,6 +14,20 @@
 
 ---
 
+## [0.1.74](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.73...v0.1.74) (2026-02-13)
+
+
+### ✨ Features
+
+* Android mobile app scaffolding with BLE pump connectivity (Epic 16, Story 16.1) ([#168](https://github.com/jlengelbrecht/GlycemicGPT/issues/168)) ([3e5b1aa](https://github.com/jlengelbrecht/GlycemicGPT/commit/3e5b1aa5ddb1683fff9f8662d1f3e92849048435))
+* BLE connection manager and pump pairing (Story 16.2) ([#169](https://github.com/jlengelbrecht/GlycemicGPT/issues/169)) ([9cb2432](https://github.com/jlengelbrecht/GlycemicGPT/commit/9cb24320d921d23320cd05925994a7e00134ccdd))
+* implement PumpDriver status reads and live HomeScreen (Story 16.3) ([#170](https://github.com/jlengelbrecht/GlycemicGPT/issues/170)) ([ffab423](https://github.com/jlengelbrecht/GlycemicGPT/commit/ffab4238991fb8ce02d4395a4da671d4e465451c))
+
+
+### 🐛 Bug Fixes
+
+* resolve release workflow YAML parse error on secrets in if-condition ([#171](https://github.com/jlengelbrecht/GlycemicGPT/issues/171)) ([a6764c8](https://github.com/jlengelbrecht/GlycemicGPT/commit/a6764c831816df3c64278f44bbebea0f3add5297))
+
 ## [0.1.73](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.72...v0.1.73) (2026-02-12)
 
 
