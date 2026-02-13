@@ -253,6 +253,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun checkForUpdate() {
+        if (_uiState.value.updateState is UpdateUiState.Checking) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Checking)
             when (val result = appUpdateChecker.check(BuildConfig.VERSION_CODE)) {
@@ -280,11 +281,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun downloadAndInstallUpdate(url: String) {
+    fun downloadAndInstallUpdate(url: String, expectedSize: Long) {
+        if (_uiState.value.updateState is UpdateUiState.Downloading) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(updateState = UpdateUiState.Downloading)
             val fileName = url.substringAfterLast("/")
-            when (val result = appUpdateChecker.downloadApk(url, fileName)) {
+            when (val result = appUpdateChecker.downloadApk(url, fileName, expectedSize)) {
                 is DownloadResult.Success -> {
                     _uiState.value = _uiState.value.copy(
                         updateState = UpdateUiState.ReadyToInstall(result.apkFile),

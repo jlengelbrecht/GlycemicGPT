@@ -129,7 +129,7 @@ fun SettingsScreen(
         AboutSection(
             state = state,
             onCheckForUpdate = settingsViewModel::checkForUpdate,
-            onDownloadUpdate = settingsViewModel::downloadAndInstallUpdate,
+            onDownloadUpdate = { url, size -> settingsViewModel.downloadAndInstallUpdate(url, size) },
             onGetInstallIntent = settingsViewModel::getInstallIntent,
             onDismissUpdate = settingsViewModel::dismissUpdateState,
         )
@@ -584,7 +584,7 @@ private fun SyncSection(
 private fun AboutSection(
     state: SettingsUiState,
     onCheckForUpdate: () -> Unit,
-    onDownloadUpdate: (String) -> Unit,
+    onDownloadUpdate: (String, Long) -> Unit,
     onGetInstallIntent: (File) -> android.content.Intent,
     onDismissUpdate: () -> Unit,
 ) {
@@ -674,6 +674,13 @@ private fun AboutSection(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onCheckForUpdate,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Check Again")
+                    }
                 }
 
                 is UpdateUiState.Available -> {
@@ -691,7 +698,7 @@ private fun AboutSection(
                         updateState.releaseNotes?.let { notes ->
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = notes.take(200),
+                                text = notes,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 3,
@@ -700,7 +707,7 @@ private fun AboutSection(
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                onClick = { onDownloadUpdate(updateState.downloadUrl) },
+                                onClick = { onDownloadUpdate(updateState.downloadUrl, updateState.sizeBytes) },
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text("Download & Install")

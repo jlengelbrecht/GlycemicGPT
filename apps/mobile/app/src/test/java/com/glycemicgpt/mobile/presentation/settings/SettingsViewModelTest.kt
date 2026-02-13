@@ -349,10 +349,10 @@ class SettingsViewModelTest {
     @Test
     fun `downloadAndInstallUpdate transitions to ready on success`() = runTest {
         val apkFile = File("/tmp/test.apk")
-        coEvery { appUpdateChecker.downloadApk(any(), any()) } returns DownloadResult.Success(apkFile)
+        coEvery { appUpdateChecker.downloadApk(any(), any(), any()) } returns DownloadResult.Success(apkFile)
         val vm = createViewModel()
 
-        vm.downloadAndInstallUpdate("https://example.com/test.apk")
+        vm.downloadAndInstallUpdate("https://example.com/test.apk", 5_000_000)
 
         val state = vm.uiState.value.updateState
         assertTrue(state is UpdateUiState.ReadyToInstall)
@@ -361,10 +361,10 @@ class SettingsViewModelTest {
 
     @Test
     fun `downloadAndInstallUpdate shows error on failure`() = runTest {
-        coEvery { appUpdateChecker.downloadApk(any(), any()) } returns DownloadResult.Error("Download failed")
+        coEvery { appUpdateChecker.downloadApk(any(), any(), any()) } returns DownloadResult.Error("Download failed")
         val vm = createViewModel()
 
-        vm.downloadAndInstallUpdate("https://example.com/test.apk")
+        vm.downloadAndInstallUpdate("https://example.com/test.apk", 5_000_000)
 
         val state = vm.uiState.value.updateState
         assertTrue(state is UpdateUiState.Error)

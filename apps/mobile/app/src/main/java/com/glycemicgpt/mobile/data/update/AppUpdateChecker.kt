@@ -62,6 +62,9 @@ class AppUpdateChecker @Inject constructor(
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    private val apkDir: File
+        get() = File(context.cacheDir, APK_SUBDIR).also { it.mkdirs() }
+
     suspend fun check(currentVersionCode: Int): UpdateCheckResult =
         withContext(Dispatchers.IO) {
             try {
@@ -70,39 +73,43 @@ class AppUpdateChecker @Inject constructor(
                     .header("Accept", "application/vnd.github+json")
                     .build()
 
-                val response = client.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    return@withContext UpdateCheckResult.Error(
-                        "GitHub API returned ${response.code}",
-                    )
-                }
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val message = if (response.code == 403) {
+                            "Rate limit exceeded. Try again later."
+                        } else {
+                            "GitHub API returned ${response.code}"
+                        }
+                        return@withContext UpdateCheckResult.Error(message)
+                    }
 
-                val body = response.body?.string()
-                    ?: return@withContext UpdateCheckResult.Error("Empty response")
+                    val body = response.body?.string()
+                        ?: return@withContext UpdateCheckResult.Error("Empty response")
 
-                val adapter = moshi.adapter(GitHubRelease::class.java)
-                val release = adapter.fromJson(body)
-                    ?: return@withContext UpdateCheckResult.Error("Failed to parse release")
+                    val adapter = moshi.adapter(GitHubRelease::class.java)
+                    val release = adapter.fromJson(body)
+                        ?: return@withContext UpdateCheckResult.Error("Failed to parse release")
 
-                val apkAsset = release.assets.firstOrNull {
-                    it.name.startsWith(APK_PREFIX) && it.name.endsWith(APK_SUFFIX)
-                } ?: return@withContext UpdateCheckResult.Error("No APK found in release")
+                    val apkAsset = release.assets.firstOrNull {
+                        it.name.startsWith(APK_PREFIX) && it.name.endsWith(APK_SUFFIX)
+                    } ?: return@withContext UpdateCheckResult.Error("No APK found in release")
 
-                val version = release.tagName.removePrefix("v")
-                val remoteVersionCode = parseVersionCode(version)
+                    val version = release.tagName.removePrefix("v")
+                    val remoteVersionCode = parseVersionCode(version)
 
-                if (remoteVersionCode > currentVersionCode) {
-                    UpdateCheckResult.UpdateAvailable(
-                        UpdateInfo(
-                            latestVersion = version,
-                            latestVersionCode = remoteVersionCode,
-                            downloadUrl = apkAsset.browserDownloadUrl,
-                            releaseNotes = release.body,
-                            apkSizeBytes = apkAsset.size,
-                        ),
-                    )
-                } else {
-                    UpdateCheckResult.UpToDate
+                    if (remoteVersionCode > currentVersionCode) {
+                        UpdateCheckResult.UpdateAvailable(
+                            UpdateInfo(
+                                latestVersion = version,
+                                latestVersionCode = remoteVersionCode,
+                                downloadUrl = apkAsset.browserDownloadUrl,
+                                releaseNotes = release.body,
+                                apkSizeBytes = apkAsset.size,
+                            ),
+                        )
+                    } else {
+                        UpdateCheckResult.UpToDate
+                    }
                 }
             } catch (e: Exception) {
                 Timber.w(e, "Update check failed")
@@ -110,25 +117,40 @@ class AppUpdateChecker @Inject constructor(
             }
         }
 
-    suspend fun downloadApk(url: String, fileName: String): DownloadResult =
+    suspend fun downloadApk(url: String, fileName: String, expectedSize: Long): DownloadResult =
         withContext(Dispatchers.IO) {
             try {
-                val request = Request.Builder().url(url).build()
-                val response = client.newCall(request).execute()
-                if (!response.isSuccessful) {
-                    return@withContext DownloadResult.Error(
-                        "Download failed: HTTP ${response.code}",
-                    )
+                if (!isAllowedDownloadHost(url)) {
+                    return@withContext DownloadResult.Error("Download blocked: untrusted host")
                 }
 
-                val apkFile = File(context.cacheDir, fileName)
-                response.body?.byteStream()?.use { input ->
-                    apkFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                } ?: return@withContext DownloadResult.Error("Empty download body")
+                val sanitizedName = sanitizeFileName(fileName)
+                cleanOldApks()
 
-                DownloadResult.Success(apkFile)
+                val request = Request.Builder().url(url).build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        return@withContext DownloadResult.Error(
+                            "Download failed: HTTP ${response.code}",
+                        )
+                    }
+
+                    val apkFile = File(apkDir, sanitizedName)
+                    response.body?.byteStream()?.use { input ->
+                        apkFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    } ?: return@withContext DownloadResult.Error("Empty download body")
+
+                    if (expectedSize > 0 && apkFile.length() != expectedSize) {
+                        apkFile.delete()
+                        return@withContext DownloadResult.Error(
+                            "Download size mismatch (expected ${expectedSize}, got ${apkFile.length()})",
+                        )
+                    }
+
+                    DownloadResult.Success(apkFile)
+                }
             } catch (e: Exception) {
                 Timber.w(e, "APK download failed")
                 DownloadResult.Error(e.message ?: "Download failed")
@@ -148,11 +170,40 @@ class AppUpdateChecker @Inject constructor(
         }
     }
 
+    private fun cleanOldApks() {
+        apkDir.listFiles()?.filter { it.name.endsWith(".apk") }?.forEach { file ->
+            file.delete()
+        }
+    }
+
     companion object {
         private const val RELEASES_URL =
             "https://api.github.com/repos/jlengelbrecht/GlycemicGPT/releases/latest"
         private const val APK_PREFIX = "GlycemicGPT-"
         private const val APK_SUFFIX = "-release.apk"
+        private const val APK_SUBDIR = "apk_updates"
+
+        private val ALLOWED_DOWNLOAD_HOSTS = setOf(
+            "github.com",
+            "objects.githubusercontent.com",
+        )
+
+        fun isAllowedDownloadHost(url: String): Boolean {
+            val host = try {
+                java.net.URI(url).host?.lowercase()
+            } catch (_: Exception) {
+                null
+            } ?: return false
+            return ALLOWED_DOWNLOAD_HOSTS.any { allowed ->
+                host == allowed || host.endsWith(".$allowed")
+            }
+        }
+
+        fun sanitizeFileName(name: String): String {
+            val withoutQuery = name.substringBefore("?").substringBefore("#")
+            val cleaned = withoutQuery.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+            return cleaned.ifEmpty { "update.apk" }
+        }
 
         fun parseVersionCode(version: String): Int {
             val parts = version.split(".")
