@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.presentation.settings
 
+import android.content.Context
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
@@ -51,6 +52,7 @@ class SettingsViewModelTest {
         every { backendSyncEnabled } returns true
         every { dataRetentionDays } returns 7
     }
+    private val appContext = mockk<Context>(relaxed = true)
     private val api = mockk<GlycemicGptApi>()
     private val appUpdateChecker = mockk<AppUpdateChecker>()
 
@@ -65,7 +67,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(authTokenStore, pumpCredentialStore, appSettingsStore, api, appUpdateChecker)
+        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, appUpdateChecker)
 
     @Test
     fun `loadState initializes from stores`() {

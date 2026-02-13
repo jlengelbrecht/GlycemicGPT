@@ -6,6 +6,7 @@ import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
+import com.glycemicgpt.mobile.wear.WearDataSender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -34,6 +35,7 @@ class PumpPollingOrchestrator @Inject constructor(
     private val repository: PumpDataRepository,
     private val syncEnqueuer: SyncQueueEnqueuer,
     private val rawHistoryLogDao: RawHistoryLogDao,
+    private val wearDataSender: WearDataSender,
 ) {
 
     /** Set by PumpConnectionService to trigger immediate sync after enqueue. */
@@ -48,14 +50,9 @@ class PumpPollingOrchestrator @Inject constructor(
     @Volatile
     private var hardwareInfoCached: Boolean = false
 
-    companion object {
-        const val INTERVAL_FAST_MS = 30_000L       // IoB + basal
-        const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
-        const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
-
-        // When phone battery is low, slow everything down by this factor
-        const val LOW_BATTERY_MULTIPLIER = 3
-    }
+    /** Track the last alert type sent to watch to avoid re-sending the same alert. */
+    @Volatile
+    private var previousAlertType: String? = null
 
     private val lock = Any()
     private var fastJob: Job? = null
@@ -83,6 +80,7 @@ class PumpPollingOrchestrator @Inject constructor(
                         startPollingLoops(scope)
                     } else {
                         Timber.d("Pump disconnected (state=%s), pausing polling", state)
+                        previousAlertType = null
                         cancelPollingLoops()
                     }
                 }
@@ -161,6 +159,11 @@ class PumpPollingOrchestrator @Inject constructor(
                 repository.saveIoB(it)
                 syncEnqueuer.enqueueIoB(it)
                 backendSyncManager?.triggerSync()
+                try {
+                    wearDataSender.sendIoB(it.iob, it.timestamp.toEpochMilli())
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to send IoB to watch")
+                }
             }
             .onFailure { Timber.w(it, "Failed to poll IoB") }
     }
@@ -193,10 +196,75 @@ class PumpPollingOrchestrator @Inject constructor(
     private suspend fun pollCgm() {
         try {
             pumpDriver.getCgmStatus()
-                .onSuccess { repository.saveCgm(it) }
+                .onSuccess {
+                    repository.saveCgm(it)
+                    try {
+                        wearDataSender.sendCgm(
+                            mgDl = it.glucoseMgDl,
+                            trend = it.trendArrow.name,
+                            timestampMs = it.timestamp.toEpochMilli(),
+                            low = 70,
+                            high = 180,
+                            urgentLow = 55,
+                            urgentHigh = 250,
+                        )
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to send CGM to watch")
+                    }
+
+                    // Alert threshold detection for watch
+                    val alertType = detectAlertType(it.glucoseMgDl)
+                    try {
+                        if (alertType != null && alertType != previousAlertType) {
+                            wearDataSender.sendAlert(
+                                type = alertType,
+                                bgValue = it.glucoseMgDl,
+                                timestampMs = it.timestamp.toEpochMilli(),
+                                message = "${alertLabel(alertType)} ${it.glucoseMgDl} mg/dL",
+                            )
+                            previousAlertType = alertType
+                        } else if (alertType == null && previousAlertType != null) {
+                            wearDataSender.clearAlert()
+                            previousAlertType = null
+                        }
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to send alert to watch")
+                    }
+                }
                 .onFailure { Timber.w(it, "Failed to poll CGM status") }
         } catch (e: Exception) {
             Timber.w(e, "CGM poll exception")
+        }
+    }
+
+    companion object {
+        const val INTERVAL_FAST_MS = 30_000L       // IoB + basal
+        const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
+        const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
+
+        // When phone battery is low, slow everything down by this factor
+        const val LOW_BATTERY_MULTIPLIER = 3
+
+        // Alert thresholds (match CGM threshold defaults)
+        private const val URGENT_LOW = 55
+        private const val LOW = 70
+        private const val HIGH = 180
+        private const val URGENT_HIGH = 250
+
+        fun detectAlertType(mgDl: Int): String? = when {
+            mgDl <= URGENT_LOW -> "urgent_low"
+            mgDl >= URGENT_HIGH -> "urgent_high"
+            mgDl <= LOW -> "low"
+            mgDl >= HIGH -> "high"
+            else -> null
+        }
+
+        fun alertLabel(type: String): String = when (type) {
+            "urgent_low" -> "URGENT LOW"
+            "urgent_high" -> "URGENT HIGH"
+            "low" -> "LOW"
+            "high" -> "HIGH"
+            else -> ""
         }
     }
 

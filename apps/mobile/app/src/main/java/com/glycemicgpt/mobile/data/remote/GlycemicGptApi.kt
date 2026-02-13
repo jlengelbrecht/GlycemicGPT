@@ -1,5 +1,8 @@
 package com.glycemicgpt.mobile.data.remote
 
+import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
+import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
+import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
 import com.glycemicgpt.mobile.data.remote.dto.PumpPushRequest
@@ -8,7 +11,6 @@ import com.glycemicgpt.mobile.data.remote.dto.TandemUploadSettingsRequest
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadStatus
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadTriggerResponse
 import retrofit2.Response
-import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -38,4 +40,7 @@ interface GlycemicGptApi {
 
     @POST("/api/integrations/tandem/cloud-upload/trigger")
     suspend fun triggerTandemUpload(): Response<TandemUploadTriggerResponse>
+
+    @POST("/api/ai/chat")
+    suspend fun sendChatMessage(@Body request: ChatRequest): Response<ChatResponse>
 }

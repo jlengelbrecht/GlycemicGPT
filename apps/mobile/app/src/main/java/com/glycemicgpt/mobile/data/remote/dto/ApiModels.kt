@@ -104,3 +104,14 @@ data class TandemUploadSettingsRequest(
     val enabled: Boolean,
     @Json(name = "interval_minutes") val intervalMinutes: Int,
 )
+
+@JsonClass(generateAdapter = true)
+data class ChatRequest(
+    val message: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class ChatResponse(
+    val response: String,
+    val disclaimer: String,
+)
