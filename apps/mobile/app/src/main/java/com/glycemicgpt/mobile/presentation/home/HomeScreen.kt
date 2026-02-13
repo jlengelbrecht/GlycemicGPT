@@ -13,6 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.glycemicgpt.mobile.domain.model.ConnectionState
+import com.glycemicgpt.mobile.service.SyncStatus
 
 @Composable
 fun HomeScreen(
@@ -40,6 +44,7 @@ fun HomeScreen(
     val basalRate by viewModel.basalRate.collectAsState()
     val battery by viewModel.battery.collectAsState()
     val reservoir by viewModel.reservoir.collectAsState()
+    val syncStatus by viewModel.syncStatus.collectAsState()
 
     // Auto-refresh when newly connected (debounced to avoid rapid-fire
     // during fast CONNECTING -> CONNECTED -> DISCONNECTED transitions)
@@ -59,7 +64,12 @@ fun HomeScreen(
         // Connection status banner
         ConnectionStatusBanner(connectionState)
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Sync status banner
+        SyncStatusBanner(syncStatus)
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // IoB card
         Card(
@@ -190,6 +200,58 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
         Text(
             text = "  $text",
             style = MaterialTheme.typography.bodyMedium,
+            color = color,
+        )
+    }
+}
+
+@Composable
+private fun SyncStatusBanner(status: SyncStatus) {
+    val (icon, text, color) = when {
+        status.lastError != null -> Triple(
+            Icons.Default.CloudOff,
+            "Sync error",
+            MaterialTheme.colorScheme.error,
+        )
+        status.pendingCount > 0 -> Triple(
+            Icons.Default.CloudSync,
+            "${status.pendingCount} pending",
+            MaterialTheme.colorScheme.tertiary,
+        )
+        status.lastSyncAtMs > 0 -> {
+            val ago = (System.currentTimeMillis() - status.lastSyncAtMs) / 1000
+            val label = when {
+                ago < 60 -> "just now"
+                ago < 3600 -> "${ago / 60}m ago"
+                else -> "${ago / 3600}h ago"
+            }
+            Triple(
+                Icons.Default.CloudDone,
+                "Synced $label",
+                MaterialTheme.colorScheme.primary,
+            )
+        }
+        else -> Triple(
+            Icons.Default.CloudOff,
+            "Not synced",
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = text,
+            tint = color,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = "  $text",
+            style = MaterialTheme.typography.bodySmall,
             color = color,
         )
     }

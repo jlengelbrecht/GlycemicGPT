@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.service
 
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
+import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +30,12 @@ import javax.inject.Singleton
 class PumpPollingOrchestrator @Inject constructor(
     private val pumpDriver: PumpDriver,
     private val repository: PumpDataRepository,
+    private val syncEnqueuer: SyncQueueEnqueuer,
 ) {
+
+    /** Set by PumpConnectionService to trigger immediate sync after enqueue. */
+    @Volatile
+    var backendSyncManager: BackendSyncManager? = null
 
     companion object {
         const val INTERVAL_FAST_MS = 30_000L       // IoB + basal
@@ -134,13 +140,21 @@ class PumpPollingOrchestrator @Inject constructor(
 
     private suspend fun pollIoB() {
         pumpDriver.getIoB()
-            .onSuccess { repository.saveIoB(it) }
+            .onSuccess {
+                repository.saveIoB(it)
+                syncEnqueuer.enqueueIoB(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll IoB") }
     }
 
     private suspend fun pollBasal() {
         pumpDriver.getBasalRate()
-            .onSuccess { repository.saveBasal(it) }
+            .onSuccess {
+                repository.saveBasal(it)
+                syncEnqueuer.enqueueBasal(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll basal rate") }
     }
 
@@ -151,6 +165,8 @@ class PumpPollingOrchestrator @Inject constructor(
             .onSuccess { events ->
                 if (events.isNotEmpty()) {
                     repository.saveBoluses(events)
+                    syncEnqueuer.enqueueBoluses(events)
+                    backendSyncManager?.triggerSync()
                     Timber.d("Saved %d new bolus events", events.size)
                 }
             }

@@ -107,6 +107,12 @@ class TokenResponse(BaseModel):
     expires_in: int = Field(..., description="Token expiration in seconds")
 
 
+class MobileLoginResponse(TokenResponse):
+    """Response schema for mobile login (returns JWT in body instead of cookie)."""
+
+    user: UserResponse = Field(..., description="Authenticated user details")
+
+
 # ============================================================================
 # Story 2.3: Logout Schemas
 # ============================================================================

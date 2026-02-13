@@ -39,6 +39,9 @@ class PumpConnectionService : Service() {
     @Inject
     lateinit var pollingOrchestrator: PumpPollingOrchestrator
 
+    @Inject
+    lateinit var backendSyncManager: BackendSyncManager
+
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var batteryReceiverRegistered = false
 
@@ -71,7 +74,9 @@ class PumpConnectionService : Service() {
         val notification = buildNotification()
         startForeground(NOTIFICATION_ID, notification)
 
+        pollingOrchestrator.backendSyncManager = backendSyncManager
         pollingOrchestrator.start(serviceScope)
+        backendSyncManager.start(serviceScope)
         if (!batteryReceiverRegistered) {
             registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             batteryReceiverRegistered = true
@@ -85,6 +90,7 @@ class PumpConnectionService : Service() {
 
     override fun onDestroy() {
         pollingOrchestrator.stop()
+        backendSyncManager.stop()
         if (batteryReceiverRegistered) {
             try {
                 unregisterReceiver(batteryReceiver)

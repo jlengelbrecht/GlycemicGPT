@@ -20,15 +20,17 @@ logger = get_logger(__name__)
 
 
 async def get_current_user(
+    request: Request,
     session_token: Annotated[str | None, Cookie(alias=settings.jwt_cookie_name)] = None,
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Extract and validate the current user from the session cookie.
+    """Extract and validate the current user from a session cookie or Bearer token.
 
-    This dependency reads the JWT token from the httpOnly cookie,
-    validates it, and returns the corresponding User object.
+    Checks the httpOnly cookie first, then falls back to an Authorization
+    Bearer header (used by mobile clients).
 
     Args:
+        request: The HTTP request (for reading Authorization header)
         session_token: JWT token from the session cookie
         db: Database session
 
@@ -45,7 +47,11 @@ async def get_current_user(
     )
 
     if not session_token:
-        raise credentials_exception
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header[7:]
+        if not session_token:
+            raise credentials_exception
 
     # Decode and validate the token
     payload = decode_access_token(session_token)

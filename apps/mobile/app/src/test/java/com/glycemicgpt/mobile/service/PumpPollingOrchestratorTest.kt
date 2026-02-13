@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.service
 
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
+import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.ConnectionState
@@ -50,8 +51,9 @@ class PumpPollingOrchestratorTest {
     private val repository = mockk<PumpDataRepository>(relaxed = true) {
         coEvery { getLatestBolusTimestamp() } returns null
     }
+    private val syncEnqueuer = mockk<SyncQueueEnqueuer>(relaxed = true)
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer)
 
     @Test
     fun `does not poll when disconnected`() = runTest {
