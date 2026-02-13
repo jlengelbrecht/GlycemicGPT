@@ -77,13 +77,23 @@ object TandemProtocol {
     )
 
     // -- Read-only status request opcodes ----------------------------------
+    // Tandem response opcode = request opcode + 1
 
-    const val OPCODE_CONTROL_IQ_IOB = 108
-    const val OPCODE_CURRENT_BASAL_STATUS = 114
-    const val OPCODE_INSULIN_STATUS = 41
-    const val OPCODE_CURRENT_BATTERY = 57
-    const val OPCODE_PUMP_SETTINGS = 90
-    const val OPCODE_BOLUS_CALC_DATA = 75
+    const val OPCODE_CONTROL_IQ_IOB_REQ = 108
+    const val OPCODE_CONTROL_IQ_IOB_RESP = 109
+    const val OPCODE_CURRENT_BASAL_STATUS_REQ = 114
+    const val OPCODE_CURRENT_BASAL_STATUS_RESP = 115
+    const val OPCODE_INSULIN_STATUS_REQ = 41
+    const val OPCODE_INSULIN_STATUS_RESP = 42
+    const val OPCODE_CURRENT_BATTERY_REQ = 57
+    const val OPCODE_CURRENT_BATTERY_RESP = 58
+    const val OPCODE_PUMP_SETTINGS_REQ = 90
+    const val OPCODE_PUMP_SETTINGS_RESP = 91
+    const val OPCODE_BOLUS_CALC_DATA_REQ = 75
+    const val OPCODE_BOLUS_CALC_DATA_RESP = 76
+
+    /** Default timeout for a status read request (milliseconds). */
+    const val STATUS_READ_TIMEOUT_MS = 5000L
 
     // -- Authentication opcodes --------------------------------------------
 
