@@ -3,11 +3,14 @@ package com.glycemicgpt.mobile.data.repository
 import com.glycemicgpt.mobile.data.local.dao.PumpDao
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
+import com.glycemicgpt.mobile.data.local.entity.CgmReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.IoBReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.ReservoirReadingEntity
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
@@ -180,6 +183,50 @@ class PumpDataRepositoryTest {
         val result = repository.getLatestBolusTimestamp()
         assertNotNull(result)
         assertEquals(ms, result!!.toEpochMilli())
+    }
+
+    // -- CGM ------------------------------------------------------------------
+
+    @Test
+    fun `saveCgm converts domain model to entity`() = runTest {
+        val slot = slot<CgmReadingEntity>()
+        coEvery { pumpDao.insertCgm(capture(slot)) } returns Unit
+
+        val now = Instant.now()
+        repository.saveCgm(CgmReading(glucoseMgDl = 120, trendArrow = CgmTrend.FLAT, timestamp = now))
+
+        assertEquals(120, slot.captured.glucoseMgDl)
+        assertEquals("FLAT", slot.captured.trendArrow)
+        assertEquals(now.toEpochMilli(), slot.captured.timestampMs)
+    }
+
+    @Test
+    fun `observeLatestCgm maps entity to domain`() = runTest {
+        val entity = CgmReadingEntity(id = 1, glucoseMgDl = 180, trendArrow = "SINGLE_UP", timestampMs = 1000L)
+        coEvery { pumpDao.observeLatestCgm() } returns flowOf(entity)
+
+        val result = repository.observeLatestCgm().first()
+        assertNotNull(result)
+        assertEquals(180, result!!.glucoseMgDl)
+        assertEquals(CgmTrend.SINGLE_UP, result.trendArrow)
+    }
+
+    @Test
+    fun `observeLatestCgm returns null when no data`() = runTest {
+        coEvery { pumpDao.observeLatestCgm() } returns flowOf(null)
+
+        val result = repository.observeLatestCgm().first()
+        assertNull(result)
+    }
+
+    @Test
+    fun `observeLatestCgm handles unknown trend gracefully`() = runTest {
+        val entity = CgmReadingEntity(id = 1, glucoseMgDl = 95, trendArrow = "INVALID_TREND", timestampMs = 1000L)
+        coEvery { pumpDao.observeLatestCgm() } returns flowOf(entity)
+
+        val result = repository.observeLatestCgm().first()
+        assertNotNull(result)
+        assertEquals(CgmTrend.UNKNOWN, result!!.trendArrow)
     }
 
     // -- Cleanup --------------------------------------------------------------

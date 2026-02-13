@@ -91,6 +91,8 @@ object TandemProtocol {
     const val OPCODE_PUMP_SETTINGS_RESP = 91
     const val OPCODE_BOLUS_CALC_DATA_REQ = 75
     const val OPCODE_BOLUS_CALC_DATA_RESP = 76
+    const val OPCODE_CGM_STATUS_REQ = 100
+    const val OPCODE_CGM_STATUS_RESP = 101
 
     /** Default timeout for a status read request (milliseconds). */
     const val STATUS_READ_TIMEOUT_MS = 5000L

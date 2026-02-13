@@ -4,6 +4,8 @@ import android.util.Base64
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -164,6 +166,37 @@ object StatusResponseParser {
             offset += recordSize
         }
         return events
+    }
+
+    /**
+     * Parse CGM status response (opcode 101).
+     *
+     * Cargo layout:
+     *   bytes 0-1: glucose value in mg/dL (UInt16 LE)
+     *   byte 2: trend arrow enum (1-7, 0=unknown)
+     *   byte 3: sensor status flags
+     */
+    fun parseCgmStatusResponse(cargo: ByteArray): CgmReading? {
+        if (cargo.size < 3) return null
+        val buf = ByteBuffer.wrap(cargo, 0, 2).order(ByteOrder.LITTLE_ENDIAN)
+        val glucoseMgDl = buf.short.toInt() and 0xFFFF
+
+        // Filter out sensor error / no-data values
+        if (glucoseMgDl == 0 || glucoseMgDl > 500) return null
+
+        val trendVal = cargo[2].toInt() and 0xFF
+        val trend = when (trendVal) {
+            1 -> CgmTrend.DOUBLE_UP
+            2 -> CgmTrend.SINGLE_UP
+            3 -> CgmTrend.FORTY_FIVE_UP
+            4 -> CgmTrend.FLAT
+            5 -> CgmTrend.FORTY_FIVE_DOWN
+            6 -> CgmTrend.SINGLE_DOWN
+            7 -> CgmTrend.DOUBLE_DOWN
+            else -> CgmTrend.UNKNOWN
+        }
+
+        return CgmReading(glucoseMgDl = glucoseMgDl, trendArrow = trend, timestamp = Instant.now())
     }
 
     /**

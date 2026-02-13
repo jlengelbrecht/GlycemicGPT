@@ -131,6 +131,7 @@ class PumpPollingOrchestrator @Inject constructor(
         while (true) {
             pollIoB()
             pollBasal()
+            pollCgm()
             delay(effectiveInterval(INTERVAL_FAST_MS))
         }
     }
@@ -187,6 +188,16 @@ class PumpPollingOrchestrator @Inject constructor(
                 }
             }
             .onFailure { Timber.w(it, "Failed to poll bolus history") }
+    }
+
+    private suspend fun pollCgm() {
+        try {
+            pumpDriver.getCgmStatus()
+                .onSuccess { repository.saveCgm(it) }
+                .onFailure { Timber.w(it, "Failed to poll CGM status") }
+        } catch (e: Exception) {
+            Timber.w(e, "CGM poll exception")
+        }
     }
 
     private suspend fun pollBattery() {

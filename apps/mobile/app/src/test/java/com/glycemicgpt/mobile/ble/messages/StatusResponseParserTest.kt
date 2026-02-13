@@ -212,4 +212,116 @@ class StatusResponseParserTest {
         )
         assertTrue(events.isEmpty())
     }
+
+    // -- CGM status tests ----------------------------------------------------
+
+    @Test
+    fun `parseCgmStatusResponse with valid glucose and trend`() {
+        // 120 mg/dL = 0x78 0x00, trend = FLAT (4)
+        val cargo = byteArrayOf(0x78, 0x00, 0x04)
+        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
+        assertNotNull(result)
+        assertEquals(120, result!!.glucoseMgDl)
+        assertEquals(
+            com.glycemicgpt.mobile.domain.model.CgmTrend.FLAT,
+            result.trendArrow,
+        )
+    }
+
+    @Test
+    fun `parseCgmStatusResponse with high glucose`() {
+        // 350 mg/dL = 0x5E 0x01 (little-endian), trend = SINGLE_UP (2)
+        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(350.toShort())
+        buf.put(2)
+        val result = StatusResponseParser.parseCgmStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(350, result!!.glucoseMgDl)
+        assertEquals(
+            com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_UP,
+            result.trendArrow,
+        )
+    }
+
+    @Test
+    fun `parseCgmStatusResponse returns null for zero glucose`() {
+        val cargo = byteArrayOf(0x00, 0x00, 0x04)
+        assertNull(StatusResponseParser.parseCgmStatusResponse(cargo))
+    }
+
+    @Test
+    fun `parseCgmStatusResponse returns null for glucose over 500`() {
+        // 501 = 0xF5 0x01
+        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(501.toShort())
+        buf.put(4)
+        assertNull(StatusResponseParser.parseCgmStatusResponse(buf.array()))
+    }
+
+    @Test
+    fun `parseCgmStatusResponse returns null for short cargo`() {
+        assertNull(StatusResponseParser.parseCgmStatusResponse(byteArrayOf(0x78, 0x00)))
+    }
+
+    @Test
+    fun `parseCgmStatusResponse returns null for empty cargo`() {
+        assertNull(StatusResponseParser.parseCgmStatusResponse(ByteArray(0)))
+    }
+
+    @Test
+    fun `parseCgmStatusResponse maps all trend values`() {
+        val expected = mapOf(
+            1 to com.glycemicgpt.mobile.domain.model.CgmTrend.DOUBLE_UP,
+            2 to com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_UP,
+            3 to com.glycemicgpt.mobile.domain.model.CgmTrend.FORTY_FIVE_UP,
+            4 to com.glycemicgpt.mobile.domain.model.CgmTrend.FLAT,
+            5 to com.glycemicgpt.mobile.domain.model.CgmTrend.FORTY_FIVE_DOWN,
+            6 to com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_DOWN,
+            7 to com.glycemicgpt.mobile.domain.model.CgmTrend.DOUBLE_DOWN,
+        )
+        for ((trendByte, expectedTrend) in expected) {
+            val cargo = byteArrayOf(0x64, 0x00, trendByte.toByte()) // 100 mg/dL
+            val result = StatusResponseParser.parseCgmStatusResponse(cargo)
+            assertNotNull("trend $trendByte should parse", result)
+            assertEquals("trend $trendByte", expectedTrend, result!!.trendArrow)
+        }
+    }
+
+    @Test
+    fun `parseCgmStatusResponse maps unknown trend to UNKNOWN`() {
+        val cargo = byteArrayOf(0x64, 0x00, 0x00) // trend byte 0
+        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
+        assertNotNull(result)
+        assertEquals(
+            com.glycemicgpt.mobile.domain.model.CgmTrend.UNKNOWN,
+            result!!.trendArrow,
+        )
+
+        // Also test value 255 (0xFF)
+        val cargo2 = byteArrayOf(0x64, 0x00, 0xFF.toByte())
+        val result2 = StatusResponseParser.parseCgmStatusResponse(cargo2)
+        assertNotNull(result2)
+        assertEquals(
+            com.glycemicgpt.mobile.domain.model.CgmTrend.UNKNOWN,
+            result2!!.trendArrow,
+        )
+    }
+
+    @Test
+    fun `parseCgmStatusResponse boundary glucose 500 is valid`() {
+        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(500.toShort())
+        buf.put(4)
+        val result = StatusResponseParser.parseCgmStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(500, result!!.glucoseMgDl)
+    }
+
+    @Test
+    fun `parseCgmStatusResponse boundary glucose 1 is valid`() {
+        val cargo = byteArrayOf(0x01, 0x00, 0x04) // 1 mg/dL
+        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
+        assertNotNull(result)
+        assertEquals(1, result!!.glucoseMgDl)
+    }
 }

@@ -5,6 +5,7 @@ import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -88,6 +89,13 @@ class TandemBleDriver @Inject constructor(
     ) { cargo ->
         StatusResponseParser.parseInsulinStatusResponse(cargo)
             ?: throw IllegalStateException("Failed to parse insulin status response")
+    }
+
+    override suspend fun getCgmStatus(): Result<CgmReading> = runStatusRequest(
+        opcode = TandemProtocol.OPCODE_CGM_STATUS_REQ,
+    ) { cargo ->
+        StatusResponseParser.parseCgmStatusResponse(cargo)
+            ?: throw IllegalStateException("Failed to parse CGM status response")
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(
