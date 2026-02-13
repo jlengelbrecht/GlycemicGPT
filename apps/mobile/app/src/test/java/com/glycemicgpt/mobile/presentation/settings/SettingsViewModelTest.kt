@@ -9,6 +9,7 @@ import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
 import com.glycemicgpt.mobile.data.remote.dto.UserDto
+import com.glycemicgpt.mobile.data.repository.DeviceRepository
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
@@ -54,6 +55,7 @@ class SettingsViewModelTest {
     }
     private val appContext = mockk<Context>(relaxed = true)
     private val api = mockk<GlycemicGptApi>()
+    private val deviceRepository = mockk<DeviceRepository>(relaxed = true)
     private val appUpdateChecker = mockk<AppUpdateChecker>()
 
     @Before
@@ -67,7 +69,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, appUpdateChecker)
+        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, deviceRepository, appUpdateChecker)
 
     @Test
     fun `loadState initializes from stores`() {
