@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.77](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.76...v0.1.77) (2026-02-13)
+
+
+### 🐛 Bug Fixes
+
+* add R8 keep rule for Tink errorprone annotations and OptIn for ExperimentalCoroutinesApi ([#177](https://github.com/jlengelbrecht/GlycemicGPT/issues/177)) ([1e6dedb](https://github.com/jlengelbrecht/GlycemicGPT/commit/1e6dedb24ef469640aeacbe34f4c6555f98aabf1))
+
 ## [0.1.76](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.75...v0.1.76) (2026-02-13)
 
 
