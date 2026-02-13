@@ -149,7 +149,9 @@ class PumpEventPushItem(BaseModel):
         if v.tzinfo is None:
             v = v.replace(tzinfo=UTC)
         if v > now + timedelta(minutes=5):
-            raise ValueError("event_timestamp cannot be more than 5 minutes in the future")
+            raise ValueError(
+                "event_timestamp cannot be more than 5 minutes in the future"
+            )
         return v
 
 
