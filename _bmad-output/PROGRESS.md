@@ -21,14 +21,14 @@
 | 13 | E2E Testing & Real Data Verification | 3/3 | **Complete** |
 | 14 | Expanded AI Provider Support | 4/4 | **Complete** |
 | 15 | Frontend Auth UI & Route Protection | 8/8 | **Complete** |
-| 16 | Android Mobile App with BLE Pump Connectivity | 0/12 | Planning |
+| 16 | Android Mobile App with BLE Pump Connectivity | 2/12 | In Progress |
 
 **MVP Stories:** 54/54 complete (100%)
 **Post-MVP Fix Stories:** 13/13 complete (100%)
 **Epic 14 (AI Provider Expansion):** 4/4 complete
 **Epic 15 (Frontend Auth UI):** 8/8 complete
-**Epic 16 (Mobile App + BLE):** 0/12 planned
-**Overall Progress:** 79/91 stories complete (87%)
+**Epic 16 (Mobile App + BLE):** 2/12 in progress
+**Overall Progress:** 81/91 stories complete (89%)
 
 ---
 
@@ -309,8 +309,8 @@ All 5 stories completed:
 
 **Epic Details:** [epic-16-mobile-app-ble.md](planning-artifacts/epic-16-mobile-app-ble.md)
 
-- [ ] Story 16.1: Android Project Scaffolding & Build Configuration
-- [ ] Story 16.2: BLE Connection Manager & Pump Pairing
+- [x] Story 16.1: Android Project Scaffolding & Build Configuration (PR #168)
+- [x] Story 16.2: BLE Connection Manager & Pump Pairing (PR #169)
 - [ ] Story 16.3: PumpDriver Interface & Tandem BLE Implementation
 - [ ] Story 16.4: Real-Time Data Polling & Local Storage
 - [ ] Story 16.5: Backend Sync -- Push Real-Time Data to GlycemicGPT API
