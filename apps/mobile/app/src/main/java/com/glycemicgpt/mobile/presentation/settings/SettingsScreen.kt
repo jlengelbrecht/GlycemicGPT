@@ -46,10 +46,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -124,7 +126,13 @@ fun SettingsScreen(
 
         // -- About Section --
         SectionHeader(title = "About")
-        AboutSection(state = state)
+        AboutSection(
+            state = state,
+            onCheckForUpdate = settingsViewModel::checkForUpdate,
+            onDownloadUpdate = settingsViewModel::downloadAndInstallUpdate,
+            onGetInstallIntent = settingsViewModel::getInstallIntent,
+            onDismissUpdate = settingsViewModel::dismissUpdateState,
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
     }
@@ -573,7 +581,15 @@ private fun SyncSection(
 }
 
 @Composable
-private fun AboutSection(state: SettingsUiState) {
+private fun AboutSection(
+    state: SettingsUiState,
+    onCheckForUpdate: () -> Unit,
+    onDownloadUpdate: (String) -> Unit,
+    onGetInstallIntent: (File) -> android.content.Intent,
+    onDismissUpdate: () -> Unit,
+) {
+    val context = LocalContext.current
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -607,6 +623,144 @@ private fun AboutSection(state: SettingsUiState) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+            // App Update
+            when (val updateState = state.updateState) {
+                is UpdateUiState.Idle -> {
+                    OutlinedButton(
+                        onClick = onCheckForUpdate,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Check for Updates")
+                    }
+                }
+
+                is UpdateUiState.Checking -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Checking for updates...",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                is UpdateUiState.UpToDate -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "You are on the latest version",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+
+                is UpdateUiState.Available -> {
+                    Column {
+                        Text(
+                            text = "Update available: v${updateState.version}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        val sizeMb = updateState.sizeBytes / (1024.0 * 1024.0)
+                        Text(
+                            text = "Size: ${"%.1f".format(sizeMb)} MB",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        updateState.releaseNotes?.let { notes ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = notes.take(200),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { onDownloadUpdate(updateState.downloadUrl) },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("Download & Install")
+                            }
+                            OutlinedButton(
+                                onClick = onDismissUpdate,
+                            ) {
+                                Text("Later")
+                            }
+                        }
+                    }
+                }
+
+                is UpdateUiState.Downloading -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Downloading update...",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                is UpdateUiState.ReadyToInstall -> {
+                    Button(
+                        onClick = {
+                            val intent = onGetInstallIntent(updateState.apkFile)
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Install Update")
+                    }
+                }
+
+                is UpdateUiState.Error -> {
+                    Column {
+                        Text(
+                            text = updateState.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onCheckForUpdate,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Retry")
+                        }
+                    }
+                }
+            }
         }
     }
 }
