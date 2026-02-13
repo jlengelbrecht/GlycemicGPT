@@ -4,20 +4,28 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.glycemicgpt.mobile.R
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
- * Foreground service that maintains persistent BLE connection to the pump.
+ * Foreground service that maintains persistent BLE connection to the pump
+ * and orchestrates periodic data polling.
  *
- * This service keeps the BLE connection alive even when the app is in the
- * background, ensuring continuous data collection from the pump.
- *
- * Pump data polling and backend sync will be implemented in Stories 16.4 and 16.5.
+ * Polling pauses when BLE connection is lost and resumes on reconnect.
+ * Reduces poll frequency when phone battery drops below 15%.
  */
 @AndroidEntryPoint
 class PumpConnectionService : Service() {
@@ -25,6 +33,32 @@ class PumpConnectionService : Service() {
     companion object {
         const val CHANNEL_ID = "pump_connection"
         const val NOTIFICATION_ID = 1
+        private const val LOW_BATTERY_THRESHOLD = 15
+    }
+
+    @Inject
+    lateinit var pollingOrchestrator: PumpPollingOrchestrator
+
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var batteryReceiverRegistered = false
+
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            if (level >= 0 && scale > 0) {
+                val pct = (level * 100) / scale
+                val wasLow = pollingOrchestrator.phoneBatteryLow
+                pollingOrchestrator.phoneBatteryLow = pct < LOW_BATTERY_THRESHOLD
+                if (wasLow != pollingOrchestrator.phoneBatteryLow) {
+                    Timber.d(
+                        "Phone battery %d%% - polling %s",
+                        pct,
+                        if (pollingOrchestrator.phoneBatteryLow) "reduced" else "normal",
+                    )
+                }
+            }
+        }
     }
 
     override fun onCreate() {
@@ -36,15 +70,32 @@ class PumpConnectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = buildNotification()
         startForeground(NOTIFICATION_ID, notification)
-        Timber.d("PumpConnectionService started in foreground")
+
+        pollingOrchestrator.start(serviceScope)
+        if (!batteryReceiverRegistered) {
+            registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            batteryReceiverRegistered = true
+        }
+
+        Timber.d("PumpConnectionService started in foreground with polling")
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        super.onDestroy()
+        pollingOrchestrator.stop()
+        if (batteryReceiverRegistered) {
+            try {
+                unregisterReceiver(batteryReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was not registered
+            }
+            batteryReceiverRegistered = false
+        }
+        serviceScope.cancel()
         Timber.d("PumpConnectionService destroyed")
+        super.onDestroy()
     }
 
     private fun createNotificationChannel() {
