@@ -18,9 +18,15 @@ data class LoginRequest(
 @JsonClass(generateAdapter = true)
 data class LoginResponse(
     @Json(name = "access_token") val accessToken: String,
+    @Json(name = "refresh_token") val refreshToken: String,
     @Json(name = "token_type") val tokenType: String,
     @Json(name = "expires_in") val expiresIn: Int,
     val user: UserDto,
+)
+
+@JsonClass(generateAdapter = true)
+data class RefreshTokenRequest(
+    @Json(name = "refresh_token") val refreshToken: String,
 )
 
 @JsonClass(generateAdapter = true)

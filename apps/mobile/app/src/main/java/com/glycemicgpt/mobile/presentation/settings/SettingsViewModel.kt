@@ -197,6 +197,7 @@ class SettingsViewModel @Inject constructor(
                     }
                     val expiresAtMs = System.currentTimeMillis() + (body.expiresIn * 1000L)
                     authTokenStore.saveCredentials(url, body.accessToken, expiresAtMs, body.user.email)
+                    authTokenStore.saveRefreshToken(body.refreshToken)
                     _uiState.value = _uiState.value.copy(
                         isLoggingIn = false,
                         isLoggedIn = true,

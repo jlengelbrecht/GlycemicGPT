@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.di
 import com.glycemicgpt.mobile.data.remote.AuthInterceptor
 import com.glycemicgpt.mobile.data.remote.BaseUrlInterceptor
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
+import com.glycemicgpt.mobile.data.remote.TokenRefreshInterceptor
 import com.glycemicgpt.mobile.data.remote.InstantAdapter
 import com.squareup.moshi.Moshi
 import dagger.Module
@@ -33,6 +34,7 @@ object NetworkModule {
     fun provideOkHttpClient(
         authInterceptor: AuthInterceptor,
         baseUrlInterceptor: BaseUrlInterceptor,
+        tokenRefreshInterceptor: TokenRefreshInterceptor,
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
@@ -44,6 +46,7 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .addInterceptor(baseUrlInterceptor)
             .addInterceptor(authInterceptor)
+            .addInterceptor(tokenRefreshInterceptor)
             .addInterceptor(logging)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)

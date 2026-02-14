@@ -3,13 +3,14 @@
 Allows mobile apps to register/unregister for alert delivery.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import CurrentUser
 from src.database import get_db
 from src.logging_config import get_logger
+from src.middleware.rate_limit import limiter
 from src.services.device_service import register_device, unregister_device
 
 logger = get_logger(__name__)
@@ -37,8 +38,10 @@ class DeviceRegistrationResponse(BaseModel):
     response_model=DeviceRegistrationResponse,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("10/minute")
 async def register_device_endpoint(
-    request: DeviceRegistrationRequest,
+    body: DeviceRegistrationRequest,
+    request: Request,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> DeviceRegistrationResponse:
@@ -46,9 +49,9 @@ async def register_device_endpoint(
     device = await register_device(
         db=db,
         user_id=current_user.id,
-        device_token=request.device_token,
-        device_name=request.device_name,
-        platform=request.platform,
+        device_token=body.device_token,
+        device_name=body.device_name,
+        platform=body.platform,
     )
     return DeviceRegistrationResponse(
         id=str(device.id),

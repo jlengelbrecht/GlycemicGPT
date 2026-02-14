@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.glycemicgpt.mobile.logging.ReleaseTree
 import com.glycemicgpt.mobile.service.DataRetentionWorker
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
@@ -27,6 +28,8 @@ class GlycemicGptApp : Application(), Configuration.Provider {
         super.onCreate()
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
+        } else {
+            Timber.plant(ReleaseTree())
         }
         scheduleDataRetention()
     }

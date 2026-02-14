@@ -5,7 +5,7 @@ API endpoints for managing third-party integrations (Dexcom, Tandem) and data sy
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydexcom import Dexcom
 from pydexcom import errors as dexcom_errors
 from sqlalchemy import func, select
@@ -18,6 +18,7 @@ from src.core.auth import CurrentUser, DiabeticOrAdminUser
 from src.core.encryption import encrypt_credential
 from src.database import get_db
 from src.logging_config import get_logger
+from src.middleware.rate_limit import limiter
 from src.models.glucose import GlucoseReading
 from src.models.integration import (
     IntegrationCredential,
@@ -993,8 +994,10 @@ async def get_iob_projection_endpoint(
         401: {"model": ErrorResponse, "description": "Not authenticated"},
     },
 )
+@limiter.limit("60/minute")
 async def push_pump_events(
-    request: PumpPushRequest,
+    body: PumpPushRequest,
+    request: Request,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> PumpPushResponse:
@@ -1005,7 +1008,7 @@ async def push_pump_events(
     """
     now = datetime.now(UTC)
     rows = []
-    for item in request.events:
+    for item in body.events:
         ts = item.event_timestamp
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=UTC)
@@ -1022,7 +1025,7 @@ async def push_pump_events(
                 "iob_at_event": item.iob_at_event,
                 "bg_at_event": item.bg_at_event,
                 "received_at": now,
-                "source": request.source,
+                "source": body.source,
             }
         )
 
@@ -1041,7 +1044,7 @@ async def push_pump_events(
     # Store raw events for Tandem cloud upload (Story 16.6)
     raw_accepted = 0
     raw_duplicates = 0
-    if request.raw_events:
+    if body.raw_events:
         raw_rows = [
             {
                 "user_id": current_user.id,
@@ -1050,7 +1053,7 @@ async def push_pump_events(
                 "event_type_id": item.event_type_id,
                 "pump_time_seconds": item.pump_time_seconds,
             }
-            for item in request.raw_events
+            for item in body.raw_events
         ]
         raw_stmt = (
             pg_insert(PumpRawEvent)
@@ -1064,37 +1067,37 @@ async def push_pump_events(
         raw_duplicates = len(raw_rows) - raw_accepted
 
     # Upsert pump hardware info (Story 16.6)
-    if request.pump_info:
+    if body.pump_info:
         hw_stmt = (
             pg_insert(PumpHardwareInfo)
             .values(
                 user_id=current_user.id,
-                serial_number=request.pump_info.serial_number,
-                model_number=request.pump_info.model_number,
-                part_number=request.pump_info.part_number,
-                pump_rev=request.pump_info.pump_rev,
-                arm_sw_ver=request.pump_info.arm_sw_ver,
-                msp_sw_ver=request.pump_info.msp_sw_ver,
-                config_a_bits=request.pump_info.config_a_bits,
-                config_b_bits=request.pump_info.config_b_bits,
-                pcba_sn=request.pump_info.pcba_sn,
-                pcba_rev=request.pump_info.pcba_rev,
-                pump_features=request.pump_info.pump_features,
+                serial_number=body.pump_info.serial_number,
+                model_number=body.pump_info.model_number,
+                part_number=body.pump_info.part_number,
+                pump_rev=body.pump_info.pump_rev,
+                arm_sw_ver=body.pump_info.arm_sw_ver,
+                msp_sw_ver=body.pump_info.msp_sw_ver,
+                config_a_bits=body.pump_info.config_a_bits,
+                config_b_bits=body.pump_info.config_b_bits,
+                pcba_sn=body.pump_info.pcba_sn,
+                pcba_rev=body.pump_info.pcba_rev,
+                pump_features=body.pump_info.pump_features,
             )
             .on_conflict_do_update(
                 index_elements=["user_id"],
                 set_={
-                    "serial_number": request.pump_info.serial_number,
-                    "model_number": request.pump_info.model_number,
-                    "part_number": request.pump_info.part_number,
-                    "pump_rev": request.pump_info.pump_rev,
-                    "arm_sw_ver": request.pump_info.arm_sw_ver,
-                    "msp_sw_ver": request.pump_info.msp_sw_ver,
-                    "config_a_bits": request.pump_info.config_a_bits,
-                    "config_b_bits": request.pump_info.config_b_bits,
-                    "pcba_sn": request.pump_info.pcba_sn,
-                    "pcba_rev": request.pump_info.pcba_rev,
-                    "pump_features": request.pump_info.pump_features,
+                    "serial_number": body.pump_info.serial_number,
+                    "model_number": body.pump_info.model_number,
+                    "part_number": body.pump_info.part_number,
+                    "pump_rev": body.pump_info.pump_rev,
+                    "arm_sw_ver": body.pump_info.arm_sw_ver,
+                    "msp_sw_ver": body.pump_info.msp_sw_ver,
+                    "config_a_bits": body.pump_info.config_a_bits,
+                    "config_b_bits": body.pump_info.config_b_bits,
+                    "pcba_sn": body.pump_info.pcba_sn,
+                    "pcba_rev": body.pump_info.pcba_rev,
+                    "pump_features": body.pump_info.pump_features,
                     "updated_at": now,
                 },
             )
