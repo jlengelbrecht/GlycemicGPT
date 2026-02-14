@@ -69,13 +69,18 @@ async def _get_alerts_for_user(
     now = datetime.now(UTC)
 
     async with get_db_session() as db:
-        query = select(Alert).where(
-            and_(
-                Alert.user_id == user_id,
-                Alert.acknowledged.is_(False),
-                Alert.expires_at > now,
+        query = (
+            select(Alert)
+            .where(
+                and_(
+                    Alert.user_id == user_id,
+                    Alert.acknowledged.is_(False),
+                    Alert.expires_at > now,
+                )
             )
-        ).order_by(Alert.created_at.desc()).limit(50)
+            .order_by(Alert.created_at.desc())
+            .limit(50)
+        )
 
         result = await db.execute(query)
         alerts = result.scalars().all()
@@ -118,7 +123,8 @@ async def generate_alert_stream(
                     patients = await _get_patient_ids_for_caregiver(user_uuid)
                     for patient_id, patient_email in patients:
                         patient_alerts = await _get_alerts_for_user(
-                            patient_id, patient_name=patient_email,
+                            patient_id,
+                            patient_name=patient_email,
                         )
                         all_alerts.extend(patient_alerts)
                 else:

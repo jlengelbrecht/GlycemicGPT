@@ -98,13 +98,16 @@ async def get_pending_alerts(
             patient_email = user_result.scalar_one_or_none() or "Unknown"
 
             result = await db.execute(
-                select(Alert).where(
+                select(Alert)
+                .where(
                     and_(
                         Alert.user_id == patient_id,
                         Alert.acknowledged.is_(False),
                         Alert.expires_at > now,
                     )
-                ).order_by(Alert.created_at.desc()).limit(50)
+                )
+                .order_by(Alert.created_at.desc())
+                .limit(50)
             )
             for a in result.scalars().all():
                 alerts_out.append(
@@ -112,13 +115,16 @@ async def get_pending_alerts(
                 )
     else:
         result = await db.execute(
-            select(Alert).where(
+            select(Alert)
+            .where(
                 and_(
                     Alert.user_id == current_user.id,
                     Alert.acknowledged.is_(False),
                     Alert.expires_at > now,
                 )
-            ).order_by(Alert.created_at.desc()).limit(50)
+            )
+            .order_by(Alert.created_at.desc())
+            .limit(50)
         )
         for a in result.scalars().all():
             alerts_out.append(AlertResponse(**alert_to_dict(a)))
@@ -136,9 +142,7 @@ async def acknowledge_alert(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Mark an alert as acknowledged."""
-    result = await db.execute(
-        select(Alert).where(Alert.id == alert_id)
-    )
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
     alert = result.scalar_one_or_none()
 
     if alert is None:

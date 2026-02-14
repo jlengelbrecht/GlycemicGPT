@@ -106,9 +106,7 @@ async def unregister_device(
     if user_id is not None:
         conditions.append(DeviceRegistration.user_id == user_id)
 
-    result = await db.execute(
-        delete(DeviceRegistration).where(and_(*conditions))
-    )
+    result = await db.execute(delete(DeviceRegistration).where(and_(*conditions)))
     await db.commit()
     removed = result.rowcount > 0
     if removed:
@@ -155,9 +153,7 @@ async def cleanup_stale_devices(
     """
     cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
     result = await db.execute(
-        delete(DeviceRegistration).where(
-            DeviceRegistration.last_seen_at < cutoff
-        )
+        delete(DeviceRegistration).where(DeviceRegistration.last_seen_at < cutoff)
     )
     await db.commit()
     count = result.rowcount

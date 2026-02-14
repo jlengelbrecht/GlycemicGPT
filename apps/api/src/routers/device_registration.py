@@ -67,7 +67,9 @@ async def unregister_device_endpoint(
 ) -> None:
     """Unregister a device (e.g., on logout). Only the device owner can unregister."""
     removed = await unregister_device(
-        db=db, device_token=device_token, user_id=current_user.id,
+        db=db,
+        device_token=device_token,
+        user_id=current_user.id,
     )
     if not removed:
         raise HTTPException(

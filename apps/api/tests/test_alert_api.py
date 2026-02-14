@@ -104,9 +104,7 @@ class TestAlertApi:
         app.dependency_overrides[get_db] = lambda: mock_db
 
         try:
-            response = await client.post(
-                f"/api/v1/alerts/{alert.id}/acknowledge"
-            )
+            response = await client.post(f"/api/v1/alerts/{alert.id}/acknowledge")
             assert response.status_code == 200
             data = response.json()
             assert data["status"] == "acknowledged"
@@ -129,9 +127,7 @@ class TestAlertApi:
         app.dependency_overrides[get_db] = lambda: mock_db
 
         try:
-            response = await client.post(
-                f"/api/v1/alerts/{alert.id}/acknowledge"
-            )
+            response = await client.post(f"/api/v1/alerts/{alert.id}/acknowledge")
             assert response.status_code == 403
         finally:
             app.dependency_overrides.clear()
