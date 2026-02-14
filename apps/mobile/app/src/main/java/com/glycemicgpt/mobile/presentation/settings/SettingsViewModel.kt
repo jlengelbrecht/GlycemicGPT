@@ -9,7 +9,9 @@ import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
+import com.glycemicgpt.mobile.data.repository.DeviceRepository
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
+import com.glycemicgpt.mobile.service.AlertStreamService
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
 import com.glycemicgpt.mobile.wear.WearDataContract
@@ -79,6 +81,7 @@ class SettingsViewModel @Inject constructor(
     private val pumpCredentialStore: PumpCredentialStore,
     private val appSettingsStore: AppSettingsStore,
     private val api: GlycemicGptApi,
+    private val deviceRepository: DeviceRepository,
     private val appUpdateChecker: AppUpdateChecker,
 ) : ViewModel() {
 
@@ -102,6 +105,15 @@ class SettingsViewModel @Inject constructor(
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
         )
+
+        // Start alert stream on app startup if logged in
+        if (loggedIn) {
+            AlertStreamService.start(appContext)
+            viewModelScope.launch {
+                deviceRepository.registerDevice()
+                    .onFailure { e -> Timber.w(e, "Device re-registration failed") }
+            }
+        }
     }
 
     fun saveBaseUrl(url: String) {
@@ -190,6 +202,12 @@ class SettingsViewModel @Inject constructor(
                         isLoggedIn = true,
                         userEmail = body.user.email,
                     )
+                    // Register device and start alert stream
+                    launch {
+                        deviceRepository.registerDevice()
+                            .onFailure { e -> Timber.w(e, "Device registration failed") }
+                    }
+                    AlertStreamService.start(appContext)
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoggingIn = false,
@@ -218,6 +236,12 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun logout() {
+        // Stop alert stream and unregister device
+        AlertStreamService.stop(appContext)
+        viewModelScope.launch {
+            deviceRepository.unregisterDevice()
+                .onFailure { e -> Timber.w(e, "Device unregistration failed") }
+        }
         authTokenStore.clearToken()
         _uiState.value = _uiState.value.copy(
             isLoggedIn = false,
