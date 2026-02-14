@@ -4,6 +4,7 @@ import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.Response
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -11,6 +12,9 @@ import javax.inject.Singleton
  * OkHttp interceptor that rewrites the request URL to use the dynamic
  * base URL from [AuthTokenStore]. This allows the server address to be
  * configured at runtime (self-hosted deployments).
+ *
+ * Throws [IOException] if no valid base URL is configured, preventing
+ * requests from leaking to the Retrofit placeholder (localhost).
  */
 @Singleton
 class BaseUrlInterceptor @Inject constructor(
@@ -20,10 +24,13 @@ class BaseUrlInterceptor @Inject constructor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
         val baseUrl = authTokenStore.getBaseUrl()
-            ?: return chain.proceed(original)
+
+        if (baseUrl.isNullOrBlank()) {
+            throw IOException("Server URL not configured. Go to Settings to set your server address.")
+        }
 
         val parsed = baseUrl.toHttpUrlOrNull()
-            ?: return chain.proceed(original)
+            ?: throw IOException("Invalid server URL: $baseUrl")
 
         val newUrl = original.url.newBuilder()
             .scheme(parsed.scheme)
