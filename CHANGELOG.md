@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.86](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.85...v0.1.86) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* prevent cleartext requests to localhost when server URL not configured ([#196](https://github.com/jlengelbrecht/GlycemicGPT/issues/196)) ([e861d64](https://github.com/jlengelbrecht/GlycemicGPT/commit/e861d646801642c8f9d441f6d9182c6f05af0082))
+
 ## [0.1.85](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.84...v0.1.85) (2026-02-14)
 
 
