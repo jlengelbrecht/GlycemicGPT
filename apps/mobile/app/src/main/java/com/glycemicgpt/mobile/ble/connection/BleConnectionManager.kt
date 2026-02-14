@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
+import com.glycemicgpt.mobile.ble.auth.JpakeAuthenticator
 import com.glycemicgpt.mobile.ble.auth.TandemAuthenticator
 import com.glycemicgpt.mobile.ble.protocol.PacketAssembler
 import com.glycemicgpt.mobile.ble.protocol.Packetize
@@ -52,6 +53,7 @@ import javax.inject.Singleton
 class BleConnectionManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val authenticator: TandemAuthenticator,
+    private val jpakeAuthenticator: JpakeAuthenticator,
     private val credentialStore: PumpCredentialStore,
 ) {
 
@@ -110,6 +112,7 @@ class BleConnectionManager @Inject constructor(
         reconnectAttempt = 0
         pendingPairingCode = pairingCode
         authenticator.reset()
+        jpakeAuthenticator.reset()
         operationQueue.clear()
         operationInFlight.set(false)
 
@@ -464,8 +467,36 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun startAuthentication() {
-        val chunks = authenticator.buildCentralChallengeRequest(nextTxId())
-        enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+        val code = pendingPairingCode ?: credentialStore.getPairingCode()
+        if (code == null) {
+            Timber.e("No pairing code available for authentication")
+            _connectionState.value = ConnectionState.AUTH_FAILED
+            return
+        }
+
+        // Use JPAKE auth for 6-digit codes (firmware v7.7+), V1 for 16-char codes
+        if (code.length <= 10) {
+            Timber.d("Starting JPAKE authentication (code length=%d)", code.length)
+            val chunks = jpakeAuthenticator.buildJpake1aRequest(code, nextTxId())
+            enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+        } else {
+            Timber.d("Starting V1 authentication (code length=%d)", code.length)
+            val chunks = authenticator.buildCentralChallengeRequest(nextTxId())
+            enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+        }
+    }
+
+    private fun onAuthSuccess() {
+        _connectionState.value = ConnectionState.CONNECTED
+        reconnectAttempt = 0
+        // Save credentials on first successful pairing
+        val address = synchronized(gattLock) { gatt?.device?.address }
+        val code = pendingPairingCode
+        if (address != null && code != null) {
+            credentialStore.savePairing(address, code)
+            pendingPairingCode = null
+        }
+        Timber.d("Pump authenticated and connected")
     }
 
     private fun handleAuthNotification(data: ByteArray) {
@@ -485,6 +516,7 @@ class BleConnectionManager @Inject constructor(
         val (opcode, _, cargo) = parsed
 
         when (opcode) {
+            // -- V1 authentication opcodes --
             TandemProtocol.OPCODE_CENTRAL_CHALLENGE_RESP -> {
                 val code = pendingPairingCode ?: credentialStore.getPairingCode() ?: run {
                     Timber.e("No pairing code available for challenge response")
@@ -502,21 +534,64 @@ class BleConnectionManager @Inject constructor(
             TandemProtocol.OPCODE_PUMP_CHALLENGE_RESP -> {
                 val success = authenticator.processPumpChallengeResponse(cargo)
                 if (success) {
-                    _connectionState.value = ConnectionState.CONNECTED
-                    reconnectAttempt = 0
-                    // Save credentials on first successful pairing
-                    val address = synchronized(gattLock) { gatt?.device?.address }
-                    val code = pendingPairingCode
-                    if (address != null && code != null) {
-                        credentialStore.savePairing(address, code)
-                        pendingPairingCode = null
-                    }
-                    Timber.d("Pump authenticated and connected")
+                    onAuthSuccess()
                 } else {
                     Timber.e("Pump authentication rejected by pump")
                     _connectionState.value = ConnectionState.AUTH_FAILED
                 }
             }
+
+            // -- JPAKE authentication opcodes --
+            TandemProtocol.OPCODE_JPAKE_1A_RESP -> {
+                if (!jpakeAuthenticator.processJpake1aResponse(cargo)) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                val chunks = jpakeAuthenticator.buildJpake1bRequest(nextTxId())
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            }
+            TandemProtocol.OPCODE_JPAKE_1B_RESP -> {
+                if (!jpakeAuthenticator.processJpake1bResponse(cargo)) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                val chunks = jpakeAuthenticator.buildJpake2Request(nextTxId())
+                if (chunks.isEmpty()) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            }
+            TandemProtocol.OPCODE_JPAKE_2_RESP -> {
+                if (!jpakeAuthenticator.processJpake2Response(cargo)) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                val chunks = jpakeAuthenticator.buildJpake3Request(nextTxId())
+                if (chunks.isEmpty()) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            }
+            TandemProtocol.OPCODE_JPAKE_3_SESSION_KEY_RESP -> {
+                if (!jpakeAuthenticator.processJpake3Response(cargo)) {
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                    return
+                }
+                val chunks = jpakeAuthenticator.buildJpake4Request(nextTxId())
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            }
+            TandemProtocol.OPCODE_JPAKE_4_KEY_CONFIRM_RESP -> {
+                val success = jpakeAuthenticator.processJpake4Response(cargo)
+                if (success) {
+                    onAuthSuccess()
+                } else {
+                    Timber.e("JPAKE: Key confirmation failed")
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                }
+            }
+
             else -> {
                 Timber.w("Auth: unexpected opcode %d in auth notification", opcode)
             }
