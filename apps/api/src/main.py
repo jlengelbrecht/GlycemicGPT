@@ -12,11 +12,14 @@ from src.logging_config import get_logger, setup_logging
 from src.middleware import CorrelationIdMiddleware
 from src.routers import (
     ai,
+    alert_api,
+    alert_stream,
     alerts,
     auth,
     briefs,
     caregivers,
     correction_analysis,
+    device_registration,
     disclaimer,
     emergency_contacts,
     escalation,
@@ -103,6 +106,9 @@ app.include_router(emergency_contacts.router)
 app.include_router(escalation.router)
 app.include_router(telegram.router)
 app.include_router(caregivers.router)
+app.include_router(device_registration.router)
+app.include_router(alert_stream.router)
+app.include_router(alert_api.router)
 
 
 @app.get("/")

@@ -31,9 +31,20 @@ class AppSettingsStore @Inject constructor(
             prefs.edit().putInt(KEY_DATA_RETENTION_DAYS, value.coerceIn(MIN_RETENTION_DAYS, MAX_RETENTION_DAYS)).apply()
         }
 
+    var deviceToken: String?
+        get() = prefs.getString(KEY_DEVICE_TOKEN, null)
+        set(value) {
+            if (value != null) {
+                prefs.edit().putString(KEY_DEVICE_TOKEN, value).apply()
+            } else {
+                prefs.edit().remove(KEY_DEVICE_TOKEN).apply()
+            }
+        }
+
     companion object {
         private const val KEY_BACKEND_SYNC_ENABLED = "backend_sync_enabled"
         private const val KEY_DATA_RETENTION_DAYS = "data_retention_days"
+        private const val KEY_DEVICE_TOKEN = "device_token"
         const val DEFAULT_RETENTION_DAYS = 7
         const val MIN_RETENTION_DAYS = 1
         const val MAX_RETENTION_DAYS = 30

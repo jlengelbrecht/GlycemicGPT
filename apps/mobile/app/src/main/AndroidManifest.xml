@@ -15,6 +15,7 @@
     <!-- Foreground service for persistent BLE connection -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Self-update: install APK from GitHub Releases -->
@@ -49,6 +50,12 @@
         <service
             android:name=".service.PumpConnectionService"
             android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
+
+        <!-- Alert stream foreground service for SSE alert delivery -->
+        <service
+            android:name=".service.AlertStreamService"
+            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
         <!-- Disable default WorkManager initializer; we use Configuration.Provider -->

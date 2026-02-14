@@ -1,7 +1,11 @@
 package com.glycemicgpt.mobile.data.remote
 
+import com.glycemicgpt.mobile.data.remote.dto.AcknowledgeResponse
+import com.glycemicgpt.mobile.data.remote.dto.AlertResponse
 import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
 import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
+import com.glycemicgpt.mobile.data.remote.dto.DeviceRegistrationRequest
+import com.glycemicgpt.mobile.data.remote.dto.DeviceRegistrationResponse
 import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
@@ -12,9 +16,11 @@ import com.glycemicgpt.mobile.data.remote.dto.TandemUploadStatus
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadTriggerResponse
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Path
 
 /**
  * Retrofit interface for the GlycemicGPT backend API.
@@ -43,4 +49,18 @@ interface GlycemicGptApi {
 
     @POST("/api/ai/chat")
     suspend fun sendChatMessage(@Body request: ChatRequest): Response<ChatResponse>
+
+    // Device registration (Story 16.11)
+    @POST("/api/v1/devices/register")
+    suspend fun registerDevice(@Body request: DeviceRegistrationRequest): Response<DeviceRegistrationResponse>
+
+    @DELETE("/api/v1/devices/{deviceToken}")
+    suspend fun unregisterDevice(@Path("deviceToken") deviceToken: String): Response<Unit>
+
+    // Alert endpoints (Story 16.11)
+    @GET("/api/v1/alerts/pending")
+    suspend fun getPendingAlerts(): Response<List<AlertResponse>>
+
+    @POST("/api/v1/alerts/{alertId}/acknowledge")
+    suspend fun acknowledgeAlert(@Path("alertId") alertId: String): Response<AcknowledgeResponse>
 }

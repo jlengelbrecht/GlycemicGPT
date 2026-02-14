@@ -369,6 +369,19 @@ async def enforce_data_retention_all_users() -> None:
     )
 
 
+async def cleanup_stale_devices_job() -> None:
+    """Remove devices not seen in 30 days."""
+    from src.services.device_service import cleanup_stale_devices
+
+    async with get_session_maker()() as db:
+        try:
+            count = await cleanup_stale_devices(db, max_age_days=30)
+            if count > 0:
+                logger.info("Stale device cleanup completed", removed=count)
+        except Exception as e:
+            logger.error("Stale device cleanup failed", error=str(e))
+
+
 async def poll_telegram_updates() -> None:
     """Poll Telegram for verification /start messages.
 
@@ -495,6 +508,17 @@ def start_scheduler() -> AsyncIOScheduler:
             "Scheduled Tandem cloud upload job",
             interval_minutes=settings.tandem_upload_check_interval_minutes,
         )
+
+    # Add stale device cleanup job (Story 16.11)
+    scheduler.add_job(
+        cleanup_stale_devices_job,
+        trigger=IntervalTrigger(hours=24),
+        id="stale_device_cleanup",
+        name="Stale Device Cleanup",
+        replace_existing=True,
+        max_instances=1,
+    )
+    logger.info("Scheduled stale device cleanup job (daily)")
 
     # Add Telegram polling job if enabled and token configured (Story 7.1)
     if settings.telegram_polling_enabled and settings.telegram_bot_token:
