@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.89](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.88...v0.1.89) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* implement EC-JPAKE authentication for Tandem pump BLE pairing ([#202](https://github.com/jlengelbrecht/GlycemicGPT/issues/202)) ([0d89841](https://github.com/jlengelbrecht/GlycemicGPT/commit/0d89841ec5fdf65210e8f506e90f4004ea4b9704))
+
 ## [0.1.88](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.87...v0.1.88) (2026-02-14)
 
 
