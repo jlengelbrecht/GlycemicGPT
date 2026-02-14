@@ -97,14 +97,31 @@ object TandemProtocol {
     /** Default timeout for a status read request (milliseconds). */
     const val STATUS_READ_TIMEOUT_MS = 5000L
 
-    // -- Authentication opcodes --------------------------------------------
+    // -- V1 Authentication opcodes (firmware < v7.7) -------------------------
 
     const val OPCODE_CENTRAL_CHALLENGE_REQ = 16
     const val OPCODE_CENTRAL_CHALLENGE_RESP = 17
     const val OPCODE_PUMP_CHALLENGE_REQ = 18
     const val OPCODE_PUMP_CHALLENGE_RESP = 19
 
+    // -- JPAKE Authentication opcodes (firmware v7.7+, 6-digit code) --------
+
+    const val OPCODE_JPAKE_1A_REQ = 32
+    const val OPCODE_JPAKE_1A_RESP = 33
+    const val OPCODE_JPAKE_1B_REQ = 34
+    const val OPCODE_JPAKE_1B_RESP = 35
+    const val OPCODE_JPAKE_2_REQ = 36
+    const val OPCODE_JPAKE_2_RESP = 37
+    const val OPCODE_JPAKE_3_SESSION_KEY_REQ = 38
+    const val OPCODE_JPAKE_3_SESSION_KEY_RESP = 39
+    const val OPCODE_JPAKE_4_KEY_CONFIRM_REQ = 40
+    // Note: value 41 also used by OPCODE_INSULIN_STATUS_REQ on CURRENT_STATUS
+    // characteristic. No conflict because opcodes are disambiguated by characteristic UUID.
+    const val OPCODE_JPAKE_4_KEY_CONFIRM_RESP = 41
+
     // -- Post-auth baseline opcodes ----------------------------------------
+    // Note: opcode 32/33 overlap with JPAKE_1A but are on CURRENT_STATUS characteristic,
+    // not AUTHORIZATION. The pump disambiguates by characteristic.
 
     const val OPCODE_API_VERSION_REQ = 32
     const val OPCODE_API_VERSION_RESP = 33

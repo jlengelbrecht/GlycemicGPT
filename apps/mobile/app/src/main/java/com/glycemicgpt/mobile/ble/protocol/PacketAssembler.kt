@@ -17,7 +17,7 @@ class PacketAssembler {
     fun feed(notification: ByteArray): Boolean {
         if (notification.size < 2) return false
 
-        val packetsRemaining = (notification[0].toInt() and 0xF0) shr 4
+        val packetsRemaining = notification[0].toInt() and 0x0F
         val txId = notification[1].toInt() and 0xFF
 
         if (expectedTxId == null) {

@@ -19,8 +19,11 @@
 # OkHttp
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.conscrypt.**
--dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# BouncyCastle (used for EC-JPAKE authentication)
+-keep class org.bouncycastle.** { *; }
+-dontwarn org.bouncycastle.**
 
 # Retrofit
 -keepattributes Signature

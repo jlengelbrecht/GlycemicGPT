@@ -25,6 +25,7 @@ turbine = "1.2.0"
 wear-compose = "1.4.0"
 wear-watchface = "1.2.1"
 play-services-wearable = "18.2.0"
+bouncycastle = "1.78.1"
 
 [libraries]
 # AndroidX Core
@@ -91,6 +92,9 @@ wear-watchface = { group = "androidx.wear.watchface", name = "watchface", versio
 wear-watchface-style = { group = "androidx.wear.watchface", name = "watchface-style", version.ref = "wear-watchface" }
 wear-complications-data-source-ktx = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wear-watchface" }
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "play-services-wearable" }
+
+# Cryptography
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -9,10 +9,10 @@ package com.glycemicgpt.mobile.ble.protocol
  *   byte 1   : transaction ID
  *   byte 2   : cargo length
  *   bytes 3+ : cargo
- *   trailer  : 2-byte CRC16
+ *   trailer  : 2-byte CRC16 (little-endian)
  *
  * Each BLE write is a chunk:
- *   byte 0 : packets remaining (high nibble = remaining, low nibble = 0)
+ *   byte 0 : packets remaining in lower nibble (upper nibble = 0)
  *   byte 1 : transaction ID
  *   bytes 2+ : chunk payload
  */
@@ -29,7 +29,7 @@ object Packetize {
         raw[2] = cargo.size.toByte()
         cargo.copyInto(raw, 3)
 
-        // CRC over opcode + txId + length + cargo
+        // CRC over opcode + txId + length + cargo (little-endian output)
         val crc = Crc16.compute(raw, 0, 3 + cargo.size)
         val crcBytes = Crc16.toBytes(crc)
         crcBytes.copyInto(raw, 3 + cargo.size)
@@ -47,7 +47,8 @@ object Packetize {
             val packetsRemaining = totalChunks - chunkIndex - 1
 
             val chunk = ByteArray(2 + thisChunkPayload)
-            chunk[0] = (packetsRemaining shl 4).toByte()
+            // Remaining count goes in the LOWER nibble (Tandem protocol)
+            chunk[0] = (packetsRemaining and 0x0F).toByte()
             chunk[1] = txId.toByte()
             raw.copyInto(chunk, 2, offset, offset + thisChunkPayload)
 
@@ -70,10 +71,10 @@ object Packetize {
         val cargoLen = raw[2].toInt() and 0xFF
         if (raw.size < 3 + cargoLen + 2) return null
 
-        // Verify CRC
+        // Verify CRC (little-endian: low byte first, high byte second)
         val expectedCrc = Crc16.compute(raw, 0, 3 + cargoLen)
-        val actualCrc = ((raw[3 + cargoLen].toInt() and 0xFF) shl 8) or
-            (raw[3 + cargoLen + 1].toInt() and 0xFF)
+        val actualCrc = (raw[3 + cargoLen].toInt() and 0xFF) or
+            ((raw[3 + cargoLen + 1].toInt() and 0xFF) shl 8)
         if (expectedCrc != actualCrc) return null
 
         val cargo = raw.copyOfRange(3, 3 + cargoLen)
