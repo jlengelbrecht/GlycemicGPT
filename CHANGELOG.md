@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.84](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.83...v0.1.84) (2026-02-14)
+
+
+### ✨ Features
+
+* implement caregiver and emergency contact push notifications (Story 16.11) ([#192](https://github.com/jlengelbrecht/GlycemicGPT/issues/192)) ([78dfa10](https://github.com/jlengelbrecht/GlycemicGPT/commit/78dfa104d6f3b264ca9c2e1c0870636f881a2592))
+
 ## [0.1.83](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.82...v0.1.83) (2026-02-13)
 
 
