@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.88](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.87...v0.1.88) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* correct BLE authentication protocol to match Tandem pump spec ([#200](https://github.com/jlengelbrecht/GlycemicGPT/issues/200)) ([9c8fb40](https://github.com/jlengelbrecht/GlycemicGPT/commit/9c8fb40d5c77d7132de107957259cd2752b29c25))
+
 ## [0.1.87](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.86...v0.1.87) (2026-02-14)
 
 
