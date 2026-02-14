@@ -1,5 +1,10 @@
 package com.glycemicgpt.mobile.presentation.pairing
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,10 +38,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.DiscoveredPump
@@ -244,6 +254,16 @@ private fun PairingCodeInput(
     }
 }
 
+private fun requiredBlePermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
+    } else {
+        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
 @Composable
 private fun ScanSection(
     pumps: List<DiscoveredPump>,
@@ -252,6 +272,27 @@ private fun ScanSection(
     onStopScan: () -> Unit,
     onSelectPump: (DiscoveredPump) -> Unit,
 ) {
+    val context = LocalContext.current
+    var permissionDenied by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { results ->
+        val allGranted = results.values.all { it }
+        if (allGranted) {
+            permissionDenied = false
+            onStartScan()
+        } else {
+            permissionDenied = true
+        }
+    }
+
+    fun hasPermissions(): Boolean {
+        return requiredBlePermissions().all { perm ->
+            ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
     Text(
         text = "Scan for nearby Tandem pumps. Make sure Bluetooth is enabled " +
             "and your pump is in pairing mode.",
@@ -260,8 +301,45 @@ private fun ScanSection(
     )
     Spacer(modifier = Modifier.height(16.dp))
 
+    if (permissionDenied) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+            ),
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Bluetooth permissions required",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "GlycemicGPT needs Bluetooth permissions to scan for and " +
+                        "connect to your Tandem pump. Please grant the permissions " +
+                        "when prompted, or enable them in your device settings.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+
     Button(
-        onClick = if (isScanning) onStopScan else onStartScan,
+        onClick = if (isScanning) {
+            onStopScan
+        } else {
+            {
+                if (hasPermissions()) {
+                    permissionDenied = false
+                    onStartScan()
+                } else {
+                    permissionLauncher.launch(requiredBlePermissions())
+                }
+            }
+        },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Icon(
