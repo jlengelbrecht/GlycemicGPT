@@ -115,6 +115,8 @@ object TandemProtocol {
     const val OPCODE_JPAKE_3_SESSION_KEY_REQ = 38
     const val OPCODE_JPAKE_3_SESSION_KEY_RESP = 39
     const val OPCODE_JPAKE_4_KEY_CONFIRM_REQ = 40
+    // Note: value 41 also used by OPCODE_INSULIN_STATUS_REQ on CURRENT_STATUS
+    // characteristic. No conflict because opcodes are disambiguated by characteristic UUID.
     const val OPCODE_JPAKE_4_KEY_CONFIRM_RESP = 41
 
     // -- Post-auth baseline opcodes ----------------------------------------

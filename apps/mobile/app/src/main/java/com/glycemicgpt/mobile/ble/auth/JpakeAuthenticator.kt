@@ -63,10 +63,16 @@ class JpakeAuthenticator @Inject constructor() {
     fun reset() {
         _step.value = JpakeStep.IDLE
         cli = null
+        // Zero sensitive crypto material before releasing references
+        clientRound1?.fill(0)
         clientRound1 = null
+        serverRound1PartA?.fill(0)
         serverRound1PartA = null
+        derivedSecret?.fill(0)
         derivedSecret = null
+        serverNonce3?.fill(0)
         serverNonce3 = null
+        clientNonce4?.fill(0)
         clientNonce4 = null
     }
 
@@ -330,18 +336,10 @@ class JpakeAuthenticator @Inject constructor() {
     }
 
     /**
-     * Convert pairing code string to bytes matching pumpX2's charCode() method.
-     * Each digit char is mapped to its ASCII byte value (e.g., '0' -> 48).
+     * Convert pairing code string to ASCII bytes matching pumpX2's charCode().
      */
     private fun pairingCodeToBytes(code: String): ByteArray {
-        return ByteArray(code.length) { i ->
-            val c = code[i]
-            if (c in '0'..'9') {
-                (48 + (c - '0')).toByte()
-            } else {
-                c.code.toByte()
-            }
-        }
+        return code.toByteArray(Charsets.US_ASCII)
     }
 
     private fun putShortLE(buf: ByteArray, offset: Int, value: Int) {

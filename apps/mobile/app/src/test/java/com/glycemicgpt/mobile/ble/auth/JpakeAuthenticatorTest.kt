@@ -153,14 +153,25 @@ class JpakeAuthenticatorTest {
         assertTrue(chunks4.isNotEmpty())
         assertEquals(JpakeAuthenticator.JpakeStep.CONFIRM_4_SENT, authenticator.step.value)
 
-        // Decode client key confirmation to verify the HMAC
+        // Decode client key confirmation and verify the client's HMAC from server's perspective
         val raw4 = reassembleChunks(chunks4)
         val parsed4 = Packetize.parseHeader(raw4)!!
         assertEquals(TandemProtocol.OPCODE_JPAKE_4_KEY_CONFIRM_REQ, parsed4.first)
 
-        // Server computes its own HMAC for verification
-        val serverNonce4 = ByteArray(8).also { SecureRandom().nextBytes(it) }
+        val clientCargo4 = parsed4.third
+        val clientNonce4 = clientCargo4.copyOfRange(2, 10)
+        val clientHashDigest = clientCargo4.copyOfRange(18, 50)
+
+        // Server verifies client's HMAC (same key derivation, client's nonce as data)
         val hkdfKey = Hkdf.build(serverNonce3, serverDerivedSecret)
+        val expectedClientHash = HmacSha256Util.hmacSha256(clientNonce4, hkdfKey)
+        assertTrue(
+            "Server should accept client's key confirmation HMAC",
+            clientHashDigest.contentEquals(expectedClientHash),
+        )
+
+        // Server computes its own HMAC for the response
+        val serverNonce4 = ByteArray(8).also { SecureRandom().nextBytes(it) }
         val serverHashDigest = HmacSha256Util.hmacSha256(serverNonce4, hkdfKey)
 
         // Server response: appInstanceId(2) + nonce(8) + reserved(8) + hashDigest(32)

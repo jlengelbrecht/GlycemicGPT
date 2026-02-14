@@ -1,7 +1,6 @@
 package com.glycemicgpt.mobile.ble.crypto
 
 import org.bouncycastle.jce.ECNamedCurveTable
-import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.jce.spec.ECParameterSpec
 import org.bouncycastle.math.ec.ECPoint
 import org.bouncycastle.util.BigIntegers
@@ -12,7 +11,6 @@ import java.io.OutputStream
 import java.math.BigInteger
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.security.Security
 
 /**
  * EC-JPAKE protocol implementation based on the Thread specification.
@@ -200,8 +198,11 @@ class EcJpake(
     }
 
     private fun writeNum(out: OutputStream, value: BigInteger) {
-        val encoded = BigIntegers.asUnsignedByteArray(value)
-        check(encoded.size <= 255) { "Encoded BigInteger too long" }
+        // Use fixed-length encoding (32 bytes for P-256 scalars) to ensure
+        // round 1 is always exactly 330 bytes and round 2 is always 165 bytes.
+        // Without this, BigIntegers.asUnsignedByteArray strips leading zeros,
+        // causing rare (~1.6%) ArrayIndexOutOfBoundsException on split offsets.
+        val encoded = BigIntegers.asUnsignedByteArray(SCALAR_LEN, value)
         writeUint8(out, encoded.size)
         out.write(encoded)
     }
@@ -243,14 +244,13 @@ class EcJpake(
         private val CLIENT_ID = "client".toByteArray()
         private val SERVER_ID = "server".toByteArray()
         private const val ENCODED_COMPRESSED = false
+        /** Fixed scalar length for P-256 (order n is 256 bits = 32 bytes). */
+        private const val SCALAR_LEN = 32
 
-        init {
-            // Replace Android's built-in BouncyCastle with the full version
-            if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) != null) {
-                Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
-            }
-            Security.addProvider(BouncyCastleProvider())
-        }
+        // No global JCE provider manipulation needed. ECNamedCurveTable and
+        // EC point arithmetic use the BouncyCastle jar directly (not through
+        // the JCE provider framework), so adding/removing the BC provider
+        // is unnecessary and would risk disrupting Tink/EncryptedSharedPreferences.
 
         private fun readUint8(input: InputStream): Int {
             val b = input.read()

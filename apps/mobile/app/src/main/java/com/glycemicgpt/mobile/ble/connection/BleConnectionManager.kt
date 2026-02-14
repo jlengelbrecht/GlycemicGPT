@@ -88,6 +88,11 @@ class BleConnectionManager @Inject constructor(
     // Pending status read requests: txId -> deferred response cargo
     private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<ByteArray>>()
 
+    // Handshake timeout: fail if authentication doesn't complete within this window.
+    // JPAKE has 5 round trips; 30s is generous even on slow BLE connections.
+    private var authTimeoutJob: Job? = null
+    private val AUTH_TIMEOUT_MS = 30_000L
+
     private sealed class GattOperation {
         data class WriteCharacteristic(
             val characteristicUuid: UUID,
@@ -134,6 +139,8 @@ class BleConnectionManager @Inject constructor(
         autoReconnect = false
         reconnectJob?.cancel()
         reconnectJob = null
+        authTimeoutJob?.cancel()
+        authTimeoutJob = null
         operationQueue.clear()
         operationInFlight.set(false)
         cancelPendingRequests()
@@ -474,6 +481,16 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
+        // Start handshake timeout -- fail if auth doesn't complete in time
+        authTimeoutJob?.cancel()
+        authTimeoutJob = scope.launch {
+            delay(AUTH_TIMEOUT_MS)
+            if (_connectionState.value == ConnectionState.AUTHENTICATING) {
+                Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
+                _connectionState.value = ConnectionState.AUTH_FAILED
+            }
+        }
+
         // Use JPAKE auth for 6-digit codes (firmware v7.7+), V1 for 16-char codes
         if (code.length <= 10) {
             Timber.d("Starting JPAKE authentication (code length=%d)", code.length)
@@ -487,6 +504,8 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun onAuthSuccess() {
+        authTimeoutJob?.cancel()
+        authTimeoutJob = null
         _connectionState.value = ConnectionState.CONNECTED
         reconnectAttempt = 0
         // Save credentials on first successful pairing
