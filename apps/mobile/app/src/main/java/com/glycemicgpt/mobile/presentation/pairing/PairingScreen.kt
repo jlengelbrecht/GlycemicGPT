@@ -97,6 +97,19 @@ fun PairingScreen(
                 ConnectingCard(connectionState)
             }
 
+            // Auth failed -- show error with retry option
+            connectionState == ConnectionState.AUTH_FAILED && selectedPump != null -> {
+                AuthFailedCard(onRetry = { viewModel.pair() })
+                Spacer(modifier = Modifier.height(16.dp))
+                PairingCodeInput(
+                    pump = selectedPump!!,
+                    pairingCode = pairingCode,
+                    onCodeChanged = { viewModel.updatePairingCode(it) },
+                    onPair = { viewModel.pair() },
+                    onCancel = { viewModel.clearSelection() },
+                )
+            }
+
             // Pump selected, show pairing code input
             selectedPump != null -> {
                 PairingCodeInput(
@@ -167,6 +180,31 @@ private fun PairedStatusCard(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Unpair")
             }
+        }
+    }
+}
+
+@Composable
+private fun AuthFailedCard(onRetry: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Pairing failed",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "The pump rejected the pairing attempt. Please verify the " +
+                    "code matches what is displayed on your pump screen and try again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
         }
     }
 }

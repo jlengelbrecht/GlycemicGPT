@@ -488,12 +488,15 @@ class BleConnectionManager @Inject constructor(
             TandemProtocol.OPCODE_CENTRAL_CHALLENGE_RESP -> {
                 val code = pendingPairingCode ?: credentialStore.getPairingCode() ?: run {
                     Timber.e("No pairing code available for challenge response")
-                    _connectionState.value = ConnectionState.DISCONNECTED
+                    _connectionState.value = ConnectionState.AUTH_FAILED
                     return
                 }
                 val chunks = authenticator.processChallengeResponse(cargo, code, nextTxId())
                 if (chunks != null) {
                     enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+                } else {
+                    Timber.e("Auth: failed to build PumpChallengeRequest (bad state or response)")
+                    _connectionState.value = ConnectionState.AUTH_FAILED
                 }
             }
             TandemProtocol.OPCODE_PUMP_CHALLENGE_RESP -> {
@@ -510,9 +513,12 @@ class BleConnectionManager @Inject constructor(
                     }
                     Timber.d("Pump authenticated and connected")
                 } else {
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    Timber.e("Pump authentication failed")
+                    Timber.e("Pump authentication rejected by pump")
+                    _connectionState.value = ConnectionState.AUTH_FAILED
                 }
+            }
+            else -> {
+                Timber.w("Auth: unexpected opcode %d in auth notification", opcode)
             }
         }
     }

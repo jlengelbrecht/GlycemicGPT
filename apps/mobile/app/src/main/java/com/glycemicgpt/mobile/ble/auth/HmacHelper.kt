@@ -24,10 +24,10 @@ object HmacHelper {
     }
 
     /**
-     * Build the HMAC response for the Tandem legacy auth challenge.
+     * Build the HMAC response for the Tandem auth challenge.
      *
-     * @param pairingCode 16-character pairing code (ASCII bytes used as key)
-     * @param challengeKey Challenge bytes from the pump's CentralChallengeResponse
+     * @param pairingCode Pairing code from pump screen (ASCII bytes used as HMAC key)
+     * @param challengeKey 8-byte HMAC key from bytes 22-29 of CentralChallengeResponse
      */
     fun buildChallengeResponse(pairingCode: String, challengeKey: ByteArray): ByteArray {
         val keyBytes = pairingCode.toByteArray(Charsets.US_ASCII)
