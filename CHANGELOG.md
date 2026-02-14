@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.87](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.86...v0.1.87) (2026-02-14)
+
+
+### 🐛 Bug Fixes
+
+* add BLE runtime permission requests to prevent pump scan crash ([#198](https://github.com/jlengelbrecht/GlycemicGPT/issues/198)) ([bbc00cd](https://github.com/jlengelbrecht/GlycemicGPT/commit/bbc00cdc5b32444782a0ba1fce1dbbb635b7da52))
+
 ## [0.1.86](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.85...v0.1.86) (2026-02-14)
 
 
