@@ -226,6 +226,11 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
             "Scanning...",
             MaterialTheme.colorScheme.tertiary,
         )
+        ConnectionState.AUTH_FAILED -> Triple(
+            Icons.Default.BluetoothDisabled,
+            "Pairing failed",
+            MaterialTheme.colorScheme.error,
+        )
         ConnectionState.DISCONNECTED -> Triple(
             Icons.Default.BluetoothDisabled,
             "No pump connected",

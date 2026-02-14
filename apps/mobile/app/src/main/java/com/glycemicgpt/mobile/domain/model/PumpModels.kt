@@ -87,6 +87,7 @@ enum class ConnectionState {
     SCANNING,
     CONNECTING,
     AUTHENTICATING,
+    AUTH_FAILED,
     CONNECTED,
     RECONNECTING,
 }
