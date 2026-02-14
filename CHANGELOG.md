@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.85](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.84...v0.1.85) (2026-02-14)
+
+
+### ✨ Features
+
+* add security hardening with token refresh, rate limiting, and TLS (Story 16.12) ([#194](https://github.com/jlengelbrecht/GlycemicGPT/issues/194)) ([4c6e15e](https://github.com/jlengelbrecht/GlycemicGPT/commit/4c6e15e90f455f0a9be82a1ba8cff56e8c546672))
+
 ## [0.1.84](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.83...v0.1.84) (2026-02-14)
 
 
