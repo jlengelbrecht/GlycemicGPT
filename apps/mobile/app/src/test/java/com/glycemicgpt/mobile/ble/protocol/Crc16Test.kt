@@ -26,9 +26,9 @@ class Crc16Test {
     }
 
     @Test
-    fun `toBytes produces big-endian byte pair`() {
+    fun `toBytes produces little-endian byte pair`() {
         val bytes = Crc16.toBytes(0x29B1)
-        assertArrayEquals(byteArrayOf(0x29, 0xB1.toByte()), bytes)
+        assertArrayEquals(byteArrayOf(0xB1.toByte(), 0x29), bytes)
     }
 
     @Test

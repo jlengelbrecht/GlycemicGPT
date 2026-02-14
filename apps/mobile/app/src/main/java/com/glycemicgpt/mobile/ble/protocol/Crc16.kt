@@ -24,8 +24,9 @@ object Crc16 {
         return crc
     }
 
+    /** Convert CRC to 2 bytes in little-endian order (matching Tandem protocol). */
     fun toBytes(crc: Int): ByteArray = byteArrayOf(
-        ((crc shr 8) and 0xFF).toByte(),
         (crc and 0xFF).toByte(),
+        ((crc shr 8) and 0xFF).toByte(),
     )
 }
