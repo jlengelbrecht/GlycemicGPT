@@ -5,11 +5,13 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 
 from src.config import settings
 from src.database import close_database
 from src.logging_config import get_logger, setup_logging
 from src.middleware import CorrelationIdMiddleware
+from src.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from src.routers import (
     ai,
     alert_api,
@@ -73,6 +75,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Rate limiting (Story 16.12)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Middleware (order matters: first added = last executed)
 # Add CORS middleware

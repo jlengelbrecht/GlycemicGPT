@@ -61,12 +61,19 @@ class CorrelationIdMiddleware:
         client = scope.get("client")
         client_ip = client[0] if client else None
 
+        # Extract User-Agent for audit logging
+        user_agent = headers.get(b"user-agent", b"").decode() or None
+
+        # Extract request content-length from headers
+        req_content_length = headers.get(b"content-length", b"").decode() or None
+
         # Log request start
         logger.info(
             "Request started",
             method=method,
             path=path,
             client_ip=client_ip,
+            user_agent=user_agent,
         )
 
         async def send_wrapper(message: Message) -> None:
@@ -95,6 +102,7 @@ class CorrelationIdMiddleware:
                 path=path,
                 status_code=status_code,
                 duration_ms=round(duration_ms, 2),
+                content_length=req_content_length,
             )
         except Exception:
             duration_ms = (time.perf_counter() - start_time) * 1000

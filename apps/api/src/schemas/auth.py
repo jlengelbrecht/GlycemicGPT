@@ -110,7 +110,14 @@ class TokenResponse(BaseModel):
 class MobileLoginResponse(TokenResponse):
     """Response schema for mobile login (returns JWT in body instead of cookie)."""
 
+    refresh_token: str = Field(..., description="JWT refresh token for token renewal")
     user: UserResponse = Field(..., description="Authenticated user details")
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request schema for mobile token refresh."""
+
+    refresh_token: str = Field(..., description="The refresh token to exchange")
 
 
 # ============================================================================

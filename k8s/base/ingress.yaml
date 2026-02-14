@@ -17,6 +17,13 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     # Enable websocket/SSE support
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # TLS via cert-manager (Story 16.12)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Force HTTPS and enable HSTS
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
     # traefik annotations (if using traefik)
     traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
 spec:
@@ -62,8 +69,7 @@ spec:
                 name: glycemicgpt-web
                 port:
                   number: 3000
-  # TLS configuration (uncomment and configure for HTTPS)
-  # tls:
-  #   - hosts:
-  #       - glycemicgpt.local
-  #     secretName: glycemicgpt-tls
+  tls:
+    - hosts:
+        - glycemicgpt.local  # Change to your domain
+      secretName: glycemicgpt-tls

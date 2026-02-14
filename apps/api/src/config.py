@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # Session
     session_expire_hours: int = 24
+    # Mobile token lifetimes (Story 16.12)
+    access_token_expire_minutes: int = 60  # 1 hour for mobile access tokens
+    refresh_token_expire_days: int = 30  # 30 days for mobile refresh tokens
     cookie_secure: bool = (
         True  # Set to False for plain HTTP (e.g. Docker integration tests)
     )

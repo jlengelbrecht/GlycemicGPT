@@ -1,0 +1,162 @@
+"""Story 16.12: Tests for mobile token refresh endpoint."""
+
+import uuid
+
+from httpx import ASGITransport, AsyncClient
+
+from src.core.security import create_refresh_token, decode_refresh_token
+from src.main import app
+
+
+def _email() -> str:
+    return f"refresh_{uuid.uuid4().hex[:8]}@test.com"
+
+
+async def _register_and_mobile_login(
+    client: AsyncClient, email: str, password: str = "TestPass1"
+) -> dict:
+    """Register a user and return the full mobile login response."""
+    await client.post(
+        "/api/auth/register",
+        json={"email": email, "password": password},
+    )
+    resp = await client.post(
+        "/api/auth/mobile/login",
+        json={"email": email, "password": password},
+    )
+    assert resp.status_code == 200
+    return resp.json()
+
+
+class TestMobileLoginRefreshToken:
+    async def test_mobile_login_returns_refresh_token(self):
+        email = _email()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            body = await _register_and_mobile_login(c, email)
+
+        assert "refresh_token" in body
+        assert "access_token" in body
+        assert body["token_type"] == "bearer"
+        assert body["expires_in"] == 3600  # 60 minutes
+
+    async def test_refresh_token_is_valid_jwt(self):
+        email = _email()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            body = await _register_and_mobile_login(c, email)
+
+        payload = decode_refresh_token(body["refresh_token"])
+        assert payload is not None
+        assert payload["type"] == "refresh"
+        assert payload["email"] == email
+
+
+class TestMobileRefreshEndpoint:
+    async def test_refresh_returns_new_tokens(self):
+        email = _email()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            login_body = await _register_and_mobile_login(c, email)
+
+            resp = await c.post(
+                "/api/auth/mobile/refresh",
+                json={"refresh_token": login_body["refresh_token"]},
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "access_token" in body
+        assert "refresh_token" in body
+        assert body["user"]["email"] == email
+        assert body["expires_in"] == 3600
+
+    async def test_new_access_token_works(self):
+        email = _email()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            login_body = await _register_and_mobile_login(c, email)
+
+            refresh_resp = await c.post(
+                "/api/auth/mobile/refresh",
+                json={"refresh_token": login_body["refresh_token"]},
+            )
+            new_token = refresh_resp.json()["access_token"]
+
+            me_resp = await c.get(
+                "/api/auth/me",
+                headers={"Authorization": f"Bearer {new_token}"},
+            )
+        assert me_resp.status_code == 200
+        assert me_resp.json()["email"] == email
+
+    async def test_invalid_refresh_token_returns_401(self):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/auth/mobile/refresh",
+                json={"refresh_token": "invalid.token.here"},
+            )
+        assert resp.status_code == 401
+
+    async def test_access_token_used_as_refresh_returns_401(self):
+        email = _email()
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            login_body = await _register_and_mobile_login(c, email)
+
+            resp = await c.post(
+                "/api/auth/mobile/refresh",
+                json={"refresh_token": login_body["access_token"]},
+            )
+        assert resp.status_code == 401
+
+    async def test_expired_refresh_token_returns_401(self):
+        from datetime import timedelta
+
+        # Create an already-expired refresh token
+        fake_user_id = uuid.uuid4()
+        expired_token = create_refresh_token(
+            user_id=fake_user_id,
+            email="expired@test.com",
+            role="diabetic",
+            expires_delta=timedelta(seconds=-1),
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            resp = await c.post(
+                "/api/auth/mobile/refresh",
+                json={"refresh_token": expired_token},
+            )
+        assert resp.status_code == 401
+
+
+class TestRefreshTokenFunctions:
+    def test_create_and_decode_refresh_token(self):
+        user_id = uuid.uuid4()
+        token = create_refresh_token(user_id, "test@example.com", "diabetic")
+        payload = decode_refresh_token(token)
+        assert payload is not None
+        assert payload["sub"] == str(user_id)
+        assert payload["email"] == "test@example.com"
+        assert payload["role"] == "diabetic"
+        assert payload["type"] == "refresh"
+
+    def test_decode_access_token_as_refresh_returns_none(self):
+        from src.core.security import create_access_token
+
+        user_id = uuid.uuid4()
+        access_token = create_access_token(user_id, "test@example.com", "diabetic")
+        result = decode_refresh_token(access_token)
+        assert result is None
+
+    def test_decode_garbage_returns_none(self):
+        result = decode_refresh_token("not.a.valid.jwt")
+        assert result is None

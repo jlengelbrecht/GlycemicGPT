@@ -147,6 +147,69 @@ def decode_access_token(token: str) -> dict | None:
         return None
 
 
+def create_refresh_token(
+    user_id: uuid.UUID,
+    email: str,
+    role: str,
+    expires_delta: timedelta | None = None,
+) -> str:
+    """Create a JWT refresh token (longer-lived, for mobile token renewal).
+
+    Args:
+        user_id: User's unique identifier
+        email: User's email address
+        role: User's role
+        expires_delta: Optional custom expiration time
+
+    Returns:
+        Encoded JWT refresh token string
+    """
+    if expires_delta is None:
+        expires_delta = timedelta(days=settings.refresh_token_expire_days)
+
+    expire = datetime.now(UTC) + expires_delta
+
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "role": role,
+        "exp": expire,
+        "iat": datetime.now(UTC),
+        "type": "refresh",
+    }
+
+    return jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def decode_refresh_token(token: str) -> dict | None:
+    """Decode and validate a JWT refresh token.
+
+    Args:
+        token: The JWT token string to decode
+
+    Returns:
+        Token payload dict if valid, None if invalid or expired
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.jwt_algorithm],
+        )
+
+        if payload.get("type") != "refresh":
+            return None
+
+        return payload
+
+    except JWTError:
+        return None
+
+
 class TokenData:
     """Parsed token data for type safety."""
 
