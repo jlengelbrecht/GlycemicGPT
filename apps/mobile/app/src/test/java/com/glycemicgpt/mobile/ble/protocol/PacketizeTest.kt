@@ -17,8 +17,8 @@ class PacketizeTest {
             chunkSize = 40,
         )
         assertEquals(1, chunks.size)
-        // First byte: packets remaining = 0
-        assertEquals(0, chunks[0][0].toInt() and 0xF0)
+        // First byte: packets remaining = 0 (lower nibble)
+        assertEquals(0, chunks[0][0].toInt() and 0x0F)
         // Second byte: txId = 1
         assertEquals(1, chunks[0][1].toInt() and 0xFF)
     }
@@ -53,14 +53,14 @@ class PacketizeTest {
         val chunks = Packetize.encode(0x01, 0, cargo, 6)
         assertEquals(4, chunks.size)
 
-        // Last chunk should have packets-remaining = 0
+        // Last chunk should have packets-remaining = 0 (lower nibble)
         val lastChunk = chunks.last()
-        assertEquals(0, (lastChunk[0].toInt() and 0xF0) shr 4)
+        assertEquals(0, lastChunk[0].toInt() and 0x0F)
 
         // Verify packets-remaining counts down correctly: 3, 2, 1, 0
         for (i in chunks.indices) {
             val expected = chunks.size - i - 1
-            val actual = (chunks[i][0].toInt() and 0xF0) shr 4
+            val actual = chunks[i][0].toInt() and 0x0F
             assertEquals("Chunk $i packets-remaining", expected, actual)
         }
     }
