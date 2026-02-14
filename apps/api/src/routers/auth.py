@@ -3,7 +3,8 @@
 API endpoints for user registration, login, logout, and authentication.
 """
 
-from datetime import UTC, datetime
+import uuid as uuid_mod
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -12,9 +13,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.core.auth import CurrentUser
-from src.core.security import create_access_token, hash_password, verify_password
+from src.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    hash_password,
+    verify_password,
+)
 from src.database import get_db
 from src.logging_config import get_logger
+from src.middleware.rate_limit import limiter
 from src.models.user import User, UserRole
 from src.schemas.auth import (
     ErrorResponse,
@@ -24,6 +32,7 @@ from src.schemas.auth import (
     MobileLoginResponse,
     PasswordChangeRequest,
     ProfileUpdateRequest,
+    RefreshTokenRequest,
     UserRegistrationRequest,
     UserRegistrationResponse,
     UserResponse,
@@ -133,41 +142,30 @@ async def register_user(
         401: {"model": ErrorResponse, "description": "Invalid credentials"},
     },
 )
+@limiter.limit("10/minute")
 async def login(
-    request: LoginRequest,
+    body: LoginRequest,
     response: Response,
-    http_request: Request,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
     """Authenticate a user and create a session.
 
     Validates credentials and returns a JWT token in an httpOnly cookie.
     The token expires after the configured session duration (default 24 hours).
-
-    Args:
-        request: Login request with email and password
-        response: FastAPI response object for setting cookies
-        http_request: HTTP request for logging client info
-        db: Database session
-
-    Returns:
-        LoginResponse with user details and session info
-
-    Raises:
-        HTTPException 401: If credentials are invalid
     """
     # Get client IP for logging
-    client_ip = http_request.client.host if http_request.client else "unknown"
+    client_ip = request.client.host if request.client else "unknown"
 
     # Find user by email (case-insensitive)
-    result = await db.execute(select(User).where(User.email == request.email.lower()))
+    result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
 
     # Check if user exists and password is correct
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not user or not verify_password(body.password, user.hashed_password):
         logger.warning(
             "Failed login attempt",
-            email=request.email,
+            email=body.email,
             client_ip=client_ip,
             reason="invalid_credentials",
         )
@@ -180,7 +178,7 @@ async def login(
     if not user.is_active:
         logger.warning(
             "Failed login attempt",
-            email=request.email,
+            email=body.email,
             client_ip=client_ip,
             reason="account_disabled",
         )
@@ -233,9 +231,10 @@ async def login(
         401: {"model": ErrorResponse, "description": "Invalid credentials"},
     },
 )
+@limiter.limit("10/minute")
 async def mobile_login(
-    request: LoginRequest,
-    http_request: Request,
+    body: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> MobileLoginResponse:
     """Authenticate a mobile client and return a JWT in the response body.
@@ -243,15 +242,15 @@ async def mobile_login(
     Identical logic to the web login, but returns the token directly
     instead of setting an httpOnly cookie.
     """
-    client_ip = http_request.client.host if http_request.client else "unknown"
+    client_ip = request.client.host if request.client else "unknown"
 
-    result = await db.execute(select(User).where(User.email == request.email.lower()))
+    result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not user or not verify_password(body.password, user.hashed_password):
         logger.warning(
             "Failed mobile login attempt",
-            email=request.email,
+            email=body.email,
             client_ip=client_ip,
             reason="invalid_credentials",
         )
@@ -263,7 +262,7 @@ async def mobile_login(
     if not user.is_active:
         logger.warning(
             "Failed mobile login attempt",
-            email=request.email,
+            email=body.email,
             client_ip=client_ip,
             reason="account_disabled",
         )
@@ -272,7 +271,13 @@ async def mobile_login(
             detail="Invalid email or password",
         )
 
-    token = create_access_token(
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    refresh_token = create_refresh_token(
         user_id=user.id,
         email=user.email,
         role=user.role.value,
@@ -289,9 +294,89 @@ async def mobile_login(
     )
 
     return MobileLoginResponse(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
-        expires_in=settings.session_expire_hours * 3600,
+        expires_in=settings.access_token_expire_minutes * 60,
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post(
+    "/mobile/refresh",
+    response_model=MobileLoginResponse,
+    responses={
+        200: {"description": "Tokens refreshed successfully"},
+        401: {
+            "model": ErrorResponse,
+            "description": "Invalid or expired refresh token",
+        },
+    },
+)
+@limiter.limit("30/minute")
+async def mobile_refresh(
+    body: RefreshTokenRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> MobileLoginResponse:
+    """Exchange a valid refresh token for new access + refresh tokens.
+
+    Implements token rotation: each refresh invalidates the old refresh token
+    by issuing a new one.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+
+    payload = decode_refresh_token(body.refresh_token)
+    if payload is None:
+        logger.warning(
+            "Invalid refresh token attempt",
+            client_ip=client_ip,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # Look up the user to ensure they still exist and are active
+    user_id = uuid_mod.UUID(payload["sub"])
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        logger.warning(
+            "Refresh token for invalid/inactive user",
+            user_id=payload["sub"],
+            client_ip=client_ip,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    # Issue new token pair (rotation)
+    new_access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+        expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    new_refresh_token = create_refresh_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+    )
+
+    logger.info(
+        "Mobile token refreshed",
+        user_id=str(user.id),
+        client_ip=client_ip,
+    )
+
+    return MobileLoginResponse(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        token_type="bearer",
+        expires_in=settings.access_token_expire_minutes * 60,
         user=UserResponse.model_validate(user),
     )
 

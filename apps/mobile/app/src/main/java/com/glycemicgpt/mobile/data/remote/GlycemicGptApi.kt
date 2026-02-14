@@ -11,6 +11,7 @@ import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
 import com.glycemicgpt.mobile.data.remote.dto.PumpPushRequest
 import com.glycemicgpt.mobile.data.remote.dto.PumpPushResponse
+import com.glycemicgpt.mobile.data.remote.dto.RefreshTokenRequest
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadSettingsRequest
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadStatus
 import com.glycemicgpt.mobile.data.remote.dto.TandemUploadTriggerResponse
@@ -32,6 +33,9 @@ interface GlycemicGptApi {
 
     @POST("/api/auth/mobile/login")
     suspend fun login(@Body request: LoginRequest): Response<LoginResponse>
+
+    @POST("/api/auth/mobile/refresh")
+    suspend fun refreshToken(@Body request: RefreshTokenRequest): Response<LoginResponse>
 
     @POST("/api/integrations/pump/push")
     suspend fun pushPumpEvents(@Body request: PumpPushRequest): Response<PumpPushResponse>

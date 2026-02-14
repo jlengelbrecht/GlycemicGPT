@@ -174,6 +174,7 @@ class SettingsViewModelTest {
         coEvery { api.login(any()) } returns Response.success(
             LoginResponse(
                 accessToken = "jwt123",
+                refreshToken = "refresh123",
                 tokenType = "bearer",
                 expiresIn = 3600,
                 user = UserDto(id = "1", email = "user@test.com", role = "user"),
@@ -188,6 +189,7 @@ class SettingsViewModelTest {
         assertFalse(vm.uiState.value.isLoggingIn)
         assertNull(vm.uiState.value.loginError)
         verify { authTokenStore.saveCredentials(any(), "jwt123", any(), "user@test.com") }
+        verify { authTokenStore.saveRefreshToken("refresh123") }
     }
 
     @Test
