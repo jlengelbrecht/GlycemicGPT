@@ -92,6 +92,8 @@ class BleConnectionManager @Inject constructor(
     // Pending status read requests: txId -> deferred response cargo
     private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<ByteArray>>()
 
+    // Handshake timeout: fail if authentication doesn't complete within this window.
+    // JPAKE has 5 round trips; 30s is generous even on slow BLE connections.
     private var authTimeoutJob: Job? = null
 
     // Post-auth settle: delayed job that sets CONNECTED after the pump stabilizes.
