@@ -22,7 +22,7 @@ import javax.inject.Singleton
  * Orchestrates periodic polling of pump data and persists results to Room.
  *
  * Poll intervals:
- * - IoB + basal rate: every 30 seconds (AC1)
+ * - IoB + basal rate + CGM: every 15 seconds (keep-alive; pump drops idle connections at ~30s)
  * - Bolus history: every 5 minutes (AC2)
  * - Battery + reservoir: every 15 minutes (AC3)
  *
@@ -122,7 +122,7 @@ class PumpPollingOrchestrator @Inject constructor(
         if (phoneBatteryLow) baseMs * LOW_BATTERY_MULTIPLIER else baseMs
 
     /**
-     * Fast loop: IoB + basal rate + CGM at least every ~30s.
+     * Fast loop: IoB + basal rate + CGM at least every ~15s.
      *
      * Waits [INITIAL_POLL_DELAY_MS] for the connection to stabilize, then
      * staggers requests by [REQUEST_STAGGER_MS] to avoid overwhelming the
@@ -255,7 +255,7 @@ class PumpPollingOrchestrator @Inject constructor(
     }
 
     companion object {
-        const val INTERVAL_FAST_MS = 30_000L       // IoB + basal + CGM
+        const val INTERVAL_FAST_MS = 15_000L       // IoB + basal + CGM (keep-alive: pump drops idle connections at ~30s)
         const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
         const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
 

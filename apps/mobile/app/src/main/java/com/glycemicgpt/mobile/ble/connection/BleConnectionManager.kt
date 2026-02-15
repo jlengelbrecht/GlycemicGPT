@@ -78,6 +78,12 @@ class BleConnectionManager @Inject constructor(
     @Volatile
     private var autoReconnect = true
 
+    // Tracks rapid disconnections after connect (bond loss detection).
+    // If the pump disconnects us multiple times before we ever reach CONNECTED,
+    // it likely means the BLE bond was lost and re-pairing is required.
+    @Volatile
+    private var rapidDisconnectCount = 0
+
     // GATT operation queue -- only one GATT write at a time
     private val operationQueue = ConcurrentLinkedQueue<GattOperation>()
     private val operationInFlight = AtomicBoolean(false)
@@ -121,7 +127,9 @@ class BleConnectionManager @Inject constructor(
 
         val device: BluetoothDevice = adapter.getRemoteDevice(address)
         _connectionState.value = ConnectionState.CONNECTING
+        autoReconnect = true
         reconnectAttempt = 0
+        rapidDisconnectCount = 0
         pendingPairingCode = pairingCode
         authenticator.reset()
         jpakeAuthenticator.reset()
@@ -185,9 +193,9 @@ class BleConnectionManager @Inject constructor(
     /** Attempt auto-reconnect to the previously paired pump. */
     fun autoReconnectIfPaired() {
         val address = credentialStore.getPairedAddress() ?: return
-        val code = credentialStore.getPairingCode()
-        autoReconnect = true
-        connect(address, code)
+        // Pass null for pairingCode -- reconnects rely on BLE bonding, not JPAKE.
+        // connect() sets autoReconnect = true internally.
+        connect(address, pairingCode = null)
     }
 
     /**
@@ -348,7 +356,8 @@ class BleConnectionManager @Inject constructor(
         reconnectJob = scope.launch {
             delay(delayMs)
             if (autoReconnect && _connectionState.value == ConnectionState.RECONNECTING) {
-                connect(address, credentialStore.getPairingCode())
+                // Pass null for pairingCode -- reconnects rely on BLE bonding, not JPAKE
+                connect(address, pairingCode = null)
             }
         }
     }
@@ -374,6 +383,37 @@ class BleConnectionManager @Inject constructor(
                     operationQueue.clear()
                     operationInFlight.set(false)
                     cancelPendingRequests()
+
+                    // Bond-loss detection: if the pump keeps disconnecting us
+                    // before we ever reach CONNECTED (e.g., status 5 or 19),
+                    // the BLE bond is likely lost and re-pairing is needed.
+                    val wasConnected = _connectionState.value == ConnectionState.CONNECTED ||
+                        _connectionState.value == ConnectionState.AUTHENTICATING
+                    if (!wasConnected && status == GATT_CONN_TERMINATE_PEER_USER) {
+                        rapidDisconnectCount++
+                        if (rapidDisconnectCount >= MAX_RAPID_DISCONNECTS) {
+                            Timber.e("Pump rejected %d consecutive connections -- BLE bond likely lost, re-pairing required",
+                                rapidDisconnectCount)
+                            autoReconnect = false
+                            authTimeoutJob?.cancel()
+                            reconnectJob?.cancel()
+                            _connectionState.value = ConnectionState.AUTH_FAILED
+                            return
+                        }
+                    }
+                    // Insufficient authentication before CONNECTED = bond definitely lost.
+                    // During an active session, status 0x05 can be transient (key rotation),
+                    // so only treat it as bond loss if we haven't reached CONNECTED yet.
+                    if (!wasConnected && status == GATT_INSUFFICIENT_AUTHENTICATION) {
+                        Timber.e("Pump reports insufficient authentication -- BLE bond lost, re-pairing required")
+                        autoReconnect = false
+                        rapidDisconnectCount = 0
+                        authTimeoutJob?.cancel()
+                        reconnectJob?.cancel()
+                        _connectionState.value = ConnectionState.AUTH_FAILED
+                        return
+                    }
+
                     _connectionState.value = ConnectionState.DISCONNECTED
                     if (autoReconnect) scheduleReconnect()
                 }
@@ -522,6 +562,23 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun startAuthentication() {
+        // On reconnect (no user-provided code), skip JPAKE entirely.
+        // After initial pairing, the pump bonds at the BLE level and considers
+        // the device authorized. Re-running JPAKE causes the pump to reject us
+        // with status 19 (CONN_TERMINATE_PEER_USER).
+        //
+        // Note: notification enable writes are enqueued in onServicesDiscovered
+        // before this method is called. On reconnect we skip straight to
+        // onAuthSuccess(), which imposes a POST_AUTH_SETTLE_MS delay before
+        // setting CONNECTED. The 6 notification descriptor writes (~50ms each)
+        // complete well within this window.
+        val isReconnect = pendingPairingCode == null && credentialStore.isPaired()
+        if (isReconnect) {
+            Timber.d("Reconnecting to bonded pump, skipping JPAKE (BLE bonding handles auth)")
+            onAuthSuccess()
+            return
+        }
+
         val code = pendingPairingCode ?: credentialStore.getPairingCode()
         if (code == null) {
             Timber.e("No pairing code available for authentication")
@@ -555,6 +612,7 @@ class BleConnectionManager @Inject constructor(
         authTimeoutJob?.cancel()
         authTimeoutJob = null
         reconnectAttempt = 0
+        rapidDisconnectCount = 0
         // Save credentials on first successful pairing
         val address = synchronized(gattLock) { gatt?.device?.address }
         val code = pendingPairingCode
@@ -703,6 +761,13 @@ class BleConnectionManager @Inject constructor(
 
         /** Auth handshake timeout. JPAKE has 5 round trips; 30s is generous. */
         const val AUTH_TIMEOUT_MS = 30_000L
+
+        /** Max consecutive rapid disconnections before declaring bond lost. */
+        const val MAX_RAPID_DISCONNECTS = 3
+
+        // Named GATT status codes used in bond-loss detection
+        private const val GATT_INSUFFICIENT_AUTHENTICATION = 0x05
+        private const val GATT_CONN_TERMINATE_PEER_USER = 0x13
 
         /** Convert a GATT status code to a human-readable name. */
         fun gattStatusName(status: Int): String = when (status) {
