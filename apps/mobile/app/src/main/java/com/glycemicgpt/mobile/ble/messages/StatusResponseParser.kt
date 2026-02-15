@@ -212,7 +212,7 @@ object StatusResponseParser {
     }
 
     /**
-     * Parse PumpSettings response (opcode 91).
+     * Parse PumpSettings response (opcode 83).
      *
      * Cargo layout:
      *   bytes 0-3: firmware version length (Int32 LE), then string bytes
@@ -240,43 +240,52 @@ object StatusResponseParser {
     }
 
     /**
-     * Parse BolusCalcDataSnapshot response (opcode 76).
+     * Parse LastBolusStatusResponse (opcode 49).
      *
-     * Cargo layout: repeated bolus records, each 13 bytes:
-     *   bytes 0-3: units in milliunits (Int32 LE)
-     *   byte 4: flags (bit 0 = automated, bit 1 = correction)
-     *   bytes 5-12: timestamp (Int64 LE, millis since epoch)
+     * Cargo layout (17 bytes, all little-endian unsigned):
+     *   bytes  0- 3: bolusId (uint32 LE)
+     *   bytes  4- 7: timestampSeconds (uint32 LE, seconds since Tandem epoch)
+     *   bytes  8-11: deliveredVolume (uint32 LE, milliunits -- 1000x per unit)
+     *   byte  12:    bolusStatusId (0=UNKNOWN, 2=CANCELED, 3=COMPLETED, 4=ERROR)
+     *   byte  13:    bolusSourceId (0=GUI, 1=AUTO_PILOT, 2=AUTO_POP_UP)
+     *   byte  14:    bolusTypeBitmask (1=STANDARD, 2=EXTENDED, 4=FOOD, 8=CORRECTION)
+     *   bytes 15-16: extendedBolusDuration (uint16 LE, minutes)
+     *
+     * Returns a single-element list with the last bolus (if completed and
+     * newer than [since]), or an empty list otherwise.
      */
-    fun parseBolusHistoryResponse(cargo: ByteArray, since: Instant): List<BolusEvent> {
-        val recordSize = 13
-        if (cargo.size < recordSize) return emptyList()
+    fun parseLastBolusStatusResponse(cargo: ByteArray, since: Instant): List<BolusEvent> {
+        if (cargo.size < 17) return emptyList()
+        val buf = ByteBuffer.wrap(cargo).order(ByteOrder.LITTLE_ENDIAN)
+        buf.int // skip bolusId
+        val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
+        val deliveredMilliUnits = buf.int.toLong() and 0xFFFFFFFFL
+        val bolusStatusId = cargo[12].toInt() and 0xFF
+        val bolusSourceId = cargo[13].toInt() and 0xFF
+        val bolusTypeBitmask = cargo[14].toInt() and 0xFF
 
-        val events = mutableListOf<BolusEvent>()
-        var offset = 0
-        while (offset + recordSize <= cargo.size) {
-            val buf = ByteBuffer.wrap(cargo, offset, recordSize).order(ByteOrder.LITTLE_ENDIAN)
-            val milliUnits = buf.int
-            val flags = buf.get().toInt() and 0xFF
-            val timestampMs = buf.long
-            val timestamp = Instant.ofEpochMilli(timestampMs)
+        // Only report completed boluses (status 3)
+        if (bolusStatusId != 3) return emptyList()
 
-            if (!timestamp.isBefore(since)) {
-                events.add(
-                    BolusEvent(
-                        units = milliUnits / 1000f,
-                        isAutomated = (flags and 0x01) != 0,
-                        isCorrection = (flags and 0x02) != 0,
-                        timestamp = timestamp,
-                    ),
-                )
-            }
-            offset += recordSize
-        }
-        return events
+        val timestamp = Instant.ofEpochSecond(pumpTimeSec + TANDEM_EPOCH_OFFSET)
+        if (timestamp.isBefore(since)) return emptyList()
+
+        val units = deliveredMilliUnits / 1000f
+        val isAutomated = bolusSourceId == 1 // AUTO_PILOT
+        val isCorrection = (bolusTypeBitmask and 0x08) != 0
+
+        return listOf(
+            BolusEvent(
+                units = units,
+                isAutomated = isAutomated,
+                isCorrection = isCorrection,
+                timestamp = timestamp,
+            ),
+        )
     }
 
     /**
-     * Parse history log response (opcode 27).
+     * Parse HistoryLogResponse (opcode 61) records.
      *
      * Cargo layout: repeated records, each 18 bytes:
      *   bytes 0-3: sequence number (Int32 LE)
@@ -317,7 +326,7 @@ object StatusResponseParser {
     }
 
     /**
-     * Parse PumpGlobals response (opcode 89).
+     * Parse PumpGlobals response (opcode 87).
      *
      * Cargo layout (packed, little-endian):
      *   bytes 0-7: serial number (Int64 LE)

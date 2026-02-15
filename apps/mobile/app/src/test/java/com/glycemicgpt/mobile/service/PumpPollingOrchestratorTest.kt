@@ -66,14 +66,24 @@ class PumpPollingOrchestratorTest {
     private val wearDataSender = mockk<WearDataSender>(relaxed = true)
 
     /**
-     * Time to advance past initial delay + all loop stagger offsets.
-     *
-     * Slow loop has the largest offset: INITIAL_POLL_DELAY + STAGGER * (fast_count + medium_count).
-     * Within the slow loop, 4 reads are staggered (battery, reservoir, history, hardware).
-     * Total = initial_delay + offset_slow + 3 staggers within slow + margin.
+     * Time to advance past the fast loop's initial delay + stagger + margin.
+     * Fast loop fires at: INITIAL_DELAY + 0 + STAGGER + 0 + STAGGER (= 1500ms for CGM).
+     * Second CGM: +INTERVAL_FAST + 2*STAGGER = 17500ms.
+     * Tests that advance by SETTLE + INTERVAL_FAST need to reach the second CGM,
+     * so we add extra margin (5 staggers) to ensure timing tests pass.
      */
-    private val SETTLE_TIME_MS = PumpPollingOrchestrator.INITIAL_POLL_DELAY_MS +
-        PumpPollingOrchestrator.REQUEST_STAGGER_MS * 8 + 100
+    private val FAST_SETTLE_MS = PumpPollingOrchestrator.INITIAL_POLL_DELAY_MS +
+        PumpPollingOrchestrator.REQUEST_STAGGER_MS * 5 + 100
+
+    /**
+     * Time to advance past ALL loop initial delays + staggers.
+     * Slow loop has the largest delay (120s) and 4 reads with stagger.
+     */
+    private val ALL_SETTLE_MS = PumpPollingOrchestrator.SLOW_LOOP_INITIAL_DELAY_MS +
+        PumpPollingOrchestrator.REQUEST_STAGGER_MS * 4 + 100
+
+    /** Alias for tests that only need fast loop data. */
+    private val SETTLE_TIME_MS = FAST_SETTLE_MS
 
     private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender)
 
@@ -111,8 +121,8 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        // Advance past initial delay + stagger for all loops
-        advanceTimeBy(SETTLE_TIME_MS)
+        // Advance past ALL loop initial delays (slow loop takes 120s)
+        advanceTimeBy(ALL_SETTLE_MS)
 
         coVerify(atLeast = 1) { pumpDriver.getIoB() }
         coVerify(atLeast = 1) { pumpDriver.getBasalRate() }
@@ -128,7 +138,8 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(SETTLE_TIME_MS)
+        // Advance past ALL loop initial delays (slow loop takes 120s)
+        advanceTimeBy(ALL_SETTLE_MS)
 
         coVerify(atLeast = 1) { repository.saveIoB(any()) }
         coVerify(atLeast = 1) { repository.saveBasal(any()) }
@@ -236,7 +247,8 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(SETTLE_TIME_MS)
+        // Advance past ALL loop delays so battery/reservoir have also been polled
+        advanceTimeBy(ALL_SETTLE_MS)
 
         // Other reads should still succeed
         coVerify(atLeast = 1) { repository.saveBasal(any()) }
@@ -244,7 +256,7 @@ class PumpPollingOrchestratorTest {
 
         // Should continue polling despite IoB failure
         advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
-        coVerify(exactly = 2) { pumpDriver.getIoB() }
+        coVerify(atLeast = 2) { pumpDriver.getIoB() }
         orchestrator.stop()
     }
 

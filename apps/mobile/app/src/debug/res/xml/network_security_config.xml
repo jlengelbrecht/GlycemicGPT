@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Debug builds: allow cleartext to emulator host (10.0.2.2) for local testing -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Debug builds: allow cleartext (HTTP) for local development testing.
+         The release build (src/main) enforces HTTPS-only. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
-
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
 </network-security-config>

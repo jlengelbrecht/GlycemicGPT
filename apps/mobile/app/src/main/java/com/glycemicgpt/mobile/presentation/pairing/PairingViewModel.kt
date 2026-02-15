@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.presentation.pairing
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
@@ -7,7 +8,9 @@ import com.glycemicgpt.mobile.ble.connection.BleScanner
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.DiscoveredPump
+import com.glycemicgpt.mobile.service.PumpConnectionService
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +23,7 @@ class PairingViewModel @Inject constructor(
     private val bleScanner: BleScanner,
     private val connectionManager: BleConnectionManager,
     private val credentialStore: PumpCredentialStore,
+    @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
     private val _discoveredPumps = MutableStateFlow<List<DiscoveredPump>>(emptyList())
@@ -83,11 +87,14 @@ class PairingViewModel @Inject constructor(
         val code = _pairingCode.value
         if (code.isEmpty()) return
 
+        // Start the foreground service so polling begins once connected
+        PumpConnectionService.start(appContext)
         connectionManager.connect(pump.address, code)
     }
 
     fun unpair() {
         connectionManager.unpair()
+        PumpConnectionService.stop(appContext)
         _selectedPump.value = null
         _pairingCode.value = ""
     }

@@ -92,10 +92,10 @@ object TandemProtocol {
     const val OPCODE_CURRENT_BATTERY_V1_RESP = 53
     const val OPCODE_CURRENT_BATTERY_V2_REQ = 144   // CurrentBatteryV2Request (11 bytes resp, fw v7.7+)
     const val OPCODE_CURRENT_BATTERY_V2_RESP = 145
-    const val OPCODE_PUMP_SETTINGS_REQ = 90
-    const val OPCODE_PUMP_SETTINGS_RESP = 91
-    const val OPCODE_BOLUS_CALC_DATA_REQ = 75
-    const val OPCODE_BOLUS_CALC_DATA_RESP = 76
+    const val OPCODE_LAST_BOLUS_STATUS_REQ = 48     // LastBolusStatusRequest (17-byte resp)
+    const val OPCODE_LAST_BOLUS_STATUS_RESP = 49    // LastBolusStatusResponse
+    const val OPCODE_PUMP_SETTINGS_REQ = 82          // PumpSettingsRequest (was 90 -- wrong)
+    const val OPCODE_PUMP_SETTINGS_RESP = 83
     // Note: value 34/35 overlap with JPAKE_1B on AUTHORIZATION characteristic.
     // No conflict -- status requests route to CURRENT_STATUS_UUID.
     const val OPCODE_CGM_EGV_REQ = 34               // CurrentEGVGuiDataRequest
@@ -134,17 +134,19 @@ object TandemProtocol {
 
     const val OPCODE_API_VERSION_REQ = 32
     const val OPCODE_API_VERSION_RESP = 33
-    const val OPCODE_PUMP_VERSION_REQ = 78
-    const val OPCODE_PUMP_VERSION_RESP = 79
-    const val OPCODE_TIME_SINCE_RESET_REQ = 80
-    const val OPCODE_TIME_SINCE_RESET_RESP = 81
+    const val OPCODE_PUMP_VERSION_REQ = 84           // PumpVersionRequest (was 78 -- wrong)
+    const val OPCODE_PUMP_VERSION_RESP = 85
+    const val OPCODE_TIME_SINCE_RESET_REQ = 54       // TimeSinceResetRequest (was 80 -- wrong)
+    const val OPCODE_TIME_SINCE_RESET_RESP = 55
 
     // -- History log / hardware info opcodes --------------------------------
 
-    const val OPCODE_LOG_ENTRY_SEQ_REQ = 26
-    const val OPCODE_LOG_ENTRY_SEQ_RESP = 27
-    const val OPCODE_PUMP_GLOBALS_REQ = 88
-    const val OPCODE_PUMP_GLOBALS_RESP = 89
+    const val OPCODE_HISTORY_LOG_STATUS_REQ = 58     // HistoryLogStatusRequest (was LOG_ENTRY_SEQ 26 -- wrong)
+    const val OPCODE_HISTORY_LOG_STATUS_RESP = 59
+    const val OPCODE_HISTORY_LOG_REQ = 60             // HistoryLogRequest (5-byte cargo: uint32 startLog + byte count)
+    const val OPCODE_HISTORY_LOG_RESP = 61
+    const val OPCODE_PUMP_GLOBALS_REQ = 86            // PumpGlobalsRequest (was 88 -- wrong)
+    const val OPCODE_PUMP_GLOBALS_RESP = 87
 
     // -- Connection parameters ---------------------------------------------
 
@@ -169,10 +171,10 @@ object TandemProtocol {
         OPCODE_CURRENT_BATTERY_V1_RESP -> "BatteryV1_RESP"
         OPCODE_CURRENT_BATTERY_V2_REQ -> "BatteryV2_REQ"
         OPCODE_CURRENT_BATTERY_V2_RESP -> "BatteryV2_RESP"
+        OPCODE_LAST_BOLUS_STATUS_REQ -> "LastBolus_REQ"
+        OPCODE_LAST_BOLUS_STATUS_RESP -> "LastBolus_RESP"
         OPCODE_PUMP_SETTINGS_REQ -> "PumpSettings_REQ"
         OPCODE_PUMP_SETTINGS_RESP -> "PumpSettings_RESP"
-        OPCODE_BOLUS_CALC_DATA_REQ -> "BolusCalc_REQ"
-        OPCODE_BOLUS_CALC_DATA_RESP -> "BolusCalc_RESP"
         OPCODE_CGM_EGV_REQ -> "CGM_EGV_REQ"
         OPCODE_CGM_EGV_RESP -> "CGM_EGV_RESP"
         OPCODE_HOME_SCREEN_MIRROR_REQ -> "HomeScreenMirror_REQ"
@@ -191,8 +193,10 @@ object TandemProtocol {
         OPCODE_JPAKE_3_SESSION_KEY_RESP -> "JPAKE_3_KEY_RESP"
         OPCODE_JPAKE_4_KEY_CONFIRM_REQ -> "JPAKE_4_CONFIRM_REQ"
         OPCODE_JPAKE_4_KEY_CONFIRM_RESP -> "JPAKE_4_CONFIRM_RESP"
-        OPCODE_LOG_ENTRY_SEQ_REQ -> "HistoryLog_REQ"
-        OPCODE_LOG_ENTRY_SEQ_RESP -> "HistoryLog_RESP"
+        OPCODE_HISTORY_LOG_STATUS_REQ -> "HistoryLogStatus_REQ"
+        OPCODE_HISTORY_LOG_STATUS_RESP -> "HistoryLogStatus_RESP"
+        OPCODE_HISTORY_LOG_REQ -> "HistoryLog_REQ"
+        OPCODE_HISTORY_LOG_RESP -> "HistoryLog_RESP"
         OPCODE_PUMP_GLOBALS_REQ -> "PumpGlobals_REQ"
         OPCODE_PUMP_GLOBALS_RESP -> "PumpGlobals_RESP"
         OPCODE_API_VERSION_REQ -> "ApiVersion_REQ"

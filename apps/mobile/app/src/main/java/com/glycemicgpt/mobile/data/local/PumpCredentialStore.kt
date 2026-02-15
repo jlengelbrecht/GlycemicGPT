@@ -48,6 +48,32 @@ class PumpCredentialStore @Inject constructor(
     /** Whether a pump is currently paired. */
     fun isPaired(): Boolean = getPairedAddress() != null
 
+    /**
+     * Save JPAKE-derived credentials for confirmation mode reconnect.
+     * These are persisted after a successful bootstrap JPAKE handshake and
+     * allow subsequent connections to skip rounds 1-2.
+     */
+    fun saveJpakeCredentials(derivedSecretHex: String, serverNonceHex: String) {
+        prefs.edit()
+            .putString(KEY_JPAKE_DERIVED_SECRET, derivedSecretHex)
+            .putString(KEY_JPAKE_SERVER_NONCE, serverNonceHex)
+            .apply()
+    }
+
+    /** Get the saved JPAKE derived secret (hex string), or null if not available. */
+    fun getJpakeDerivedSecret(): String? = prefs.getString(KEY_JPAKE_DERIVED_SECRET, null)
+
+    /** Get the saved JPAKE server nonce (hex string), or null if not available. */
+    fun getJpakeServerNonce(): String? = prefs.getString(KEY_JPAKE_SERVER_NONCE, null)
+
+    /** Clear JPAKE credentials only (e.g., on confirmation mode failure). */
+    fun clearJpakeCredentials() {
+        prefs.edit()
+            .remove(KEY_JPAKE_DERIVED_SECRET)
+            .remove(KEY_JPAKE_SERVER_NONCE)
+            .apply()
+    }
+
     /** Clear all pairing data (unpair). */
     fun clearPairing() {
         prefs.edit().clear().apply()
@@ -57,5 +83,7 @@ class PumpCredentialStore @Inject constructor(
         private const val KEY_ADDRESS = "paired_pump_address"
         private const val KEY_PAIRING_CODE = "pairing_code"
         private const val KEY_PAIRED_AT = "paired_at"
+        private const val KEY_JPAKE_DERIVED_SECRET = "jpake_derived_secret"
+        private const val KEY_JPAKE_SERVER_NONCE = "jpake_server_nonce"
     }
 }

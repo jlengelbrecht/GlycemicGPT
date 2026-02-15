@@ -122,37 +122,37 @@ class TandemBleDriverTest {
     // -- Battery tests (V2 opcode 144, V1 opcode 52) ---------------------------
 
     @Test
-    fun `getBatteryStatus returns V2 reading on success`() = runTest {
-        // 11-byte V2 response: abc=27, ibc=85, charging=0, then 8 zeros
+    fun `getBatteryStatus returns V1 reading on success`() = runTest {
+        // 2-byte V1 response: abc=27, ibc=85
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ, any(), any())
+        } returns byteArrayOf(27, 85.toByte())
+
+        val result = driver.getBatteryStatus()
+        assertTrue(result.isSuccess)
+        assertEquals(85, result.getOrThrow().percentage)
+        assertFalse(result.getOrThrow().isCharging) // V1 has no charging flag
+    }
+
+    @Test
+    fun `getBatteryStatus falls back to V2 when V1 fails`() = runTest {
+        // V1 fails (e.g., on Mobi pumps)
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ, any(), any())
+        } throws IllegalStateException("V1 not supported")
+        // V2 succeeds: 11-byte response
         val v2Cargo = ByteArray(11)
-        v2Cargo[0] = 27       // abc (internal)
-        v2Cargo[1] = 85.toByte() // ibc = 85%
-        v2Cargo[2] = 0        // not charging
+        v2Cargo[0] = 99.toByte() // abc
+        v2Cargo[1] = 72          // ibc = 72%
+        v2Cargo[2] = 1           // charging
         coEvery {
             connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ, any(), any())
         } returns v2Cargo
 
         val result = driver.getBatteryStatus()
         assertTrue(result.isSuccess)
-        assertEquals(85, result.getOrThrow().percentage)
-        assertFalse(result.getOrThrow().isCharging)
-    }
-
-    @Test
-    fun `getBatteryStatus falls back to V1 when V2 fails`() = runTest {
-        // V2 fails
-        coEvery {
-            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ, any(), any())
-        } throws IllegalStateException("V2 not supported")
-        // V1 succeeds: abc=99, ibc=72
-        coEvery {
-            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ, any(), any())
-        } returns byteArrayOf(99, 72)
-
-        val result = driver.getBatteryStatus()
-        assertTrue(result.isSuccess)
         assertEquals(72, result.getOrThrow().percentage)
-        assertFalse(result.getOrThrow().isCharging) // V1 has no charging flag
+        assertTrue(result.getOrThrow().isCharging)
     }
 
     // -- Reservoir tests (opcode 36, uint16 whole units) -----------------------
@@ -196,21 +196,28 @@ class TandemBleDriverTest {
         assertEquals("SN123", result.getOrThrow().serialNumber)
     }
 
-    // -- Bolus history tests ---------------------------------------------------
+    // -- Bolus history tests (LastBolusStatus opcode 48) -------------------------
 
     @Test
     fun `getBolusHistory returns parsed events on success`() = runTest {
-        val now = Instant.now()
-        val buf = ByteBuffer.allocate(13).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(3500) // 3.5 units (milliunits)
-        buf.put(0x01)    // automated
-        buf.putLong(now.minusSeconds(600).toEpochMilli())
+        // LastBolusStatusResponse: 17 bytes
+        // bolusId=42, timestamp=recent, volume=3500 milliunits, status=3(COMPLETED),
+        // source=0(GUI), type=1(STANDARD), extDuration=0
+        val recentPumpTime = (Instant.now().epochSecond - 1199145600L - 600).toInt()
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(42)            // bolusId
+        buf.putInt(recentPumpTime) // timestamp (Tandem epoch)
+        buf.putInt(3500)          // deliveredVolume (milliunits = 3.5 units)
+        buf.put(3)                // bolusStatusId = COMPLETED
+        buf.put(0)                // bolusSourceId = GUI
+        buf.put(1)                // bolusTypeBitmask = STANDARD
+        buf.putShort(0)           // extendedBolusDuration = 0
 
         coEvery {
-            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_BOLUS_CALC_DATA_REQ, any(), any())
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_LAST_BOLUS_STATUS_REQ, any(), any())
         } returns buf.array()
 
-        val since = now.minusSeconds(3600)
+        val since = Instant.now().minusSeconds(3600)
         val result = driver.getBolusHistory(since)
         assertTrue(result.isSuccess)
         assertEquals(1, result.getOrThrow().size)
@@ -283,11 +290,10 @@ class TandemBleDriverTest {
 
         coVerify { connectionManager.sendStatusRequest(108, any(), any()) } // IoB
         coVerify { connectionManager.sendStatusRequest(40, any(), any()) }  // Basal
-        coVerify { connectionManager.sendStatusRequest(144, any(), any()) } // Battery V2 (tried first)
-        coVerify { connectionManager.sendStatusRequest(52, any(), any()) }  // Battery V1 (fallback)
+        coVerify { connectionManager.sendStatusRequest(52, any(), any()) }  // Battery V1 (tried first)
         coVerify { connectionManager.sendStatusRequest(36, any(), any()) }  // Insulin/Reservoir
-        coVerify { connectionManager.sendStatusRequest(90, any(), any()) }  // Pump Settings
-        coVerify { connectionManager.sendStatusRequest(75, any(), any()) }  // Bolus History
+        coVerify { connectionManager.sendStatusRequest(82, any(), any()) }  // Pump Settings
+        coVerify { connectionManager.sendStatusRequest(48, any(), any()) }  // Last Bolus Status
         coVerify { connectionManager.sendStatusRequest(34, any(), any()) }  // CGM EGV
         // HomeScreenMirror (56) is only called if EGV succeeds -- verified in getCgmStatus tests above
     }

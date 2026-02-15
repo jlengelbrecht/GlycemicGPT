@@ -69,9 +69,9 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getBolusHistory(since: Instant): Result<List<BolusEvent>> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_BOLUS_CALC_DATA_REQ,
+        opcode = TandemProtocol.OPCODE_LAST_BOLUS_STATUS_REQ,
     ) { cargo ->
-        StatusResponseParser.parseBolusHistoryResponse(cargo, since)
+        StatusResponseParser.parseLastBolusStatusResponse(cargo, since)
     }
 
     override suspend fun getPumpSettings(): Result<PumpSettings> = runStatusRequest(
@@ -82,19 +82,22 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getBatteryStatus(): Result<BatteryStatus> {
-        // Try V2 first (firmware v7.7+), fall back to V1
-        val v2Result = runStatusRequest(
-            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ,
-        ) { cargo ->
-            StatusResponseParser.parseBatteryV2Response(cargo)
-                ?: throw IllegalStateException("Failed to parse battery V2 response")
-        }
-        if (v2Result.isSuccess) return v2Result
-        return runStatusRequest(
+        // Use V1 first (universally supported). V2 (opcode 144) is only for
+        // Mobi pumps and causes GATT_ERROR (133) on tslim X2, killing the
+        // connection before fallback can execute.
+        val v1Result = runStatusRequest(
             opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ,
         ) { cargo ->
             StatusResponseParser.parseBatteryV1Response(cargo)
                 ?: throw IllegalStateException("Failed to parse battery V1 response")
+        }
+        if (v1Result.isSuccess) return v1Result
+        // Fall back to V2 only if V1 fails (e.g., on Mobi pumps)
+        return runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseBatteryV2Response(cargo)
+                ?: throw IllegalStateException("Failed to parse battery V2 response")
         }
     }
 
@@ -130,8 +133,13 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_LOG_ENTRY_SEQ_REQ,
+        opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
     ) { cargo ->
+        // HistoryLogStatusResponse returns 8 bytes (firstSeq + lastSeq).
+        // The record parser expects 18-byte records, so it safely returns
+        // emptyList() for the status response. Full log fetching via
+        // OPCODE_HISTORY_LOG_REQ (60) with 5-byte cargo will be added
+        // when we implement incremental log download.
         StatusResponseParser.parseHistoryLogResponse(cargo, sinceSequence)
     }
 

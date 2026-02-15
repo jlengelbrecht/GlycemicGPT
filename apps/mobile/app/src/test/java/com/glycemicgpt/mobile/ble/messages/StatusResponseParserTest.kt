@@ -372,33 +372,50 @@ class StatusResponseParserTest {
         assertNull(StatusResponseParser.parsePumpSettingsResponse(byteArrayOf(0x05, 0x00)))
     }
 
-    // -- Bolus history tests (opcode 76) --------------------------------------
+    // -- Last bolus status tests (opcode 49) -----------------------------------
 
     @Test
-    fun `parseBolusHistoryResponse with two records`() {
-        val now = Instant.now()
-        val buf = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(3500)
-        buf.put(0x03) // automated + correction
-        buf.putLong(now.minusSeconds(1800).toEpochMilli())
-        buf.putInt(1000)
-        buf.put(0x00)
-        buf.putLong(now.minusSeconds(600).toEpochMilli())
+    fun `parseLastBolusStatusResponse with completed bolus`() {
+        // 17-byte LastBolusStatusResponse
+        val recentPumpTime = (Instant.now().epochSecond - 1199145600L - 600).toInt()
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(42)             // bolusId
+        buf.putInt(recentPumpTime) // timestamp (Tandem epoch)
+        buf.putInt(3500)           // deliveredVolume (milliunits = 3.5 units)
+        buf.put(3)                 // bolusStatusId = COMPLETED
+        buf.put(1)                 // bolusSourceId = AUTO_PILOT
+        buf.put(0x09.toByte())     // bolusTypeBitmask = STANDARD | CORRECTION
+        buf.putShort(0)            // extendedBolusDuration
 
-        val since = now.minusSeconds(3600)
-        val events = StatusResponseParser.parseBolusHistoryResponse(buf.array(), since)
-        assertEquals(2, events.size)
+        val since = Instant.now().minusSeconds(3600)
+        val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+        assertEquals(1, events.size)
         assertEquals(3.5f, events[0].units, 0.001f)
-        assertTrue(events[0].isAutomated)
-        assertTrue(events[0].isCorrection)
-        assertEquals(1.0f, events[1].units, 0.001f)
-        assertFalse(events[1].isAutomated)
+        assertTrue(events[0].isAutomated) // AUTO_PILOT
+        assertTrue(events[0].isCorrection) // bitmask bit 3
     }
 
     @Test
-    fun `parseBolusHistoryResponse returns empty for short cargo`() {
+    fun `parseLastBolusStatusResponse returns empty for canceled bolus`() {
+        val recentPumpTime = (Instant.now().epochSecond - 1199145600L - 60).toInt()
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(43)             // bolusId
+        buf.putInt(recentPumpTime) // timestamp
+        buf.putInt(1000)           // deliveredVolume
+        buf.put(2)                 // bolusStatusId = CANCELED
+        buf.put(0)                 // bolusSourceId = GUI
+        buf.put(1)                 // bolusTypeBitmask = STANDARD
+        buf.putShort(0)
+
+        val since = Instant.now().minusSeconds(3600)
+        val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `parseLastBolusStatusResponse returns empty for short cargo`() {
         assertTrue(
-            StatusResponseParser.parseBolusHistoryResponse(byteArrayOf(0x01, 0x02), Instant.now()).isEmpty(),
+            StatusResponseParser.parseLastBolusStatusResponse(byteArrayOf(0x01, 0x02), Instant.now()).isEmpty(),
         )
     }
 

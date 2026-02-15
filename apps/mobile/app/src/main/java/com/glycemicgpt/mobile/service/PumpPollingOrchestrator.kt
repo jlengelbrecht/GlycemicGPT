@@ -142,11 +142,12 @@ class PumpPollingOrchestrator @Inject constructor(
         }
     }
 
-    /** Medium loop: bolus history at least every ~5 min. */
+    /** Medium loop: last bolus status at least every ~5 min. */
     private suspend fun pollMediumLoop() {
-        // Offset: initial delay + fast loop's 3 requests worth of stagger,
-        // so this fires after the first fast loop iteration completes.
-        delay(INITIAL_POLL_DELAY_MS + REQUEST_STAGGER_MS * FAST_REQUEST_COUNT)
+        // Wait for the fast loop to establish a stable connection rhythm
+        // before introducing additional request types. The pump can reject
+        // unfamiliar opcodes with GATT_ERROR (133), killing the connection.
+        delay(MEDIUM_LOOP_INITIAL_DELAY_MS)
         while (true) {
             pollBolusHistory()
             delay(effectiveInterval(INTERVAL_MEDIUM_MS))
@@ -155,9 +156,9 @@ class PumpPollingOrchestrator @Inject constructor(
 
     /** Slow loop: battery + reservoir + raw history logs at least every ~15 min. */
     private suspend fun pollSlowLoop() {
-        // Offset: initial delay + fast loop requests + 1 medium request,
-        // so this fires after both fast and medium first iterations.
-        delay(INITIAL_POLL_DELAY_MS + REQUEST_STAGGER_MS * (FAST_REQUEST_COUNT + MEDIUM_REQUEST_COUNT))
+        // Wait even longer before slow-loop requests. These are lower priority
+        // and we want the connection well-established first.
+        delay(SLOW_LOOP_INITIAL_DELAY_MS)
         while (true) {
             pollBattery()
             delay(REQUEST_STAGGER_MS)
@@ -259,16 +260,24 @@ class PumpPollingOrchestrator @Inject constructor(
         const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
         const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
 
-        /** Delay before first poll after connection to let the pump settle. */
-        const val INITIAL_POLL_DELAY_MS = 2_000L
+        /** Delay before first poll after connection to let the pump settle.
+         *  Keep short to avoid idle-timeout disconnects (pump drops idle at ~3-5s). */
+        const val INITIAL_POLL_DELAY_MS = 500L
 
-        /** Stagger between consecutive BLE requests within a loop iteration. */
-        const val REQUEST_STAGGER_MS = 200L
+        /** Stagger between consecutive BLE requests within a loop iteration.
+         *  500ms gives the pump time to process each request and respond before
+         *  the next write arrives. Lower values (200ms) can cause GATT_ERROR. */
+        const val REQUEST_STAGGER_MS = 500L
 
-        // Request counts per loop -- used to compute stagger offsets.
-        // Update these if you add/remove reads from a loop.
-        private const val FAST_REQUEST_COUNT = 3   // IoB, basal, CGM
-        private const val MEDIUM_REQUEST_COUNT = 1 // bolus history
+        /** Wait before starting the medium loop (last bolus status).
+         *  Let the fast loop run several cycles to establish a stable
+         *  connection rhythm before introducing additional request types. */
+        const val MEDIUM_LOOP_INITIAL_DELAY_MS = 60_000L  // 60 seconds
+
+        /** Wait before starting the slow loop (battery, reservoir, history).
+         *  These are lower priority and can wait until the connection is
+         *  well-established. */
+        const val SLOW_LOOP_INITIAL_DELAY_MS = 120_000L   // 2 minutes
 
         // When phone battery is low, slow everything down by this factor
         const val LOW_BATTERY_MULTIPLIER = 3

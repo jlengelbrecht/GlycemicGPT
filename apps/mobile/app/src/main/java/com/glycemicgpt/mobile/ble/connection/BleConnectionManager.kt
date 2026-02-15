@@ -84,6 +84,13 @@ class BleConnectionManager @Inject constructor(
     @Volatile
     private var rapidDisconnectCount = 0
 
+    // Tracks connections where we reach CONNECTED but receive zero notifications.
+    // If this happens repeatedly, the pump is not responding (likely needs re-pairing).
+    @Volatile
+    private var zeroResponseConnectionCount = 0
+    @Volatile
+    private var receivedAnyNotification = false
+
     // GATT operation queue -- only one GATT write at a time
     private val operationQueue = ConcurrentLinkedQueue<GattOperation>()
     private val operationInFlight = AtomicBoolean(false)
@@ -126,15 +133,27 @@ class BleConnectionManager @Inject constructor(
         }
 
         val device: BluetoothDevice = adapter.getRemoteDevice(address)
+        val bondState = device.bondState
+        Timber.d("Bond state for %s: %s", address, when (bondState) {
+            BluetoothDevice.BOND_NONE -> "NONE"
+            BluetoothDevice.BOND_BONDING -> "BONDING"
+            BluetoothDevice.BOND_BONDED -> "BONDED"
+            else -> "UNKNOWN($bondState)"
+        })
         _connectionState.value = ConnectionState.CONNECTING
         autoReconnect = true
         reconnectAttempt = 0
         rapidDisconnectCount = 0
+        receivedAnyNotification = false
         pendingPairingCode = pairingCode
         authenticator.reset()
         jpakeAuthenticator.reset()
         operationQueue.clear()
         operationInFlight.set(false)
+        // Clear stale packet assemblers from previous connection
+        assemblers.clear()
+        statusAssemblers.clear()
+        cancelPendingRequests()
 
         Timber.d("Connecting to pump: %s", address)
         val newGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -183,18 +202,58 @@ class BleConnectionManager @Inject constructor(
         }
     }
 
-    /** Unpair: clear credentials and disconnect. */
+    /** Unpair: clear credentials, remove BLE bond, and disconnect. */
+    @SuppressLint("MissingPermission")
     fun unpair() {
+        val address = credentialStore.getPairedAddress()
         disconnect()
         credentialStore.clearPairing()
-        Timber.d("Pump unpaired and credentials cleared")
+        // Remove the BLE bond so stale encryption keys don't block future connections.
+        if (address != null) {
+            removeBond(address)
+        }
+        Timber.d("Pump unpaired, credentials + JPAKE session cleared, bond removed")
+    }
+
+    /**
+     * Remove the BLE bond for a device by address.
+     * Uses reflection because BluetoothDevice.removeBond() is a hidden API.
+     */
+    @SuppressLint("MissingPermission")
+    private fun removeBond(address: String) {
+        try {
+            val adapter = bluetoothManager?.adapter ?: return
+            val device = adapter.getRemoteDevice(address)
+            if (device.bondState == BluetoothDevice.BOND_BONDED) {
+                val method = device.javaClass.getMethod("removeBond")
+                val result = method.invoke(device) as? Boolean ?: false
+                Timber.d("removeBond(%s) = %b", address, result)
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to remove BLE bond for %s", address)
+        }
+    }
+
+    /**
+     * Clear Android's GATT service cache via reflection.
+     * This forces a fresh service discovery, preventing stale cached
+     * characteristics from silently dropping notifications.
+     */
+    private fun refreshGattCache(gatt: BluetoothGatt) {
+        try {
+            val method = gatt.javaClass.getMethod("refresh")
+            val result = method.invoke(gatt) as? Boolean ?: false
+            Timber.d("GATT cache refresh = %b", result)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to refresh GATT cache")
+        }
     }
 
     /** Attempt auto-reconnect to the previously paired pump. */
     fun autoReconnectIfPaired() {
         val address = credentialStore.getPairedAddress() ?: return
-        // Pass null for pairingCode -- reconnects rely on BLE bonding, not JPAKE.
-        // connect() sets autoReconnect = true internally.
+        // Pass null for pairingCode -- reconnects use JPAKE confirmation mode
+        // with the saved derived secret from initial pairing.
         connect(address, pairingCode = null)
     }
 
@@ -356,7 +415,8 @@ class BleConnectionManager @Inject constructor(
         reconnectJob = scope.launch {
             delay(delayMs)
             if (autoReconnect && _connectionState.value == ConnectionState.RECONNECTING) {
-                // Pass null for pairingCode -- reconnects rely on BLE bonding, not JPAKE
+                // Pass null for pairingCode -- reconnects use JPAKE confirmation mode
+                // with the saved derived secret (or bootstrap if no secret saved)
                 connect(address, pairingCode = null)
             }
         }
@@ -368,7 +428,15 @@ class BleConnectionManager @Inject constructor(
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> {
-                    Timber.d("GATT connected, requesting MTU %d", TandemProtocol.REQUIRED_MTU)
+                    // Clear GATT service cache on reconnect. Android caches GATT
+                    // services after bonding; stale caches can cause notifications
+                    // to silently fail on subsequent connections.
+                    refreshGattCache(gatt)
+                    // Request HIGH connection priority (7.5-15ms interval) to match
+                    // pumpX2 behavior. The pump may drop connections with slower
+                    // default intervals (~30-50ms).
+                    gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
+                    Timber.d("GATT connected, requesting MTU %d (priority=HIGH)", TandemProtocol.REQUIRED_MTU)
                     gatt.requestMtu(TandemProtocol.REQUIRED_MTU)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -406,12 +474,49 @@ class BleConnectionManager @Inject constructor(
                     // so only treat it as bond loss if we haven't reached CONNECTED yet.
                     if (!wasConnected && status == GATT_INSUFFICIENT_AUTHENTICATION) {
                         Timber.e("Pump reports insufficient authentication -- BLE bond lost, re-pairing required")
+                        val addr = credentialStore.getPairedAddress()
+                        if (addr != null) removeBond(addr)
                         autoReconnect = false
                         rapidDisconnectCount = 0
                         authTimeoutJob?.cancel()
                         reconnectJob?.cancel()
                         _connectionState.value = ConnectionState.AUTH_FAILED
                         return
+                    }
+                    // Insufficient encryption = stale bond encryption keys.
+                    // The BLE bond exists but the keys are no longer valid.
+                    // Remove the bond so the next connection triggers fresh bonding.
+                    if (status == GATT_INSUFFICIENT_ENCRYPTION) {
+                        Timber.e("Pump reports insufficient encryption -- bond keys stale, removing bond for re-pairing")
+                        val addr = credentialStore.getPairedAddress()
+                        if (addr != null) removeBond(addr)
+                        autoReconnect = false
+                        authTimeoutJob?.cancel()
+                        reconnectJob?.cancel()
+                        _connectionState.value = ConnectionState.AUTH_FAILED
+                        return
+                    }
+
+                    // Track connections where we reached CONNECTED but got zero
+                    // notifications. This means the pump ignored all our requests,
+                    // likely because it requires re-pairing.
+                    if (wasConnected && !receivedAnyNotification) {
+                        zeroResponseConnectionCount++
+                        Timber.w("Zero-response connection #%d (pump ignoring requests)",
+                            zeroResponseConnectionCount)
+                        if (zeroResponseConnectionCount >= MAX_ZERO_RESPONSE_CONNECTIONS) {
+                            Timber.e("Pump has not responded in %d consecutive connections -- re-pairing required",
+                                zeroResponseConnectionCount)
+                            val addr = credentialStore.getPairedAddress()
+                            if (addr != null) removeBond(addr)
+                            autoReconnect = false
+                            authTimeoutJob?.cancel()
+                            reconnectJob?.cancel()
+                            _connectionState.value = ConnectionState.AUTH_FAILED
+                            return
+                        }
+                    } else if (receivedAnyNotification) {
+                        zeroResponseConnectionCount = 0
                     }
 
                     _connectionState.value = ConnectionState.DISCONNECTED
@@ -443,14 +548,19 @@ class BleConnectionManager @Inject constructor(
             }
 
             Timber.d("Services discovered, enabling notifications")
-            // Enqueue notification subscriptions for serialized GATT execution
-            for (uuid in TandemProtocol.NOTIFICATION_CHARACTERISTICS) {
-                enqueueNotificationEnable(uuid)
-            }
-
-            // Enqueue authentication start after all notifications are enabled
+            // Enable AUTHORIZATION CCCD first so the pump can respond to
+            // JPAKE immediately. Then enqueue auth, then the remaining CCCDs.
+            // This matches the pumpX2 approach: auth first, then status CCCDs.
+            enqueueNotificationEnable(TandemProtocol.AUTHORIZATION_UUID)
             _connectionState.value = ConnectionState.AUTHENTICATING
             startAuthentication()
+            // Enable remaining notification CCCDs after auth is queued.
+            // They'll execute after JPAKE chunks in the serialized queue.
+            for (uuid in TandemProtocol.NOTIFICATION_CHARACTERISTICS) {
+                if (uuid != TandemProtocol.AUTHORIZATION_UUID) {
+                    enqueueNotificationEnable(uuid)
+                }
+            }
         }
 
         override fun onCharacteristicWrite(
@@ -459,7 +569,10 @@ class BleConnectionManager @Inject constructor(
             status: Int,
         ) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Timber.e("Characteristic write failed (status=%d, uuid=%s)", status, characteristic.uuid)
+                Timber.e("BLE_RAW WRITE FAILED status=%d (%s) char=%s",
+                    status, gattStatusName(status), characteristic.uuid)
+            } else {
+                Timber.d("BLE_RAW WRITE OK char=%s", characteristic.uuid)
             }
             onGattOperationComplete()
         }
@@ -469,8 +582,11 @@ class BleConnectionManager @Inject constructor(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
+            val charUuid = descriptor.characteristic?.uuid
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Timber.e("Descriptor write failed (status=%d)", status)
+                Timber.e("Descriptor write failed (status=%d, char=%s)", status, charUuid)
+            } else {
+                Timber.d("CCCD enabled for %s", charUuid)
             }
             onGattOperationComplete()
         }
@@ -497,9 +613,12 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun handleCharacteristicChanged(uuid: UUID, data: ByteArray) {
+        receivedAnyNotification = true
+        Timber.d("BLE_RAW NOTIFY char=%s len=%d", uuid, data.size)
         when (uuid) {
             TandemProtocol.AUTHORIZATION_UUID -> handleAuthNotification(data)
             TandemProtocol.CURRENT_STATUS_UUID -> handleStatusNotification(data)
+            else -> Timber.d("BLE_RAW NOTIFY unhandled char=%s", uuid)
         }
     }
 
@@ -562,23 +681,15 @@ class BleConnectionManager @Inject constructor(
     }
 
     private fun startAuthentication() {
-        // On reconnect (no user-provided code), skip JPAKE entirely.
-        // After initial pairing, the pump bonds at the BLE level and considers
-        // the device authorized. Re-running JPAKE causes the pump to reject us
-        // with status 19 (CONN_TERMINATE_PEER_USER).
+        // The pump requires app-level auth (JPAKE) on EVERY connection,
+        // including reconnects. Without it, the pump silently ignores all
+        // status requests even with a valid BLE bond.
         //
-        // Note: notification enable writes are enqueued in onServicesDiscovered
-        // before this method is called. On reconnect we skip straight to
-        // onAuthSuccess(), which imposes a POST_AUTH_SETTLE_MS delay before
-        // setting CONNECTED. The 6 notification descriptor writes (~50ms each)
-        // complete well within this window.
+        // JPAKE has two modes:
+        // - BOOTSTRAP: Full 5-round-trip handshake. Requires pump in pairing mode.
+        // - CONFIRMATION: 2-round-trip handshake using saved derived secret.
+        //   Works on reconnect without pairing mode.
         val isReconnect = pendingPairingCode == null && credentialStore.isPaired()
-        if (isReconnect) {
-            Timber.d("Reconnecting to bonded pump, skipping JPAKE (BLE bonding handles auth)")
-            onAuthSuccess()
-            return
-        }
-
         val code = pendingPairingCode ?: credentialStore.getPairingCode()
         if (code == null) {
             Timber.e("No pairing code available for authentication")
@@ -596,15 +707,39 @@ class BleConnectionManager @Inject constructor(
             }
         }
 
-        // Use JPAKE auth for 6-digit codes (firmware v7.7+), V1 for 16-char codes
+        // Use JPAKE for 6-digit codes (firmware v7.7+), V1 for 16-char codes.
         if (code.length <= 10) {
-            Timber.d("Starting JPAKE authentication (code length=%d)", code.length)
-            val chunks = jpakeAuthenticator.buildJpake1aRequest(code, nextTxId())
-            enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            jpakeAuthenticator.reset()
+            val savedSecretHex = credentialStore.getJpakeDerivedSecret()
+            if (isReconnect && savedSecretHex != null) {
+                // CONFIRMATION mode: skip rounds 1-2, jump to round 3 using
+                // the derived secret saved from the initial bootstrap pairing.
+                Timber.d("Starting JPAKE CONFIRMATION mode (reconnect, saved secret available)")
+                val secretBytes = hexStringToByteArray(savedSecretHex)
+                val chunks = jpakeAuthenticator.buildJpake3RequestFromDerivedSecret(
+                    secretBytes, nextTxId(),
+                )
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            } else {
+                // BOOTSTRAP mode: full 5-round-trip handshake.
+                // Pump must be in pairing mode (showing code on screen).
+                Timber.d("Starting JPAKE BOOTSTRAP mode (initial pair, code length=%d)", code.length)
+                val chunks = jpakeAuthenticator.buildJpake1aRequest(code, nextTxId())
+                enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+            }
         } else {
             Timber.d("Starting V1 authentication (code length=%d)", code.length)
+            authenticator.reset()
             val chunks = authenticator.buildCentralChallengeRequest(nextTxId())
             enqueueWrite(TandemProtocol.AUTHORIZATION_UUID, chunks)
+        }
+    }
+
+    /** Convert a hex string (no separators) to a ByteArray. */
+    private fun hexStringToByteArray(hex: String): ByteArray {
+        val clean = hex.replace(" ", "")
+        return ByteArray(clean.length / 2) { i ->
+            clean.substring(i * 2, i * 2 + 2).toInt(16).toByte()
         }
     }
 
@@ -620,10 +755,28 @@ class BleConnectionManager @Inject constructor(
             credentialStore.savePairing(address, code)
             pendingPairingCode = null
         }
-        // Post-auth settle: give the pump time to finalize its internal state
-        // before we flood it with status requests. Without this delay, the first
-        // batch of reads often gets garbage or times out.
-        Timber.d("Pump authenticated, settling for %d ms before allowing reads", POST_AUTH_SETTLE_MS)
+        // Save JPAKE derived credentials for confirmation mode reconnect.
+        // After initial bootstrap, the derived secret allows reconnection
+        // without the pump being in pairing mode.
+        val secret = jpakeAuthenticator.getDerivedSecret()
+        val nonce = jpakeAuthenticator.getServerNonce()
+        if (secret != null && nonce != null) {
+            credentialStore.saveJpakeCredentials(
+                derivedSecretHex = secret.joinToString("") { "%02x".format(it) },
+                serverNonceHex = nonce.joinToString("") { "%02x".format(it) },
+            )
+            Timber.d("JPAKE credentials saved for confirmation mode reconnect")
+        }
+        // Send initialization sequence (API version, pump version, time since reset)
+        // before allowing status reads. pumpX2 sends these after auth to fully
+        // establish the session -- without them the pump may drop the connection
+        // after a few status responses.
+        Timber.d("Pump authenticated, sending initialization sequence")
+        sendInitSequence()
+
+        // Post-auth settle: give the pump time to process the init messages
+        // before we flood it with status requests.
+        Timber.d("Settling for %d ms before allowing reads", POST_AUTH_SETTLE_MS)
         settleJob?.cancel()
         settleJob = scope.launch {
             delay(POST_AUTH_SETTLE_MS)
@@ -632,6 +785,26 @@ class BleConnectionManager @Inject constructor(
                 _connectionState.value = ConnectionState.CONNECTED
                 Timber.d("Pump connected and ready for status requests")
             }
+        }
+    }
+
+    /**
+     * Send post-auth initialization requests that pumpX2 sends to establish
+     * the session. These are fire-and-forget -- we don't need the responses,
+     * but the pump needs to see them before accepting status reads.
+     */
+    private fun sendInitSequence() {
+        val initOpcodes = intArrayOf(
+            TandemProtocol.OPCODE_API_VERSION_REQ,
+            TandemProtocol.OPCODE_PUMP_VERSION_REQ,
+            TandemProtocol.OPCODE_TIME_SINCE_RESET_REQ,
+        )
+        for (opcode in initOpcodes) {
+            val id = nextTxId()
+            Timber.d("Init TX opcode=0x%02x (%s) txId=%d",
+                opcode, TandemProtocol.opcodeName(opcode), id)
+            val chunks = Packetize.encode(opcode, id, ByteArray(0), TandemProtocol.CHUNK_SIZE_SHORT)
+            enqueueWrite(TandemProtocol.CURRENT_STATUS_UUID, chunks)
         }
     }
 
@@ -733,6 +906,11 @@ class BleConnectionManager @Inject constructor(
             }
             TandemProtocol.OPCODE_JPAKE_3_SESSION_KEY_RESP -> {
                 if (!jpakeAuthenticator.processJpake3Response(cargo)) {
+                    // If confirmation mode was rejected, the derived secret may
+                    // be stale (e.g., pump was factory reset). Clear saved
+                    // credentials so the next attempt uses bootstrap mode.
+                    Timber.w("JPAKE round 3 failed, clearing saved JPAKE credentials")
+                    credentialStore.clearJpakeCredentials()
                     _connectionState.value = ConnectionState.AUTH_FAILED
                     return
                 }
@@ -744,7 +922,8 @@ class BleConnectionManager @Inject constructor(
                 if (success) {
                     onAuthSuccess()
                 } else {
-                    Timber.e("JPAKE: Key confirmation failed")
+                    Timber.e("JPAKE: Key confirmation failed, clearing saved JPAKE credentials")
+                    credentialStore.clearJpakeCredentials()
                     _connectionState.value = ConnectionState.AUTH_FAILED
                 }
             }
@@ -756,7 +935,11 @@ class BleConnectionManager @Inject constructor(
     }
 
     companion object {
-        /** Post-auth settle delay (ms) before setting CONNECTED state. */
+        /** Post-auth settle delay (ms) before setting CONNECTED state.
+         *  After JPAKE completes and init sequence is sent, this gives the pump
+         *  time to process initialization before we send status requests.
+         *  Keep short to avoid idle-timeout disconnects from the pump.
+         */
         const val POST_AUTH_SETTLE_MS = 500L
 
         /** Auth handshake timeout. JPAKE has 5 round trips; 30s is generous. */
@@ -765,8 +948,12 @@ class BleConnectionManager @Inject constructor(
         /** Max consecutive rapid disconnections before declaring bond lost. */
         const val MAX_RAPID_DISCONNECTS = 3
 
+        /** Max connections with zero pump responses before giving up. */
+        const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
+
         // Named GATT status codes used in bond-loss detection
         private const val GATT_INSUFFICIENT_AUTHENTICATION = 0x05
+        private const val GATT_INSUFFICIENT_ENCRYPTION = 0x08
         private const val GATT_CONN_TERMINATE_PEER_USER = 0x13
 
         /** Convert a GATT status code to a human-readable name. */
