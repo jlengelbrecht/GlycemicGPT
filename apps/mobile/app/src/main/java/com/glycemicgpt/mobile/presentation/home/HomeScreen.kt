@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,14 +66,9 @@ fun HomeScreen(
     val syncStatus by viewModel.syncStatus.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
-    // Auto-refresh when newly connected (debounced to avoid rapid-fire
-    // during fast CONNECTING -> CONNECTED -> DISCONNECTED transitions)
-    LaunchedEffect(connectionState) {
-        if (connectionState == ConnectionState.CONNECTED) {
-            delay(300)
-            viewModel.refreshData()
-        }
-    }
+    // Data refresh is handled by PumpPollingOrchestrator (staggered reads
+    // with initial delay). Manual refresh is available via pull-to-refresh.
+    // HomeViewModel observes Room, so data appears as the orchestrator writes it.
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -118,6 +114,7 @@ fun HomeScreen(
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.testTag("iob_value"),
                     )
                     Text(
                         text = "units",
@@ -142,7 +139,7 @@ fun HomeScreen(
                     title = "Basal Rate",
                     value = basalRate?.let { "%.2f".format(it.rate) } ?: "--",
                     unit = "u/hr",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("basal_card"),
                     timestamp = basalRate?.timestamp,
                     badge = basalRate?.let {
                         when (it.controlIqMode) {
@@ -161,7 +158,7 @@ fun HomeScreen(
                     title = "Reservoir",
                     value = reservoir?.let { "%.0f".format(it.unitsRemaining) } ?: "--",
                     unit = "units",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("reservoir_card"),
                     timestamp = reservoir?.timestamp,
                 )
             }
@@ -177,14 +174,14 @@ fun HomeScreen(
                     title = "Battery",
                     value = battery?.let { "${it.percentage}" } ?: "--",
                     unit = "%",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("battery_card"),
                     timestamp = battery?.timestamp,
                 )
                 StatusCard(
                     title = "Last BG",
                     value = cgm?.let { "${it.glucoseMgDl}" } ?: "--",
                     unit = "mg/dL",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("cgm_card"),
                     timestamp = cgm?.timestamp,
                     badge = cgm?.let { trendArrowSymbol(it.trendArrow) },
                 )
@@ -197,6 +194,12 @@ fun HomeScreen(
                     text = "Pair your pump in Settings to start",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (connectionState == ConnectionState.CONNECTED && iob == null) {
+                Text(
+                    text = "Loading pump data...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }
@@ -239,7 +242,9 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("connection_status"),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

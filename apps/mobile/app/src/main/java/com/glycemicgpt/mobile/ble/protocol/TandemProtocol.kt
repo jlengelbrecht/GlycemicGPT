@@ -147,4 +147,47 @@ object TandemProtocol {
 
     /** Max chunk size for control characteristics */
     const val CHUNK_SIZE_LONG = 40
+
+    /** Map an opcode to a human-readable name for debug logging. */
+    fun opcodeName(opcode: Int): String = when (opcode) {
+        OPCODE_CONTROL_IQ_IOB_REQ -> "IoB_REQ"
+        OPCODE_CONTROL_IQ_IOB_RESP -> "IoB_RESP"
+        OPCODE_CURRENT_BASAL_STATUS_REQ -> "Basal_REQ"
+        OPCODE_CURRENT_BASAL_STATUS_RESP -> "Basal_RESP"
+        OPCODE_INSULIN_STATUS_REQ -> "Insulin_REQ"
+        OPCODE_INSULIN_STATUS_RESP -> "Insulin_RESP"
+        OPCODE_CURRENT_BATTERY_REQ -> "Battery_REQ"
+        OPCODE_CURRENT_BATTERY_RESP -> "Battery_RESP"
+        OPCODE_PUMP_SETTINGS_REQ -> "PumpSettings_REQ"
+        OPCODE_PUMP_SETTINGS_RESP -> "PumpSettings_RESP"
+        OPCODE_BOLUS_CALC_DATA_REQ -> "BolusCalc_REQ"
+        OPCODE_BOLUS_CALC_DATA_RESP -> "BolusCalc_RESP"
+        OPCODE_CGM_STATUS_REQ -> "CGM_REQ"
+        OPCODE_CGM_STATUS_RESP -> "CGM_RESP"
+        OPCODE_CENTRAL_CHALLENGE_REQ -> "V1Auth_CentralChallenge_REQ"
+        OPCODE_CENTRAL_CHALLENGE_RESP -> "V1Auth_CentralChallenge_RESP"
+        OPCODE_PUMP_CHALLENGE_REQ -> "V1Auth_PumpChallenge_REQ"
+        OPCODE_PUMP_CHALLENGE_RESP -> "V1Auth_PumpChallenge_RESP"
+        OPCODE_JPAKE_1A_REQ -> "JPAKE_1A_REQ"
+        OPCODE_JPAKE_1A_RESP -> "JPAKE_1A_RESP"
+        OPCODE_JPAKE_1B_REQ -> "JPAKE_1B_REQ"
+        OPCODE_JPAKE_1B_RESP -> "JPAKE_1B_RESP"
+        OPCODE_JPAKE_2_REQ -> "JPAKE_2_REQ"
+        OPCODE_JPAKE_2_RESP -> "JPAKE_2_RESP"
+        OPCODE_JPAKE_3_SESSION_KEY_REQ -> "JPAKE_3_KEY_REQ"
+        OPCODE_JPAKE_3_SESSION_KEY_RESP -> "JPAKE_3_KEY_RESP"
+        OPCODE_JPAKE_4_KEY_CONFIRM_REQ -> "JPAKE_4_CONFIRM_REQ"
+        OPCODE_JPAKE_4_KEY_CONFIRM_RESP -> "JPAKE_4_CONFIRM_RESP"
+        OPCODE_LOG_ENTRY_SEQ_REQ -> "HistoryLog_REQ"
+        OPCODE_LOG_ENTRY_SEQ_RESP -> "HistoryLog_RESP"
+        OPCODE_PUMP_GLOBALS_REQ -> "PumpGlobals_REQ"
+        OPCODE_PUMP_GLOBALS_RESP -> "PumpGlobals_RESP"
+        OPCODE_API_VERSION_REQ -> "ApiVersion_REQ"
+        OPCODE_API_VERSION_RESP -> "ApiVersion_RESP"
+        OPCODE_PUMP_VERSION_REQ -> "PumpVersion_REQ"
+        OPCODE_PUMP_VERSION_RESP -> "PumpVersion_RESP"
+        OPCODE_TIME_SINCE_RESET_REQ -> "TimeSinceReset_REQ"
+        OPCODE_TIME_SINCE_RESET_RESP -> "TimeSinceReset_RESP"
+        else -> "Unknown_0x${opcode.toString(16).padStart(2, '0')}"
+    }
 }

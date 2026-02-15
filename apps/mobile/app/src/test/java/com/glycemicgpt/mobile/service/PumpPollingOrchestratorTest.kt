@@ -19,7 +19,6 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -66,6 +65,16 @@ class PumpPollingOrchestratorTest {
     private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
     private val wearDataSender = mockk<WearDataSender>(relaxed = true)
 
+    /**
+     * Time to advance past initial delay + all loop stagger offsets.
+     *
+     * Slow loop has the largest offset: INITIAL_POLL_DELAY + STAGGER * (fast_count + medium_count).
+     * Within the slow loop, 4 reads are staggered (battery, reservoir, history, hardware).
+     * Total = initial_delay + offset_slow + 3 staggers within slow + margin.
+     */
+    private val SETTLE_TIME_MS = PumpPollingOrchestrator.INITIAL_POLL_DELAY_MS +
+        PumpPollingOrchestrator.REQUEST_STAGGER_MS * 8 + 100
+
     private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender)
 
     @Test
@@ -80,12 +89,30 @@ class PumpPollingOrchestratorTest {
     }
 
     @Test
-    fun `polls immediately when connected`() = runTest {
+    fun `does not poll before initial delay elapses`() = runTest {
         val orchestrator = createOrchestrator()
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // let coroutines run
+        advanceTimeBy(100) // well before INITIAL_POLL_DELAY_MS
+
+        coVerify(exactly = 0) { pumpDriver.getIoB() }
+        coVerify(exactly = 0) { pumpDriver.getBasalRate() }
+        coVerify(exactly = 0) { pumpDriver.getCgmStatus() }
+        coVerify(exactly = 0) { pumpDriver.getBatteryStatus() }
+        coVerify(exactly = 0) { pumpDriver.getReservoirLevel() }
+        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any()) }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `polls after initial delay when connected`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        // Advance past initial delay + stagger for all loops
+        advanceTimeBy(SETTLE_TIME_MS)
 
         coVerify(atLeast = 1) { pumpDriver.getIoB() }
         coVerify(atLeast = 1) { pumpDriver.getBasalRate() }
@@ -101,7 +128,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
 
         coVerify(atLeast = 1) { repository.saveIoB(any()) }
         coVerify(atLeast = 1) { repository.saveBasal(any()) }
@@ -117,7 +144,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // initial poll
+        advanceTimeBy(SETTLE_TIME_MS) // initial poll (delay + stagger)
         coVerify(exactly = 1) { pumpDriver.getIoB() }
 
         advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
@@ -131,11 +158,11 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
         coVerify(exactly = 1) { pumpDriver.getIoB() }
 
         connectionStateFlow.value = ConnectionState.DISCONNECTED
-        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS + 100)
+        advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS + SETTLE_TIME_MS)
         // Should not have polled again after disconnect
         coVerify(exactly = 1) { pumpDriver.getIoB() }
         orchestrator.stop()
@@ -147,14 +174,14 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
         coVerify(exactly = 1) { pumpDriver.getIoB() }
 
         connectionStateFlow.value = ConnectionState.DISCONNECTED
         advanceTimeBy(1000)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
         coVerify(exactly = 2) { pumpDriver.getIoB() }
         orchestrator.stop()
     }
@@ -166,7 +193,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
         coVerify(exactly = 1) { pumpDriver.getIoB() }
 
         // Normal interval passes but should NOT trigger another poll
@@ -188,7 +215,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // initial poll
+        advanceTimeBy(SETTLE_TIME_MS) // initial poll
         coVerify(exactly = 1) { pumpDriver.getCgmStatus() }
 
         advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
@@ -209,7 +236,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100)
+        advanceTimeBy(SETTLE_TIME_MS)
 
         // Other reads should still succeed
         coVerify(atLeast = 1) { repository.saveBasal(any()) }
@@ -218,6 +245,36 @@ class PumpPollingOrchestratorTest {
         // Should continue polling despite IoB failure
         advanceTimeBy(PumpPollingOrchestrator.INTERVAL_FAST_MS)
         coVerify(exactly = 2) { pumpDriver.getIoB() }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `fast loop requests are staggered in order IoB then basal then CGM`() = runTest {
+        val callOrder = mutableListOf<String>()
+        coEvery { pumpDriver.getIoB() } coAnswers {
+            callOrder.add("iob")
+            Result.success(IoBReading(iob = 2.5f, timestamp = Instant.now()))
+        }
+        coEvery { pumpDriver.getBasalRate() } coAnswers {
+            callOrder.add("basal")
+            Result.success(BasalReading(rate = 0.8f, isAutomated = true, controlIqMode = ControlIqMode.STANDARD, timestamp = Instant.now()))
+        }
+        coEvery { pumpDriver.getCgmStatus() } coAnswers {
+            callOrder.add("cgm")
+            Result.success(CgmReading(glucoseMgDl = 120, trendArrow = CgmTrend.FLAT, timestamp = Instant.now()))
+        }
+
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(SETTLE_TIME_MS)
+
+        // First 3 entries should be in stagger order
+        assertTrue("Expected at least 3 calls, got ${callOrder.size}", callOrder.size >= 3)
+        assertEquals("iob", callOrder[0])
+        assertEquals("basal", callOrder[1])
+        assertEquals("cgm", callOrder[2])
         orchestrator.stop()
     }
 
@@ -269,7 +326,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // initial poll: 120 mg/dL = normal
+        advanceTimeBy(SETTLE_TIME_MS) // initial poll: 120 mg/dL = normal
 
         // No alert for normal reading
         coVerify(exactly = 0) { wearDataSender.sendAlert(any(), any(), any(), any()) }
@@ -294,7 +351,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // initial poll: low alert
+        advanceTimeBy(SETTLE_TIME_MS) // initial poll: low alert
 
         coVerify(exactly = 1) { wearDataSender.sendAlert("low", 65, any(), any()) }
 
@@ -317,7 +374,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        advanceTimeBy(100) // first high alert
+        advanceTimeBy(SETTLE_TIME_MS) // first high alert
 
         coVerify(exactly = 1) { wearDataSender.sendAlert("high", 200, any(), any()) }
 

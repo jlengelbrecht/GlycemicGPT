@@ -11,10 +11,11 @@ import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.service.BackendSyncManager
+import com.glycemicgpt.mobile.service.PumpPollingOrchestrator
 import com.glycemicgpt.mobile.service.SyncStatus
+import kotlinx.coroutines.delay
 import timber.log.Timber
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -60,31 +61,24 @@ class HomeViewModel @Inject constructor(
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     /**
-     * Manually trigger a pump data refresh. Reads are saved to the repository,
-     * which will automatically update the observed StateFlows above.
+     * Manually trigger a pump data refresh. Reads are staggered sequentially
+     * to avoid overwhelming the pump with simultaneous BLE requests (same
+     * discipline as PumpPollingOrchestrator).
      */
     fun refreshData() {
         if (_isRefreshing.value) return
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                coroutineScope {
-                    launch {
-                        pumpDriver.getIoB().onSuccess { repository.saveIoB(it) }
-                    }
-                    launch {
-                        pumpDriver.getBasalRate().onSuccess { repository.saveBasal(it) }
-                    }
-                    launch {
-                        pumpDriver.getBatteryStatus().onSuccess { repository.saveBattery(it) }
-                    }
-                    launch {
-                        pumpDriver.getReservoirLevel().onSuccess { repository.saveReservoir(it) }
-                    }
-                    launch {
-                        pumpDriver.getCgmStatus().onSuccess { repository.saveCgm(it) }
-                    }
-                }
+                pumpDriver.getIoB().onSuccess { repository.saveIoB(it) }
+                delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
+                pumpDriver.getBasalRate().onSuccess { repository.saveBasal(it) }
+                delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
+                pumpDriver.getBatteryStatus().onSuccess { repository.saveBattery(it) }
+                delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
+                pumpDriver.getReservoirLevel().onSuccess { repository.saveReservoir(it) }
+                delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
+                pumpDriver.getCgmStatus().onSuccess { repository.saveCgm(it) }
             } catch (e: Exception) {
                 Timber.w(e, "Error during manual data refresh")
             } finally {

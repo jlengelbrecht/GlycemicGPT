@@ -122,32 +122,49 @@ class PumpPollingOrchestrator @Inject constructor(
         if (phoneBatteryLow) baseMs * LOW_BATTERY_MULTIPLIER else baseMs
 
     /**
-     * Fast loop: IoB + basal rate every 30s.
-     * Runs an initial poll immediately, then repeats at interval.
+     * Fast loop: IoB + basal rate + CGM at least every ~30s.
+     *
+     * Waits [INITIAL_POLL_DELAY_MS] for the connection to stabilize, then
+     * staggers requests by [REQUEST_STAGGER_MS] to avoid overwhelming the
+     * pump with simultaneous BLE writes. The actual period is approximately
+     * INTERVAL_FAST_MS + (FAST_REQUEST_COUNT - 1) * REQUEST_STAGGER_MS
+     * plus any BLE response latency.
      */
     private suspend fun pollFastLoop() {
+        delay(INITIAL_POLL_DELAY_MS)
         while (true) {
             pollIoB()
+            delay(REQUEST_STAGGER_MS)
             pollBasal()
+            delay(REQUEST_STAGGER_MS)
             pollCgm()
             delay(effectiveInterval(INTERVAL_FAST_MS))
         }
     }
 
-    /** Medium loop: bolus history every 5 min. */
+    /** Medium loop: bolus history at least every ~5 min. */
     private suspend fun pollMediumLoop() {
+        // Offset: initial delay + fast loop's 3 requests worth of stagger,
+        // so this fires after the first fast loop iteration completes.
+        delay(INITIAL_POLL_DELAY_MS + REQUEST_STAGGER_MS * FAST_REQUEST_COUNT)
         while (true) {
             pollBolusHistory()
             delay(effectiveInterval(INTERVAL_MEDIUM_MS))
         }
     }
 
-    /** Slow loop: battery + reservoir + raw history logs every 15 min. */
+    /** Slow loop: battery + reservoir + raw history logs at least every ~15 min. */
     private suspend fun pollSlowLoop() {
+        // Offset: initial delay + fast loop requests + 1 medium request,
+        // so this fires after both fast and medium first iterations.
+        delay(INITIAL_POLL_DELAY_MS + REQUEST_STAGGER_MS * (FAST_REQUEST_COUNT + MEDIUM_REQUEST_COUNT))
         while (true) {
             pollBattery()
+            delay(REQUEST_STAGGER_MS)
             pollReservoir()
+            delay(REQUEST_STAGGER_MS)
             pollHistoryLogs()
+            delay(REQUEST_STAGGER_MS)
             cacheHardwareInfoOnce()
             delay(effectiveInterval(INTERVAL_SLOW_MS))
         }
@@ -238,9 +255,20 @@ class PumpPollingOrchestrator @Inject constructor(
     }
 
     companion object {
-        const val INTERVAL_FAST_MS = 30_000L       // IoB + basal
+        const val INTERVAL_FAST_MS = 30_000L       // IoB + basal + CGM
         const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
         const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
+
+        /** Delay before first poll after connection to let the pump settle. */
+        const val INITIAL_POLL_DELAY_MS = 2_000L
+
+        /** Stagger between consecutive BLE requests within a loop iteration. */
+        const val REQUEST_STAGGER_MS = 200L
+
+        // Request counts per loop -- used to compute stagger offsets.
+        // Update these if you add/remove reads from a loop.
+        private const val FAST_REQUEST_COUNT = 3   // IoB, basal, CGM
+        private const val MEDIUM_REQUEST_COUNT = 1 // bolus history
 
         // When phone battery is low, slow everything down by this factor
         const val LOW_BATTERY_MULTIPLIER = 3
