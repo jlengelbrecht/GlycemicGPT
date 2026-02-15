@@ -66,14 +66,9 @@ fun HomeScreen(
     val syncStatus by viewModel.syncStatus.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
-    // Auto-refresh when newly connected (debounced to avoid rapid-fire
-    // during fast CONNECTING -> CONNECTED -> DISCONNECTED transitions)
-    LaunchedEffect(connectionState) {
-        if (connectionState == ConnectionState.CONNECTED) {
-            delay(300)
-            viewModel.refreshData()
-        }
-    }
+    // Data refresh is handled by PumpPollingOrchestrator (staggered reads
+    // with initial delay). Manual refresh is available via pull-to-refresh.
+    // HomeViewModel observes Room, so data appears as the orchestrator writes it.
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -199,6 +194,12 @@ fun HomeScreen(
                     text = "Pair your pump in Settings to start",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else if (connectionState == ConnectionState.CONNECTED && iob == null) {
+                Text(
+                    text = "Loading pump data...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }

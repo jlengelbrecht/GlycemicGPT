@@ -92,10 +92,11 @@ class BleConnectionManager @Inject constructor(
     // Pending status read requests: txId -> deferred response cargo
     private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<ByteArray>>()
 
-    // Handshake timeout: fail if authentication doesn't complete within this window.
-    // JPAKE has 5 round trips; 30s is generous even on slow BLE connections.
     private var authTimeoutJob: Job? = null
-    private val AUTH_TIMEOUT_MS = 30_000L
+
+    // Post-auth settle: delayed job that sets CONNECTED after the pump stabilizes.
+    // Must be cancelled on disconnect to prevent stale CONNECTED state.
+    private var settleJob: Job? = null
 
     private sealed class GattOperation {
         data class WriteCharacteristic(
@@ -145,6 +146,8 @@ class BleConnectionManager @Inject constructor(
         reconnectJob = null
         authTimeoutJob?.cancel()
         authTimeoutJob = null
+        settleJob?.cancel()
+        settleJob = null
         operationQueue.clear()
         operationInFlight.set(false)
         cancelPendingRequests()
@@ -360,6 +363,8 @@ class BleConnectionManager @Inject constructor(
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     Timber.w("BLE_RAW GATT disconnected status=%d (%s)",
                         status, gattStatusName(status))
+                    settleJob?.cancel()
+                    settleJob = null
                     synchronized(gattLock) {
                         this@BleConnectionManager.gatt?.close()
                         this@BleConnectionManager.gatt = null
@@ -547,7 +552,6 @@ class BleConnectionManager @Inject constructor(
     private fun onAuthSuccess() {
         authTimeoutJob?.cancel()
         authTimeoutJob = null
-        _connectionState.value = ConnectionState.CONNECTED
         reconnectAttempt = 0
         // Save credentials on first successful pairing
         val address = synchronized(gattLock) { gatt?.device?.address }
@@ -556,7 +560,19 @@ class BleConnectionManager @Inject constructor(
             credentialStore.savePairing(address, code)
             pendingPairingCode = null
         }
-        Timber.d("Pump authenticated and connected")
+        // Post-auth settle: give the pump time to finalize its internal state
+        // before we flood it with status requests. Without this delay, the first
+        // batch of reads often gets garbage or times out.
+        Timber.d("Pump authenticated, settling for %d ms before allowing reads", POST_AUTH_SETTLE_MS)
+        settleJob?.cancel()
+        settleJob = scope.launch {
+            delay(POST_AUTH_SETTLE_MS)
+            // Guard: only transition if we haven't been disconnected during the delay
+            if (_connectionState.value == ConnectionState.AUTHENTICATING) {
+                _connectionState.value = ConnectionState.CONNECTED
+                Timber.d("Pump connected and ready for status requests")
+            }
+        }
     }
 
     private fun handleAuthNotification(data: ByteArray) {
@@ -680,6 +696,12 @@ class BleConnectionManager @Inject constructor(
     }
 
     companion object {
+        /** Post-auth settle delay (ms) before setting CONNECTED state. */
+        const val POST_AUTH_SETTLE_MS = 500L
+
+        /** Auth handshake timeout. JPAKE has 5 round trips; 30s is generous. */
+        const val AUTH_TIMEOUT_MS = 30_000L
+
         /** Convert a GATT status code to a human-readable name. */
         fun gattStatusName(status: Int): String = when (status) {
             0 -> "SUCCESS"
