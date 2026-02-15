@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(
     onNavigateToPairing: () -> Unit = {},
+    onNavigateToBleDebug: (() -> Unit)? = null,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     tandemCloudSyncViewModel: TandemCloudSyncViewModel = hiltViewModel(),
 ) {
@@ -144,6 +146,18 @@ fun SettingsScreen(
             onGetInstallIntent = settingsViewModel::getInstallIntent,
             onDismissUpdate = settingsViewModel::dismissUpdateState,
         )
+
+        // -- Debug Section (debug builds only) --
+        if (onNavigateToBleDebug != null) {
+            Spacer(modifier = Modifier.height(20.dp))
+            SectionHeader(title = "Developer")
+            OutlinedButton(
+                onClick = onNavigateToBleDebug,
+                modifier = Modifier.fillMaxWidth().testTag("ble_debug_button"),
+            ) {
+                Text("BLE Debug Console")
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
@@ -237,7 +251,7 @@ private fun AccountSection(
                 placeholder = { Text("https://your-server.com") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("server_url_field"),
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -252,7 +266,7 @@ private fun AccountSection(
                         onTestConnection()
                     },
                     enabled = !state.isTestingConnection && urlInput.isNotBlank(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("test_connection_button"),
                 ) {
                     if (state.isTestingConnection) {
                         CircularProgressIndicator(
@@ -346,7 +360,7 @@ private fun AccountSection(
                     label = { Text("Email") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("email_field"),
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -361,7 +375,7 @@ private fun AccountSection(
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("password_field"),
                 )
 
                 state.loginError?.let { error ->
@@ -378,7 +392,7 @@ private fun AccountSection(
                 Button(
                     onClick = { onLogin(email, password) },
                     enabled = !state.isLoggingIn && email.isNotBlank() && password.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("sign_in_button"),
                 ) {
                     if (state.isLoggingIn) {
                         CircularProgressIndicator(
@@ -441,7 +455,7 @@ private fun PumpSection(
                 ) {
                     OutlinedButton(
                         onClick = onNavigateToPairing,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("repair_button"),
                     ) {
                         Text("Re-pair")
                     }
@@ -450,7 +464,7 @@ private fun PumpSection(
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error,
                         ),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).testTag("unpair_button"),
                     ) {
                         Text("Unpair")
                     }
@@ -458,7 +472,7 @@ private fun PumpSection(
             } else {
                 Button(
                     onClick = onNavigateToPairing,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("pair_pump_button"),
                 ) {
                     Text("Pair Pump")
                 }

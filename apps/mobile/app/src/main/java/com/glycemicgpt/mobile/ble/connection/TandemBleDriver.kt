@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.ble.connection
 
 import com.glycemicgpt.mobile.ble.messages.StatusResponseParser
 import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
+import com.glycemicgpt.mobile.data.local.BleDebugStore
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
@@ -14,6 +15,7 @@ import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import kotlinx.coroutines.flow.Flow
+import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,6 +32,7 @@ import javax.inject.Singleton
 @Singleton
 class TandemBleDriver @Inject constructor(
     private val connectionManager: BleConnectionManager,
+    private val debugStore: BleDebugStore,
 ) : PumpDriver {
 
     override suspend fun connect(deviceAddress: String): Result<Unit> {
@@ -117,6 +120,7 @@ class TandemBleDriver @Inject constructor(
     /**
      * Send a status request and parse the response. Wraps the entire
      * send-receive-parse cycle in a Result for safe error handling.
+     * Logs parsed values and errors to the debug store.
      */
     private suspend fun <T> runStatusRequest(
         opcode: Int,
@@ -124,8 +128,14 @@ class TandemBleDriver @Inject constructor(
     ): Result<T> {
         return try {
             val responseCargo = connectionManager.sendStatusRequest(opcode)
-            Result.success(parser(responseCargo))
+            val result = parser(responseCargo)
+            val parsedStr = result.toString()
+            Timber.d("BLE_RAW PARSED opcode=0x%02x result=%s", opcode, parsedStr)
+            debugStore.updateLast(opcode, BleDebugStore.Direction.RX, parsedValue = parsedStr)
+            Result.success(result)
         } catch (e: Exception) {
+            Timber.e(e, "BLE_RAW PARSE_ERROR opcode=0x%02x", opcode)
+            debugStore.updateLast(opcode, BleDebugStore.Direction.RX, error = e.message ?: e.javaClass.simpleName)
             Result.failure(e)
         }
     }

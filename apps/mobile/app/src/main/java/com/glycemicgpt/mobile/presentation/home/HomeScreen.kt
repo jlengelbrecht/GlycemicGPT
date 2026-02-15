@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -118,6 +119,7 @@ fun HomeScreen(
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.testTag("iob_value"),
                     )
                     Text(
                         text = "units",
@@ -142,7 +144,7 @@ fun HomeScreen(
                     title = "Basal Rate",
                     value = basalRate?.let { "%.2f".format(it.rate) } ?: "--",
                     unit = "u/hr",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("basal_card"),
                     timestamp = basalRate?.timestamp,
                     badge = basalRate?.let {
                         when (it.controlIqMode) {
@@ -161,7 +163,7 @@ fun HomeScreen(
                     title = "Reservoir",
                     value = reservoir?.let { "%.0f".format(it.unitsRemaining) } ?: "--",
                     unit = "units",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("reservoir_card"),
                     timestamp = reservoir?.timestamp,
                 )
             }
@@ -177,14 +179,14 @@ fun HomeScreen(
                     title = "Battery",
                     value = battery?.let { "${it.percentage}" } ?: "--",
                     unit = "%",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("battery_card"),
                     timestamp = battery?.timestamp,
                 )
                 StatusCard(
                     title = "Last BG",
                     value = cgm?.let { "${it.glucoseMgDl}" } ?: "--",
                     unit = "mg/dL",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("cgm_card"),
                     timestamp = cgm?.timestamp,
                     badge = cgm?.let { trendArrowSymbol(it.trendArrow) },
                 )
@@ -239,7 +241,9 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("connection_status"),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

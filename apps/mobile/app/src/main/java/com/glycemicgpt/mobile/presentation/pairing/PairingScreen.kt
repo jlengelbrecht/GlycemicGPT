@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -265,7 +266,7 @@ private fun PairingCodeInput(
                 value = pairingCode,
                 onValueChange = onCodeChanged,
                 label = { Text("Pairing Code") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("pairing_code_field"),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
                 singleLine = true,
             )
@@ -282,7 +283,7 @@ private fun PairingCodeInput(
                 }
                 Button(
                     onClick = onPair,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag("pair_button"),
                     enabled = pairingCode.length >= 6,
                 ) {
                     Text("Pair")
@@ -378,7 +379,7 @@ private fun ScanSection(
                 }
             }
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("scan_button"),
     ) {
         Icon(
             imageVector = Icons.Default.BluetoothSearching,

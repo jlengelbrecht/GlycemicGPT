@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.presentation.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
@@ -25,6 +26,8 @@ import androidx.navigation.compose.rememberNavController
 import com.glycemicgpt.mobile.presentation.alerts.AlertsScreen
 import com.glycemicgpt.mobile.presentation.chat.AiChatScreen
 import com.glycemicgpt.mobile.presentation.home.HomeScreen
+import com.glycemicgpt.mobile.BuildConfig
+import com.glycemicgpt.mobile.presentation.debug.BleDebugScreen
 import com.glycemicgpt.mobile.presentation.pairing.PairingScreen
 import com.glycemicgpt.mobile.presentation.settings.SettingsScreen
 
@@ -34,6 +37,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object Alerts : Screen("alerts", "Alerts", Icons.Default.Notifications)
     data object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     data object Pairing : Screen("pairing", "Pairing", Icons.Default.Bluetooth)
+    data object BleDebug : Screen("ble_debug", "BLE Debug", Icons.Default.BugReport)
 }
 
 private val bottomNavItems = listOf(Screen.Home, Screen.AiChat, Screen.Alerts, Screen.Settings)
@@ -79,12 +83,22 @@ fun GlycemicGptNavHost() {
                     onNavigateToPairing = {
                         navController.navigate(Screen.Pairing.route)
                     },
+                    onNavigateToBleDebug = if (BuildConfig.DEBUG) {
+                        { navController.navigate(Screen.BleDebug.route) }
+                    } else {
+                        null
+                    },
                 )
             }
             composable(Screen.Pairing.route) {
                 PairingScreen(
                     onPaired = { navController.popBackStack() },
                 )
+            }
+            if (BuildConfig.DEBUG) {
+                composable(Screen.BleDebug.route) {
+                    BleDebugScreen()
+                }
             }
         }
     }

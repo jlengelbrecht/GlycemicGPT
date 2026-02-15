@@ -15,7 +15,9 @@ import com.glycemicgpt.mobile.ble.auth.TandemAuthenticator
 import com.glycemicgpt.mobile.ble.protocol.PacketAssembler
 import com.glycemicgpt.mobile.ble.protocol.Packetize
 import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
+import com.glycemicgpt.mobile.data.local.BleDebugStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
+import com.glycemicgpt.mobile.data.local.toHexString
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import timber.log.Timber
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -55,6 +58,7 @@ class BleConnectionManager @Inject constructor(
     private val authenticator: TandemAuthenticator,
     private val jpakeAuthenticator: JpakeAuthenticator,
     private val credentialStore: PumpCredentialStore,
+    private val debugStore: BleDebugStore,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -210,6 +214,17 @@ class BleConnectionManager @Inject constructor(
             evicted.cancel()
         }
 
+        Timber.d("BLE_RAW TX opcode=0x%02x txId=%d cargoLen=%d", opcode, id, cargo.size)
+        debugStore.add(BleDebugStore.Entry(
+            timestamp = Instant.now(),
+            direction = BleDebugStore.Direction.TX,
+            opcode = opcode,
+            opcodeName = TandemProtocol.opcodeName(opcode),
+            txId = id,
+            cargoHex = cargo.toHexString(),
+            cargoSize = cargo.size,
+        ))
+
         val chunks = Packetize.encode(opcode, id, cargo, TandemProtocol.CHUNK_SIZE_SHORT)
         enqueueWrite(TandemProtocol.CURRENT_STATUS_UUID, chunks)
 
@@ -343,7 +358,8 @@ class BleConnectionManager @Inject constructor(
                     gatt.requestMtu(TandemProtocol.REQUIRED_MTU)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
-                    Timber.d("GATT disconnected (status=%d)", status)
+                    Timber.w("BLE_RAW GATT disconnected status=%d (%s)",
+                        status, gattStatusName(status))
                     synchronized(gattLock) {
                         this@BleConnectionManager.gatt?.close()
                         this@BleConnectionManager.gatt = null
@@ -460,16 +476,41 @@ class BleConnectionManager @Inject constructor(
         statusAssemblers.remove(chunkTxId)
 
         val parsed = Packetize.parseHeader(raw) ?: run {
-            Timber.e("Failed to parse status notification txId=%d", chunkTxId)
+            Timber.e("Failed to parse status notification txId=%d len=%d",
+                chunkTxId, raw.size)
+            debugStore.add(BleDebugStore.Entry(
+                timestamp = Instant.now(),
+                direction = BleDebugStore.Direction.RX,
+                opcode = if (raw.isNotEmpty()) raw[0].toInt() and 0xFF else -1,
+                opcodeName = "PARSE_FAIL",
+                txId = chunkTxId,
+                cargoHex = raw.toHexString(),
+                cargoSize = raw.size,
+                error = "CRC or header parse failed",
+            ))
             return
         }
 
-        val (_, responseTxId, cargo) = parsed
+        val (opcode, responseTxId, cargo) = parsed
+        val cargoHex = cargo.toHexString()
+        Timber.d("BLE_RAW RX opcode=0x%02x txId=%d cargoLen=%d hex=%s",
+            opcode, responseTxId, cargo.size, cargoHex)
+        debugStore.add(BleDebugStore.Entry(
+            timestamp = Instant.now(),
+            direction = BleDebugStore.Direction.RX,
+            opcode = opcode,
+            opcodeName = TandemProtocol.opcodeName(opcode),
+            txId = responseTxId,
+            cargoHex = cargoHex,
+            cargoSize = cargo.size,
+        ))
+
         val deferred = pendingRequests.remove(responseTxId)
         if (deferred != null) {
             deferred.complete(cargo)
         } else {
-            Timber.w("Received unsolicited status response txId=%d", responseTxId)
+            Timber.w("Received unsolicited status response txId=%d opcode=0x%02x",
+                responseTxId, opcode)
         }
     }
 
@@ -528,11 +569,32 @@ class BleConnectionManager @Inject constructor(
         }
 
         val parsed = Packetize.parseHeader(raw) ?: run {
-            Timber.e("Failed to parse auth notification")
+            Timber.e("Failed to parse auth notification len=%d", raw.size)
+            debugStore.add(BleDebugStore.Entry(
+                timestamp = Instant.now(),
+                direction = BleDebugStore.Direction.RX,
+                opcode = if (raw.isNotEmpty()) raw[0].toInt() and 0xFF else -1,
+                opcodeName = "AUTH_PARSE_FAIL",
+                txId = -1,
+                cargoHex = raw.toHexString(),
+                cargoSize = raw.size,
+                error = "Auth CRC or header parse failed",
+            ))
             return
         }
 
-        val (opcode, _, cargo) = parsed
+        val (opcode, authTxId, cargo) = parsed
+        Timber.d("BLE_RAW AUTH opcode=0x%02x txId=%d cargoLen=%d",
+            opcode, authTxId, cargo.size)
+        debugStore.add(BleDebugStore.Entry(
+            timestamp = Instant.now(),
+            direction = BleDebugStore.Direction.RX,
+            opcode = opcode,
+            opcodeName = TandemProtocol.opcodeName(opcode),
+            txId = authTxId,
+            cargoHex = cargo.toHexString(),
+            cargoSize = cargo.size,
+        ))
 
         when (opcode) {
             // -- V1 authentication opcodes --
@@ -614,6 +676,27 @@ class BleConnectionManager @Inject constructor(
             else -> {
                 Timber.w("Auth: unexpected opcode %d in auth notification", opcode)
             }
+        }
+    }
+
+    companion object {
+        /** Convert a GATT status code to a human-readable name. */
+        fun gattStatusName(status: Int): String = when (status) {
+            0 -> "SUCCESS"
+            2 -> "READ_NOT_PERMITTED"
+            5 -> "INSUFFICIENT_AUTHENTICATION"
+            6 -> "REQUEST_NOT_SUPPORTED"
+            7 -> "INVALID_OFFSET"
+            8 -> "INSUFFICIENT_ENCRYPTION"
+            0x0D -> "INVALID_ATTRIBUTE_LENGTH"
+            0x13 -> "CONN_TERMINATE_PEER_USER"
+            0x16 -> "CONN_TERMINATE_LOCAL_HOST"
+            0x22 -> "CONN_FAILED_ESTABLISHMENT"
+            0x3B -> "UNSPECIFIED_ERROR"
+            0x3E -> "CONN_TIMEOUT"
+            0x85 -> "GATT_ERROR"
+            0x101 -> "GATT_FAILURE"
+            else -> "UNKNOWN_0x${status.toString(16)}"
         }
     }
 }
