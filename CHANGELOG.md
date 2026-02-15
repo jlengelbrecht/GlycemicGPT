@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.90](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.89...v0.1.90) (2026-02-15)
+
+
+### ✨ Features
+
+* BLE debug instrumentation, dev environment, and connection stability ([#204](https://github.com/jlengelbrecht/GlycemicGPT/issues/204)) ([43f708f](https://github.com/jlengelbrecht/GlycemicGPT/commit/43f708fb1b732600e45ce74d9eebe9c64c204fa2))
+
 ## [0.1.89](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.88...v0.1.89) (2026-02-14)
 
 
