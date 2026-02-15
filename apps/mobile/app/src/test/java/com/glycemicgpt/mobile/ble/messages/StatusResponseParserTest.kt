@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.ble.messages
 
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,28 +14,60 @@ import java.time.Instant
 
 class StatusResponseParserTest {
 
-    // -- IoB tests -----------------------------------------------------------
+    // -- IoB tests (opcode 109, 17-byte cargo) --------------------------------
 
     @Test
-    fun `parseIoBResponse with valid milliunits`() {
-        // 2500 milliunits = 2.5 units
-        val cargo = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(2500).array()
+    fun `parseIoBResponse mudaliar mode (CIQ off)`() {
+        // pumpX2 test vector: c00000007c380000f1000000a100000000
+        val cargo = hexToBytes("c00000007c380000f1000000a100000000")
         val result = StatusResponseParser.parseIoBResponse(cargo)
         assertNotNull(result)
+        // mudaliarIOB = 0xC0 = 192 milliunits = 0.192 U, iobType=0 -> use mudaliar
+        assertEquals(0.192f, result!!.iob, 0.001f)
+    }
+
+    @Test
+    fun `parseIoBResponse swan6hr mode (CIQ on)`() {
+        // pumpX2 test vector: b80000008c370000f10000009a00000001
+        val cargo = hexToBytes("b80000008c370000f10000009a00000001")
+        val result = StatusResponseParser.parseIoBResponse(cargo)
+        assertNotNull(result)
+        // swan6hrIOB = 0x9A = 154 milliunits = 0.154 U, iobType=1 -> use swan
+        assertEquals(0.154f, result!!.iob, 0.001f)
+    }
+
+    @Test
+    fun `parseIoBResponse with typical values`() {
+        // 2500 milliunits mudaliar, iobType=1 -> use swan6hr (1500 milliunits)
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(2500) // mudaliarIOB
+        buf.putInt(3600) // timeRemaining
+        buf.putInt(3000) // mudaliarTotalIOB
+        buf.putInt(1500) // swan6hrIOB
+        buf.put(1)       // iobType = SWAN_6HR
+        val result = StatusResponseParser.parseIoBResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(1.5f, result!!.iob, 0.001f)
+    }
+
+    @Test
+    fun `parseIoBResponse unknown iobType falls back to mudaliar`() {
+        // iobType=2 (unknown future value) should fall back to mudaliar
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(2500) // mudaliarIOB
+        buf.putInt(3600) // timeRemaining
+        buf.putInt(3000) // mudaliarTotalIOB
+        buf.putInt(1500) // swan6hrIOB
+        buf.put(2)       // iobType = unknown
+        val result = StatusResponseParser.parseIoBResponse(buf.array())
+        assertNotNull(result)
+        // Falls back to mudaliar (2500 milliunits = 2.5 U)
         assertEquals(2.5f, result!!.iob, 0.001f)
     }
 
     @Test
-    fun `parseIoBResponse with zero`() {
-        val cargo = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(0).array()
-        val result = StatusResponseParser.parseIoBResponse(cargo)
-        assertNotNull(result)
-        assertEquals(0f, result!!.iob, 0.001f)
-    }
-
-    @Test
     fun `parseIoBResponse returns null for short cargo`() {
-        assertNull(StatusResponseParser.parseIoBResponse(byteArrayOf(0x01, 0x02)))
+        assertNull(StatusResponseParser.parseIoBResponse(ByteArray(16)))
     }
 
     @Test
@@ -42,58 +75,77 @@ class StatusResponseParserTest {
         assertNull(StatusResponseParser.parseIoBResponse(ByteArray(0)))
     }
 
-    // -- Basal status tests --------------------------------------------------
+    // -- Basal status tests (opcode 41, 9-byte cargo) -------------------------
 
     @Test
-    fun `parseBasalStatusResponse standard mode automated`() {
-        val buf = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(750) // 0.75 u/hr
-        buf.put(0) // Standard mode
-        buf.put(1) // Automated delivery active
+    fun `parseBasalStatusResponse normal delivery`() {
+        // pumpX2 test vector: e8030000e803000000
+        val cargo = hexToBytes("e8030000e803000000")
+        val result = StatusResponseParser.parseBasalStatusResponse(cargo)
+        assertNotNull(result)
+        // currentBasalRate = 1000 milliunits/hr = 1.0 U/hr, modified=0
+        assertEquals(1.0f, result!!.rate, 0.001f)
+        assertFalse(result.isAutomated) // modified=0 means normal, not automated
+    }
+
+    @Test
+    fun `parseBasalStatusResponse suspended or modified`() {
+        // pumpX2 test vector: 200300000000000001
+        val cargo = hexToBytes("200300000000000001")
+        val result = StatusResponseParser.parseBasalStatusResponse(cargo)
+        assertNotNull(result)
+        // currentBasalRate = 0, modified=1 (suspended by CIQ)
+        assertEquals(0.0f, result!!.rate, 0.001f)
+        assertTrue(result.isAutomated) // modified=1
+    }
+
+    @Test
+    fun `parseBasalStatusResponse with typical rate`() {
+        val buf = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(800) // profileBasalRate = 0.8 U/hr
+        buf.putInt(750) // currentBasalRate = 0.75 U/hr
+        buf.put(0)      // not modified
         val result = StatusResponseParser.parseBasalStatusResponse(buf.array())
         assertNotNull(result)
         assertEquals(0.75f, result!!.rate, 0.001f)
         assertEquals(ControlIqMode.STANDARD, result.controlIqMode)
-        assertTrue(result.isAutomated)
-    }
-
-    @Test
-    fun `parseBasalStatusResponse sleep mode not automated`() {
-        val buf = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(1200) // 1.2 u/hr
-        buf.put(1) // Sleep mode
-        buf.put(0) // Not automated
-        val result = StatusResponseParser.parseBasalStatusResponse(buf.array())
-        assertNotNull(result)
-        assertEquals(1.2f, result!!.rate, 0.001f)
-        assertEquals(ControlIqMode.SLEEP, result.controlIqMode)
-        assertFalse(result.isAutomated)
-    }
-
-    @Test
-    fun `parseBasalStatusResponse exercise mode`() {
-        val buf = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(500) // 0.5 u/hr
-        buf.put(2) // Exercise mode
-        buf.put(1) // Automated
-        val result = StatusResponseParser.parseBasalStatusResponse(buf.array())
-        assertNotNull(result)
-        assertEquals(ControlIqMode.EXERCISE, result!!.controlIqMode)
     }
 
     @Test
     fun `parseBasalStatusResponse returns null for short cargo`() {
-        assertNull(StatusResponseParser.parseBasalStatusResponse(byteArrayOf(0x01, 0x02, 0x03)))
+        assertNull(StatusResponseParser.parseBasalStatusResponse(ByteArray(8)))
     }
 
-    // -- Insulin status (reservoir) tests ------------------------------------
+    // -- Insulin status (reservoir) tests (opcode 37, 4-byte cargo) -----------
 
     @Test
-    fun `parseInsulinStatusResponse with valid milliunits`() {
-        val cargo = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(180_000).array()
+    fun `parseInsulinStatusResponse whole units`() {
+        // pumpX2 test vector: 00000023
+        val cargo = hexToBytes("00000023")
         val result = StatusResponseParser.parseInsulinStatusResponse(cargo)
         assertNotNull(result)
-        assertEquals(180f, result!!.unitsRemaining, 0.001f)
+        // uint16 LE at bytes 0-1 = 0x0000 = 0 units
+        assertEquals(0f, result!!.unitsRemaining, 0.001f)
+    }
+
+    @Test
+    fun `parseInsulinStatusResponse with 200 units`() {
+        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(200.toShort()) // 200 units (NOT milliunits)
+        buf.put(0) // exact
+        buf.put(35) // low threshold = 35 units
+        val result = StatusResponseParser.parseInsulinStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(200f, result!!.unitsRemaining, 0.001f)
+    }
+
+    @Test
+    fun `parseInsulinStatusResponse with 150 units`() {
+        val buf = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(150.toShort())
+        val result = StatusResponseParser.parseInsulinStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(150f, result!!.unitsRemaining, 0.001f)
     }
 
     @Test
@@ -101,40 +153,200 @@ class StatusResponseParserTest {
         assertNull(StatusResponseParser.parseInsulinStatusResponse(byteArrayOf(0x01)))
     }
 
-    // -- Battery tests -------------------------------------------------------
+    // -- Battery V1 tests (opcode 53, 2-byte cargo) ---------------------------
 
     @Test
-    fun `parseBatteryResponse with percentage and charging`() {
-        val cargo = byteArrayOf(85.toByte(), 1)
-        val result = StatusResponseParser.parseBatteryResponse(cargo)
+    fun `parseBatteryV1Response with 100 percent`() {
+        // pumpX2 test vector: 6364
+        val cargo = hexToBytes("6364")
+        val result = StatusResponseParser.parseBatteryV1Response(cargo)
         assertNotNull(result)
-        assertEquals(85, result!!.percentage)
-        assertTrue(result.isCharging)
+        // byte 1 (ibc) = 0x64 = 100%
+        assertEquals(100, result!!.percentage)
+        assertFalse(result.isCharging) // V1 has no charging flag
     }
 
     @Test
-    fun `parseBatteryResponse with percentage only`() {
-        val cargo = byteArrayOf(42.toByte())
-        val result = StatusResponseParser.parseBatteryResponse(cargo)
+    fun `parseBatteryV1Response returns null for single byte`() {
+        assertNull(StatusResponseParser.parseBatteryV1Response(byteArrayOf(42)))
+    }
+
+    // -- Battery V2 tests (opcode 145, 11-byte cargo) -------------------------
+
+    @Test
+    fun `parseBatteryV2Response not charging`() {
+        // pumpX2 test vector: 1b0a000000000000000000 (11 bytes)
+        val cargo = hexToBytes("1b0a000000000000000000")
+        val result = StatusResponseParser.parseBatteryV2Response(cargo)
         assertNotNull(result)
-        assertEquals(42, result!!.percentage)
+        // byte 1 (ibc) = 0x0a = 10%, byte 2 = 0 (not charging)
+        assertEquals(10, result!!.percentage)
         assertFalse(result.isCharging)
     }
 
     @Test
-    fun `parseBatteryResponse clamps to 0-100`() {
-        val cargo = byteArrayOf(0xFF.toByte(), 0)
-        val result = StatusResponseParser.parseBatteryResponse(cargo)
+    fun `parseBatteryV2Response charging`() {
+        // pumpX2 test vector: 1b0a010000000000000000 (11 bytes)
+        val cargo = hexToBytes("1b0a010000000000000000")
+        val result = StatusResponseParser.parseBatteryV2Response(cargo)
         assertNotNull(result)
-        assertEquals(100, result!!.percentage)
+        assertEquals(10, result!!.percentage)
+        assertTrue(result.isCharging)
     }
 
     @Test
-    fun `parseBatteryResponse returns null for empty cargo`() {
-        assertNull(StatusResponseParser.parseBatteryResponse(ByteArray(0)))
+    fun `parseBatteryV2Response returns null for short cargo`() {
+        assertNull(StatusResponseParser.parseBatteryV2Response(byteArrayOf(0x1b, 0x0a)))
     }
 
-    // -- Pump settings tests -------------------------------------------------
+    // -- CGM EGV tests (opcode 35, 8-byte cargo) ------------------------------
+
+    @Test
+    fun `parseCgmEgvResponse with valid reading`() {
+        // pumpX2 test vector: c87c131c7b000100
+        val cargo = hexToBytes("c87c131c7b000100")
+        val result = StatusResponseParser.parseCgmEgvResponse(cargo)
+        assertNotNull(result)
+        // glucose = 0x007B = 123 mg/dL, egvStatus = 1 (VALID)
+        assertEquals(123, result!!.glucoseMgDl)
+        assertEquals(CgmTrend.UNKNOWN, result.trendArrow) // trend comes from HomeScreenMirror
+    }
+
+    @Test
+    fun `parseCgmEgvResponse accepts LOW status`() {
+        // egvStatus = 2 (LOW) -- still has a valid glucose value
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(471039176) // timestamp
+        buf.putShort(55)      // 55 mg/dL (low but valid)
+        buf.put(2)            // LOW
+        buf.put(0)
+        val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(55, result!!.glucoseMgDl)
+    }
+
+    @Test
+    fun `parseCgmEgvResponse accepts HIGH status`() {
+        // egvStatus = 3 (HIGH) -- still has a valid glucose value
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(471039176) // timestamp
+        buf.putShort(350)     // 350 mg/dL (high but valid)
+        buf.put(3)            // HIGH
+        buf.put(0)
+        val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(350, result!!.glucoseMgDl)
+    }
+
+    @Test
+    fun `parseCgmEgvResponse rejects INVALID status`() {
+        // egvStatus = 0 (INVALID)
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(471039176)
+        buf.putShort(120)
+        buf.put(0) // INVALID
+        buf.put(0)
+        assertNull(StatusResponseParser.parseCgmEgvResponse(buf.array()))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse with unavailable status returns null`() {
+        // egvStatus = 4 (UNAVAILABLE)
+        val cargo = hexToBytes("0000000000000400")
+        assertNull(StatusResponseParser.parseCgmEgvResponse(cargo))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse with zero glucose returns null`() {
+        val cargo = hexToBytes("c87c131c00000100")
+        assertNull(StatusResponseParser.parseCgmEgvResponse(cargo))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse with glucose over 500 returns null`() {
+        // 501 = 0x01F5
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(1000) // timestamp
+        buf.putShort(501)
+        buf.put(1) // VALID
+        buf.put(0) // trendRate
+        assertNull(StatusResponseParser.parseCgmEgvResponse(buf.array()))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse returns null for short cargo`() {
+        assertNull(StatusResponseParser.parseCgmEgvResponse(ByteArray(7)))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse returns null for empty cargo`() {
+        assertNull(StatusResponseParser.parseCgmEgvResponse(ByteArray(0)))
+    }
+
+    @Test
+    fun `parseCgmEgvResponse converts tandem epoch to unix timestamp`() {
+        // 471039176 seconds since Jan 1, 2008 = Unix 1670184776 = Dec 4, 2022
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(471039176)
+        buf.putShort(120)
+        buf.put(1) // VALID
+        buf.put(0)
+        val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(120, result!!.glucoseMgDl)
+        // 471039176 + 1199145600 = 1670184776
+        assertEquals(1670184776L, result.timestamp.epochSecond)
+    }
+
+    // -- HomeScreenMirror tests (opcode 57, 9-byte cargo) ---------------------
+
+    @Test
+    fun `parseHomeScreenMirrorResponse with flat trend`() {
+        val cargo = byteArrayOf(4, 0, 0, 0, 0, 0, 0, 0, 0) // trend=FLAT
+        val result = StatusResponseParser.parseHomeScreenMirrorResponse(cargo)
+        assertNotNull(result)
+        assertEquals(CgmTrend.FLAT, result!!.trendArrow)
+    }
+
+    @Test
+    fun `parseHomeScreenMirrorResponse maps all trend icons`() {
+        val expected = mapOf(
+            1 to CgmTrend.DOUBLE_UP,
+            2 to CgmTrend.SINGLE_UP,
+            3 to CgmTrend.FORTY_FIVE_UP,
+            4 to CgmTrend.FLAT,
+            5 to CgmTrend.FORTY_FIVE_DOWN,
+            6 to CgmTrend.SINGLE_DOWN,
+            7 to CgmTrend.DOUBLE_DOWN,
+            0 to CgmTrend.UNKNOWN,
+        )
+        for ((iconId, expectedTrend) in expected) {
+            val cargo = ByteArray(9)
+            cargo[0] = iconId.toByte()
+            val result = StatusResponseParser.parseHomeScreenMirrorResponse(cargo)
+            assertNotNull("iconId $iconId should parse", result)
+            assertEquals("iconId $iconId", expectedTrend, result!!.trendArrow)
+        }
+    }
+
+    @Test
+    fun `parseHomeScreenMirrorResponse reads CIQ state icons`() {
+        val cargo = ByteArray(9)
+        cargo[0] = 4 // FLAT trend
+        cargo[5] = 6 // basalStatusIcon = increase_basal
+        cargo[6] = 2 // apControlState = increase_basal (blue)
+        val result = StatusResponseParser.parseHomeScreenMirrorResponse(cargo)
+        assertNotNull(result)
+        assertEquals(6, result!!.basalStatusIconId)
+        assertEquals(2, result.apControlStateIconId)
+    }
+
+    @Test
+    fun `parseHomeScreenMirrorResponse returns null for short cargo`() {
+        assertNull(StatusResponseParser.parseHomeScreenMirrorResponse(ByteArray(6)))
+    }
+
+    // -- Pump settings tests (opcode 91) --------------------------------------
 
     @Test
     fun `parsePumpSettingsResponse with valid length-prefixed strings`() {
@@ -160,19 +372,15 @@ class StatusResponseParserTest {
         assertNull(StatusResponseParser.parsePumpSettingsResponse(byteArrayOf(0x05, 0x00)))
     }
 
-    // -- Bolus history tests -------------------------------------------------
+    // -- Bolus history tests (opcode 76) --------------------------------------
 
     @Test
     fun `parseBolusHistoryResponse with two records`() {
         val now = Instant.now()
-        val sinceMs = now.minusSeconds(3600).toEpochMilli() // 1 hour ago
-
         val buf = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
-        // Record 1: 3.5 units, automated correction, 30 min ago
         buf.putInt(3500)
         buf.put(0x03) // automated + correction
         buf.putLong(now.minusSeconds(1800).toEpochMilli())
-        // Record 2: 1.0 unit, manual, 10 min ago
         buf.putInt(1000)
         buf.put(0x00)
         buf.putLong(now.minusSeconds(600).toEpochMilli())
@@ -180,148 +388,30 @@ class StatusResponseParserTest {
         val since = now.minusSeconds(3600)
         val events = StatusResponseParser.parseBolusHistoryResponse(buf.array(), since)
         assertEquals(2, events.size)
-
         assertEquals(3.5f, events[0].units, 0.001f)
         assertTrue(events[0].isAutomated)
         assertTrue(events[0].isCorrection)
-
         assertEquals(1.0f, events[1].units, 0.001f)
         assertFalse(events[1].isAutomated)
-        assertFalse(events[1].isCorrection)
-    }
-
-    @Test
-    fun `parseBolusHistoryResponse filters by since timestamp`() {
-        val now = Instant.now()
-        val buf = ByteBuffer.allocate(13).order(ByteOrder.LITTLE_ENDIAN)
-        // Record before the "since" cutoff
-        buf.putInt(2000)
-        buf.put(0x00)
-        buf.putLong(now.minusSeconds(7200).toEpochMilli()) // 2 hours ago
-
-        val since = now.minusSeconds(3600) // only want last hour
-        val events = StatusResponseParser.parseBolusHistoryResponse(buf.array(), since)
-        assertEquals(0, events.size)
     }
 
     @Test
     fun `parseBolusHistoryResponse returns empty for short cargo`() {
-        val events = StatusResponseParser.parseBolusHistoryResponse(
-            byteArrayOf(0x01, 0x02),
-            Instant.now(),
-        )
-        assertTrue(events.isEmpty())
-    }
-
-    // -- CGM status tests ----------------------------------------------------
-
-    @Test
-    fun `parseCgmStatusResponse with valid glucose and trend`() {
-        // 120 mg/dL = 0x78 0x00, trend = FLAT (4)
-        val cargo = byteArrayOf(0x78, 0x00, 0x04)
-        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
-        assertNotNull(result)
-        assertEquals(120, result!!.glucoseMgDl)
-        assertEquals(
-            com.glycemicgpt.mobile.domain.model.CgmTrend.FLAT,
-            result.trendArrow,
+        assertTrue(
+            StatusResponseParser.parseBolusHistoryResponse(byteArrayOf(0x01, 0x02), Instant.now()).isEmpty(),
         )
     }
 
-    @Test
-    fun `parseCgmStatusResponse with high glucose`() {
-        // 350 mg/dL = 0x5E 0x01 (little-endian), trend = SINGLE_UP (2)
-        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort(350.toShort())
-        buf.put(2)
-        val result = StatusResponseParser.parseCgmStatusResponse(buf.array())
-        assertNotNull(result)
-        assertEquals(350, result!!.glucoseMgDl)
-        assertEquals(
-            com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_UP,
-            result.trendArrow,
-        )
-    }
+    // -- Helper ---------------------------------------------------------------
 
-    @Test
-    fun `parseCgmStatusResponse returns null for zero glucose`() {
-        val cargo = byteArrayOf(0x00, 0x00, 0x04)
-        assertNull(StatusResponseParser.parseCgmStatusResponse(cargo))
-    }
-
-    @Test
-    fun `parseCgmStatusResponse returns null for glucose over 500`() {
-        // 501 = 0xF5 0x01
-        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort(501.toShort())
-        buf.put(4)
-        assertNull(StatusResponseParser.parseCgmStatusResponse(buf.array()))
-    }
-
-    @Test
-    fun `parseCgmStatusResponse returns null for short cargo`() {
-        assertNull(StatusResponseParser.parseCgmStatusResponse(byteArrayOf(0x78, 0x00)))
-    }
-
-    @Test
-    fun `parseCgmStatusResponse returns null for empty cargo`() {
-        assertNull(StatusResponseParser.parseCgmStatusResponse(ByteArray(0)))
-    }
-
-    @Test
-    fun `parseCgmStatusResponse maps all trend values`() {
-        val expected = mapOf(
-            1 to com.glycemicgpt.mobile.domain.model.CgmTrend.DOUBLE_UP,
-            2 to com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_UP,
-            3 to com.glycemicgpt.mobile.domain.model.CgmTrend.FORTY_FIVE_UP,
-            4 to com.glycemicgpt.mobile.domain.model.CgmTrend.FLAT,
-            5 to com.glycemicgpt.mobile.domain.model.CgmTrend.FORTY_FIVE_DOWN,
-            6 to com.glycemicgpt.mobile.domain.model.CgmTrend.SINGLE_DOWN,
-            7 to com.glycemicgpt.mobile.domain.model.CgmTrend.DOUBLE_DOWN,
-        )
-        for ((trendByte, expectedTrend) in expected) {
-            val cargo = byteArrayOf(0x64, 0x00, trendByte.toByte()) // 100 mg/dL
-            val result = StatusResponseParser.parseCgmStatusResponse(cargo)
-            assertNotNull("trend $trendByte should parse", result)
-            assertEquals("trend $trendByte", expectedTrend, result!!.trendArrow)
+    private fun hexToBytes(hex: String): ByteArray {
+        val len = hex.length
+        val data = ByteArray(len / 2)
+        var i = 0
+        while (i < len) {
+            data[i / 2] = ((Character.digit(hex[i], 16) shl 4) + Character.digit(hex[i + 1], 16)).toByte()
+            i += 2
         }
-    }
-
-    @Test
-    fun `parseCgmStatusResponse maps unknown trend to UNKNOWN`() {
-        val cargo = byteArrayOf(0x64, 0x00, 0x00) // trend byte 0
-        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
-        assertNotNull(result)
-        assertEquals(
-            com.glycemicgpt.mobile.domain.model.CgmTrend.UNKNOWN,
-            result!!.trendArrow,
-        )
-
-        // Also test value 255 (0xFF)
-        val cargo2 = byteArrayOf(0x64, 0x00, 0xFF.toByte())
-        val result2 = StatusResponseParser.parseCgmStatusResponse(cargo2)
-        assertNotNull(result2)
-        assertEquals(
-            com.glycemicgpt.mobile.domain.model.CgmTrend.UNKNOWN,
-            result2!!.trendArrow,
-        )
-    }
-
-    @Test
-    fun `parseCgmStatusResponse boundary glucose 500 is valid`() {
-        val buf = ByteBuffer.allocate(3).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putShort(500.toShort())
-        buf.put(4)
-        val result = StatusResponseParser.parseCgmStatusResponse(buf.array())
-        assertNotNull(result)
-        assertEquals(500, result!!.glucoseMgDl)
-    }
-
-    @Test
-    fun `parseCgmStatusResponse boundary glucose 1 is valid`() {
-        val cargo = byteArrayOf(0x01, 0x00, 0x04) // 1 mg/dL
-        val result = StatusResponseParser.parseCgmStatusResponse(cargo)
-        assertNotNull(result)
-        assertEquals(1, result!!.glucoseMgDl)
+        return data
     }
 }

@@ -77,22 +77,31 @@ object TandemProtocol {
     )
 
     // -- Read-only status request opcodes ----------------------------------
-    // Tandem response opcode = request opcode + 1
+    // Tandem response opcode = request opcode + 1.
+    // Opcodes verified against jwoglom/pumpX2 source.
 
-    const val OPCODE_CONTROL_IQ_IOB_REQ = 108
-    const val OPCODE_CONTROL_IQ_IOB_RESP = 109
-    const val OPCODE_CURRENT_BASAL_STATUS_REQ = 114
-    const val OPCODE_CURRENT_BASAL_STATUS_RESP = 115
-    const val OPCODE_INSULIN_STATUS_REQ = 41
-    const val OPCODE_INSULIN_STATUS_RESP = 42
-    const val OPCODE_CURRENT_BATTERY_REQ = 57
-    const val OPCODE_CURRENT_BATTERY_RESP = 58
+    const val OPCODE_CONTROL_IQ_IOB_REQ = 108      // ControlIQIOBRequest
+    const val OPCODE_CONTROL_IQ_IOB_RESP = 109      // ControlIQIOBResponse (17 bytes)
+    const val OPCODE_CURRENT_BASAL_STATUS_REQ = 40  // CurrentBasalStatusRequest
+    const val OPCODE_CURRENT_BASAL_STATUS_RESP = 41 // CurrentBasalStatusResponse (9 bytes)
+    // Note: value 36/37 overlap with JPAKE_2 on AUTHORIZATION characteristic.
+    // No conflict -- status requests route to CURRENT_STATUS_UUID.
+    const val OPCODE_INSULIN_STATUS_REQ = 36        // InsulinStatusRequest
+    const val OPCODE_INSULIN_STATUS_RESP = 37       // InsulinStatusResponse (4 bytes)
+    const val OPCODE_CURRENT_BATTERY_V1_REQ = 52    // CurrentBatteryV1Request (2 bytes resp)
+    const val OPCODE_CURRENT_BATTERY_V1_RESP = 53
+    const val OPCODE_CURRENT_BATTERY_V2_REQ = 144   // CurrentBatteryV2Request (11 bytes resp, fw v7.7+)
+    const val OPCODE_CURRENT_BATTERY_V2_RESP = 145
     const val OPCODE_PUMP_SETTINGS_REQ = 90
     const val OPCODE_PUMP_SETTINGS_RESP = 91
     const val OPCODE_BOLUS_CALC_DATA_REQ = 75
     const val OPCODE_BOLUS_CALC_DATA_RESP = 76
-    const val OPCODE_CGM_STATUS_REQ = 100
-    const val OPCODE_CGM_STATUS_RESP = 101
+    // Note: value 34/35 overlap with JPAKE_1B on AUTHORIZATION characteristic.
+    // No conflict -- status requests route to CURRENT_STATUS_UUID.
+    const val OPCODE_CGM_EGV_REQ = 34               // CurrentEGVGuiDataRequest
+    const val OPCODE_CGM_EGV_RESP = 35              // CurrentEGVGuiDataResponse (8 bytes)
+    const val OPCODE_HOME_SCREEN_MIRROR_REQ = 56    // HomeScreenMirrorRequest
+    const val OPCODE_HOME_SCREEN_MIRROR_RESP = 57   // HomeScreenMirrorResponse (9 bytes: trend icons, CIQ mode)
 
     /** Default timeout for a status read request (milliseconds). */
     const val STATUS_READ_TIMEOUT_MS = 5000L
@@ -156,14 +165,18 @@ object TandemProtocol {
         OPCODE_CURRENT_BASAL_STATUS_RESP -> "Basal_RESP"
         OPCODE_INSULIN_STATUS_REQ -> "Insulin_REQ"
         OPCODE_INSULIN_STATUS_RESP -> "Insulin_RESP"
-        OPCODE_CURRENT_BATTERY_REQ -> "Battery_REQ"
-        OPCODE_CURRENT_BATTERY_RESP -> "Battery_RESP"
+        OPCODE_CURRENT_BATTERY_V1_REQ -> "BatteryV1_REQ"
+        OPCODE_CURRENT_BATTERY_V1_RESP -> "BatteryV1_RESP"
+        OPCODE_CURRENT_BATTERY_V2_REQ -> "BatteryV2_REQ"
+        OPCODE_CURRENT_BATTERY_V2_RESP -> "BatteryV2_RESP"
         OPCODE_PUMP_SETTINGS_REQ -> "PumpSettings_REQ"
         OPCODE_PUMP_SETTINGS_RESP -> "PumpSettings_RESP"
         OPCODE_BOLUS_CALC_DATA_REQ -> "BolusCalc_REQ"
         OPCODE_BOLUS_CALC_DATA_RESP -> "BolusCalc_RESP"
-        OPCODE_CGM_STATUS_REQ -> "CGM_REQ"
-        OPCODE_CGM_STATUS_RESP -> "CGM_RESP"
+        OPCODE_CGM_EGV_REQ -> "CGM_EGV_REQ"
+        OPCODE_CGM_EGV_RESP -> "CGM_EGV_RESP"
+        OPCODE_HOME_SCREEN_MIRROR_REQ -> "HomeScreenMirror_REQ"
+        OPCODE_HOME_SCREEN_MIRROR_RESP -> "HomeScreenMirror_RESP"
         OPCODE_CENTRAL_CHALLENGE_REQ -> "V1Auth_CentralChallenge_REQ"
         OPCODE_CENTRAL_CHALLENGE_RESP -> "V1Auth_CentralChallenge_RESP"
         OPCODE_PUMP_CHALLENGE_REQ -> "V1Auth_PumpChallenge_REQ"

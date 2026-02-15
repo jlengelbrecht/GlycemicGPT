@@ -7,6 +7,7 @@ import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -80,11 +81,21 @@ class TandemBleDriver @Inject constructor(
             ?: throw IllegalStateException("Failed to parse pump settings response")
     }
 
-    override suspend fun getBatteryStatus(): Result<BatteryStatus> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_REQ,
-    ) { cargo ->
-        StatusResponseParser.parseBatteryResponse(cargo)
-            ?: throw IllegalStateException("Failed to parse battery response")
+    override suspend fun getBatteryStatus(): Result<BatteryStatus> {
+        // Try V2 first (firmware v7.7+), fall back to V1
+        val v2Result = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseBatteryV2Response(cargo)
+                ?: throw IllegalStateException("Failed to parse battery V2 response")
+        }
+        if (v2Result.isSuccess) return v2Result
+        return runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseBatteryV1Response(cargo)
+                ?: throw IllegalStateException("Failed to parse battery V1 response")
+        }
     }
 
     override suspend fun getReservoirLevel(): Result<ReservoirReading> = runStatusRequest(
@@ -94,11 +105,28 @@ class TandemBleDriver @Inject constructor(
             ?: throw IllegalStateException("Failed to parse insulin status response")
     }
 
-    override suspend fun getCgmStatus(): Result<CgmReading> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_CGM_STATUS_REQ,
-    ) { cargo ->
-        StatusResponseParser.parseCgmStatusResponse(cargo)
-            ?: throw IllegalStateException("Failed to parse CGM status response")
+    override suspend fun getCgmStatus(): Result<CgmReading> {
+        // Get glucose value from CurrentEGVGuiData
+        val egvResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CGM_EGV_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseCgmEgvResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse CGM EGV response")
+        }
+        if (egvResult.isFailure) return egvResult
+
+        // Get trend arrow from HomeScreenMirror (failure degrades to UNKNOWN)
+        val mirrorResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_HOME_SCREEN_MIRROR_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseHomeScreenMirrorResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse HomeScreenMirror response")
+        }
+
+        val egv = egvResult.getOrThrow()
+        val trend = mirrorResult.getOrNull()?.trendArrow ?: CgmTrend.UNKNOWN
+
+        return Result.success(egv.copy(trendArrow = trend))
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(

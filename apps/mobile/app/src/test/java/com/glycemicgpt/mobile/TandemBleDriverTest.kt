@@ -4,6 +4,7 @@ import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
 import com.glycemicgpt.mobile.ble.connection.TandemBleDriver
 import com.glycemicgpt.mobile.ble.protocol.TandemProtocol
 import com.glycemicgpt.mobile.data.local.BleDebugStore
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
@@ -57,19 +59,24 @@ class TandemBleDriverTest {
         assertEquals(ConnectionState.CONNECTED, state)
     }
 
-    // -- IoB read tests ------------------------------------------------------
+    // -- IoB read tests (opcode 108, 17-byte cargo) ----------------------------
 
     @Test
     fun `getIoB returns parsed reading on success`() = runTest {
-        val mockCargo = ByteBuffer.allocate(4)
-            .order(ByteOrder.LITTLE_ENDIAN).putInt(2500).array()
+        // 17-byte ControlIQIOBResponse: mudaliar=2500, time=3600, total=3000, swan=1500, iobType=1
+        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(2500)  // mudaliarIOB (milliunits)
+        buf.putInt(3600)  // timeRemainingSeconds
+        buf.putInt(3000)  // mudaliarTotalIOB
+        buf.putInt(1500)  // swan6hrIOB (milliunits)
+        buf.put(1)        // iobType=SWAN_6HR -> use swan value
         coEvery {
             connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CONTROL_IQ_IOB_REQ, any(), any())
-        } returns mockCargo
+        } returns buf.array()
 
         val result = driver.getIoB()
         assertTrue(result.isSuccess)
-        assertEquals(2.5f, result.getOrThrow().iob, 0.001f)
+        assertEquals(1.5f, result.getOrThrow().iob, 0.001f)
     }
 
     @Test
@@ -93,14 +100,15 @@ class TandemBleDriverTest {
         assertTrue(result.isFailure)
     }
 
-    // -- Basal rate tests ----------------------------------------------------
+    // -- Basal rate tests (opcode 40, 9-byte cargo) ----------------------------
 
     @Test
     fun `getBasalRate returns parsed reading on success`() = runTest {
-        val buf = ByteBuffer.allocate(6).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(750) // 0.75 u/hr
-        buf.put(0) // Standard mode
-        buf.put(1) // Automated
+        // 9-byte CurrentBasalStatusResponse: profileRate=800, currentRate=750, modified=1
+        val buf = ByteBuffer.allocate(9).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(800)   // profileBasalRate (milliunits/hr)
+        buf.putInt(750)   // currentBasalRate (milliunits/hr)
+        buf.put(1)        // modified (1=automated/CIQ)
         coEvery {
             connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BASAL_STATUS_REQ, any(), any())
         } returns buf.array()
@@ -111,35 +119,61 @@ class TandemBleDriverTest {
         assertTrue(result.getOrThrow().isAutomated)
     }
 
-    // -- Battery tests -------------------------------------------------------
+    // -- Battery tests (V2 opcode 144, V1 opcode 52) ---------------------------
 
     @Test
-    fun `getBatteryStatus returns parsed reading on success`() = runTest {
+    fun `getBatteryStatus returns V2 reading on success`() = runTest {
+        // 11-byte V2 response: abc=27, ibc=85, charging=0, then 8 zeros
+        val v2Cargo = ByteArray(11)
+        v2Cargo[0] = 27       // abc (internal)
+        v2Cargo[1] = 85.toByte() // ibc = 85%
+        v2Cargo[2] = 0        // not charging
         coEvery {
-            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_REQ, any(), any())
-        } returns byteArrayOf(72, 0) // 72%, not charging
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ, any(), any())
+        } returns v2Cargo
+
+        val result = driver.getBatteryStatus()
+        assertTrue(result.isSuccess)
+        assertEquals(85, result.getOrThrow().percentage)
+        assertFalse(result.getOrThrow().isCharging)
+    }
+
+    @Test
+    fun `getBatteryStatus falls back to V1 when V2 fails`() = runTest {
+        // V2 fails
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ, any(), any())
+        } throws IllegalStateException("V2 not supported")
+        // V1 succeeds: abc=99, ibc=72
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ, any(), any())
+        } returns byteArrayOf(99, 72)
 
         val result = driver.getBatteryStatus()
         assertTrue(result.isSuccess)
         assertEquals(72, result.getOrThrow().percentage)
+        assertFalse(result.getOrThrow().isCharging) // V1 has no charging flag
     }
 
-    // -- Reservoir tests -----------------------------------------------------
+    // -- Reservoir tests (opcode 36, uint16 whole units) -----------------------
 
     @Test
     fun `getReservoirLevel returns parsed reading on success`() = runTest {
-        val cargo = ByteBuffer.allocate(4)
-            .order(ByteOrder.LITTLE_ENDIAN).putInt(150_000).array() // 150 units
+        // InsulinStatusResponse: uint16 LE whole units (NOT milliunits)
+        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(150.toShort()) // 150 units
+        buf.put(0)                  // exact
+        buf.put(35)                 // low threshold
         coEvery {
             connectionManager.sendStatusRequest(TandemProtocol.OPCODE_INSULIN_STATUS_REQ, any(), any())
-        } returns cargo
+        } returns buf.array()
 
         val result = driver.getReservoirLevel()
         assertTrue(result.isSuccess)
         assertEquals(150f, result.getOrThrow().unitsRemaining, 0.001f)
     }
 
-    // -- Pump settings tests -------------------------------------------------
+    // -- Pump settings tests ---------------------------------------------------
 
     @Test
     fun `getPumpSettings returns parsed settings on success`() = runTest {
@@ -162,14 +196,14 @@ class TandemBleDriverTest {
         assertEquals("SN123", result.getOrThrow().serialNumber)
     }
 
-    // -- Bolus history tests -------------------------------------------------
+    // -- Bolus history tests ---------------------------------------------------
 
     @Test
     fun `getBolusHistory returns parsed events on success`() = runTest {
         val now = Instant.now()
         val buf = ByteBuffer.allocate(13).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(3500) // 3.5 units
-        buf.put(0x01) // automated
+        buf.putInt(3500) // 3.5 units (milliunits)
+        buf.put(0x01)    // automated
         buf.putLong(now.minusSeconds(600).toEpochMilli())
 
         coEvery {
@@ -183,11 +217,59 @@ class TandemBleDriverTest {
         assertEquals(3.5f, result.getOrThrow()[0].units, 0.001f)
     }
 
-    // -- Opcode verification -------------------------------------------------
+    // -- CGM status tests (EGV opcode 34 + HomeScreenMirror opcode 56) ---------
+
+    @Test
+    fun `getCgmStatus merges EGV and HomeScreenMirror data`() = runTest {
+        // EGV response: 8 bytes - timestamp, glucose=120, status=1 (VALID), trendRate=0
+        val egvBuf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        egvBuf.putInt(471039176) // Tandem epoch timestamp
+        egvBuf.putShort(120)     // 120 mg/dL
+        egvBuf.put(1)            // VALID
+        egvBuf.put(0)            // trendRate
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CGM_EGV_REQ, any(), any())
+        } returns egvBuf.array()
+
+        // HomeScreenMirror response: 9 bytes - trendIconId=4 (FLAT), rest zeros
+        val mirrorCargo = ByteArray(9)
+        mirrorCargo[0] = 4 // FLAT trend
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_HOME_SCREEN_MIRROR_REQ, any(), any())
+        } returns mirrorCargo
+
+        val result = driver.getCgmStatus()
+        assertTrue(result.isSuccess)
+        assertEquals(120, result.getOrThrow().glucoseMgDl)
+        assertEquals(CgmTrend.FLAT, result.getOrThrow().trendArrow)
+    }
+
+    @Test
+    fun `getCgmStatus returns UNKNOWN trend when mirror fails`() = runTest {
+        val egvBuf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        egvBuf.putInt(471039176)
+        egvBuf.putShort(180)
+        egvBuf.put(1) // VALID
+        egvBuf.put(0)
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_CGM_EGV_REQ, any(), any())
+        } returns egvBuf.array()
+
+        // HomeScreenMirror fails
+        coEvery {
+            connectionManager.sendStatusRequest(TandemProtocol.OPCODE_HOME_SCREEN_MIRROR_REQ, any(), any())
+        } throws IllegalStateException("timeout")
+
+        val result = driver.getCgmStatus()
+        assertTrue(result.isSuccess)
+        assertEquals(180, result.getOrThrow().glucoseMgDl)
+        assertEquals(CgmTrend.UNKNOWN, result.getOrThrow().trendArrow)
+    }
+
+    // -- Opcode verification ---------------------------------------------------
 
     @Test
     fun `each read method uses correct opcode`() = runTest {
-        val emptyCargo = ByteArray(0)
         coEvery { connectionManager.sendStatusRequest(any(), any(), any()) } throws
             IllegalStateException("not connected")
 
@@ -197,12 +279,16 @@ class TandemBleDriverTest {
         driver.getReservoirLevel()
         driver.getPumpSettings()
         driver.getBolusHistory(Instant.now())
+        driver.getCgmStatus()
 
-        coVerify { connectionManager.sendStatusRequest(108, any(), any()) }
-        coVerify { connectionManager.sendStatusRequest(114, any(), any()) }
-        coVerify { connectionManager.sendStatusRequest(57, any(), any()) }
-        coVerify { connectionManager.sendStatusRequest(41, any(), any()) }
-        coVerify { connectionManager.sendStatusRequest(90, any(), any()) }
-        coVerify { connectionManager.sendStatusRequest(75, any(), any()) }
+        coVerify { connectionManager.sendStatusRequest(108, any(), any()) } // IoB
+        coVerify { connectionManager.sendStatusRequest(40, any(), any()) }  // Basal
+        coVerify { connectionManager.sendStatusRequest(144, any(), any()) } // Battery V2 (tried first)
+        coVerify { connectionManager.sendStatusRequest(52, any(), any()) }  // Battery V1 (fallback)
+        coVerify { connectionManager.sendStatusRequest(36, any(), any()) }  // Insulin/Reservoir
+        coVerify { connectionManager.sendStatusRequest(90, any(), any()) }  // Pump Settings
+        coVerify { connectionManager.sendStatusRequest(75, any(), any()) }  // Bolus History
+        coVerify { connectionManager.sendStatusRequest(34, any(), any()) }  // CGM EGV
+        // HomeScreenMirror (56) is only called if EGV succeeds -- verified in getCgmStatus tests above
     }
 }
