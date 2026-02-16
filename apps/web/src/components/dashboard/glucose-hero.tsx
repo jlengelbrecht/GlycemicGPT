@@ -307,7 +307,7 @@ export function GlucoseHero({
         >
           <div
             className="flex flex-col items-center"
-            aria-label={safeIob !== null ? `Insulin on board: ${safeIob.toFixed(1)} units` : "Insulin on board: unavailable"}
+            aria-label={safeIob !== null ? `Insulin on board: ${safeIob.toFixed(2)} units` : "Insulin on board: unavailable"}
           >
             <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
               IoB
@@ -318,7 +318,7 @@ export function GlucoseHero({
               data-testid="iob-value"
               aria-hidden="true"
             >
-              {safeIob !== null ? `${safeIob.toFixed(1)}u` : "--"}
+              {safeIob !== null ? `${safeIob.toFixed(2)}u` : "--"}
             </span>
           </div>
           <div className="w-px h-6 bg-slate-700" aria-hidden="true" />
