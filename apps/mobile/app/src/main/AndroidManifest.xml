@@ -26,6 +26,15 @@
     <!-- Self-update: install APK from GitHub Releases -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Keep CPU alive during BLE polling when screen is off -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Battery optimization exemption: prevents OEM battery managers from killing foreground service -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Auto-start pump connection service after device reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- BLE hardware feature required - app is useless without BLE -->
     <uses-feature
         android:name="android.hardware.bluetooth_le"
@@ -62,6 +71,17 @@
             android:name=".service.AlertStreamService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
+
+        <!-- Auto-start pump connection service after device reboot -->
+        <receiver
+            android:name=".service.BootCompletedReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
         <!-- Disable default WorkManager initializer; we use Configuration.Provider -->
         <provider

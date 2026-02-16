@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
@@ -100,6 +101,14 @@ fun SettingsScreen(
             onNavigateToPairing = onNavigateToPairing,
             onShowUnpair = settingsViewModel::showUnpairConfirm,
         )
+
+        // Battery optimization warning (between Pump and Sync)
+        if (state.isPumpPaired && state.isBatteryOptimized) {
+            Spacer(modifier = Modifier.height(8.dp))
+            BatteryOptimizationCard(
+                onRequestExemption = settingsViewModel::createBatteryOptimizationIntent,
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -1059,6 +1068,59 @@ private fun WatchSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Check Watch Status")
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryOptimizationCard(
+    onRequestExemption: () -> android.content.Intent,
+) {
+    val context = LocalContext.current
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Battery Optimization Active",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = "Android may stop the pump connection when the screen is off. Disable battery optimization for reliable overnight monitoring.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    try {
+                        context.startActivity(onRequestExemption())
+                    } catch (_: android.content.ActivityNotFoundException) {
+                        // Some OEMs don't support this intent; user must exempt manually
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("disable_battery_optimization_button"),
+            ) {
+                Text("Disable Battery Optimization")
             }
         }
     }

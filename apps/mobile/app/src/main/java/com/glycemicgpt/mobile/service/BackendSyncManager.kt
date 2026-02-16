@@ -53,6 +53,9 @@ class BackendSyncManager @Inject constructor(
         const val BATCH_SIZE = 50
         const val RAW_BATCH_SIZE = 100
         const val MAX_RETRIES = 5
+        const val MAX_QUEUE_SIZE = 5000
+        private const val STALE_SENDING_TIMEOUT_MS = 60_000L // 1 minute
+        private const val CLEANUP_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
     }
 
     /** Cached pump hardware info, set by PumpPollingOrchestrator on first connect. */
@@ -66,6 +69,7 @@ class BackendSyncManager @Inject constructor(
     private var pendingCountJob: Job? = null
 
     private val triggerChannel = Channel<Unit>(Channel.CONFLATED)
+    private var lastCleanupMs = 0L
 
     fun start(scope: CoroutineScope) {
         stop()
@@ -99,9 +103,32 @@ class BackendSyncManager @Inject constructor(
         }
     }
 
+    internal suspend fun pruneQueueIfNeeded() {
+        val count = syncDao.countAll()
+        if (count > MAX_QUEUE_SIZE) {
+            val excess = count - MAX_QUEUE_SIZE
+            syncDao.pruneOldest(excess)
+            Timber.w("Sync queue pruned: removed %d oldest items (was %d, max %d)", excess, count, MAX_QUEUE_SIZE)
+        }
+    }
+
+    private suspend fun cleanupIfNeeded() {
+        val now = System.currentTimeMillis()
+        if (now - lastCleanupMs < CLEANUP_INTERVAL_MS) return
+        lastCleanupMs = now
+        val cutoffMs = now - (appSettingsStore.dataRetentionDays * 24L * 60 * 60 * 1000)
+        syncDao.cleanup(maxRetries = MAX_RETRIES, cutoffMs = cutoffMs)
+    }
+
     internal suspend fun processQueue() {
         if (!appSettingsStore.backendSyncEnabled) return
         if (!authTokenStore.isLoggedIn()) return
+
+        // Reset orphaned 'sending' items that got stuck after a crash or cancellation
+        syncDao.resetStaleSending(System.currentTimeMillis() - STALE_SENDING_TIMEOUT_MS)
+
+        pruneQueueIfNeeded()
+        cleanupIfNeeded()
 
         val batch = syncDao.getPendingBatch(limit = BATCH_SIZE, maxRetries = MAX_RETRIES)
         if (batch.isEmpty()) return
