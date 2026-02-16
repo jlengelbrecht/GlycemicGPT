@@ -12,6 +12,7 @@ import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.repository.DeviceRepository
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
 import com.glycemicgpt.mobile.service.AlertStreamService
+import com.glycemicgpt.mobile.service.PumpConnectionService
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
 import com.glycemicgpt.mobile.wear.WearDataContract
@@ -106,13 +107,16 @@ class SettingsViewModel @Inject constructor(
             buildType = BuildConfig.BUILD_TYPE,
         )
 
-        // Start alert stream on app startup if logged in
+        // Start services on app startup if conditions are met
         if (loggedIn) {
             AlertStreamService.start(appContext)
             viewModelScope.launch {
                 deviceRepository.registerDevice()
                     .onFailure { e -> Timber.w(e, "Device re-registration failed") }
             }
+        }
+        if (pumpCredentialStore.isPaired()) {
+            PumpConnectionService.start(appContext)
         }
     }
 
@@ -237,8 +241,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun logout() {
-        // Stop alert stream and unregister device
+        // Stop services and unregister device
         AlertStreamService.stop(appContext)
+        PumpConnectionService.stop(appContext)
         viewModelScope.launch {
             deviceRepository.unregisterDevice()
                 .onFailure { e -> Timber.w(e, "Device unregistration failed") }

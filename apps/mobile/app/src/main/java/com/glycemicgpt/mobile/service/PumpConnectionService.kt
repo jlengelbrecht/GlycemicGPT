@@ -12,6 +12,7 @@ import android.os.BatteryManager
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.glycemicgpt.mobile.R
+import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,14 @@ class PumpConnectionService : Service() {
         const val CHANNEL_ID = "pump_connection"
         const val NOTIFICATION_ID = 1
         private const val LOW_BATTERY_THRESHOLD = 15
+
+        fun start(context: Context) {
+            context.startForegroundService(Intent(context, PumpConnectionService::class.java))
+        }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, PumpConnectionService::class.java))
+        }
     }
 
     @Inject
@@ -41,6 +50,9 @@ class PumpConnectionService : Service() {
 
     @Inject
     lateinit var backendSyncManager: BackendSyncManager
+
+    @Inject
+    lateinit var connectionManager: BleConnectionManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var batteryReceiverRegistered = false
@@ -77,6 +89,7 @@ class PumpConnectionService : Service() {
         pollingOrchestrator.backendSyncManager = backendSyncManager
         pollingOrchestrator.start(serviceScope)
         backendSyncManager.start(serviceScope)
+        connectionManager.autoReconnectIfPaired()
         if (!batteryReceiverRegistered) {
             registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             batteryReceiverRegistered = true
