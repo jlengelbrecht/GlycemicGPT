@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.data.remote
 
 import com.glycemicgpt.mobile.data.remote.dto.AcknowledgeResponse
 import com.glycemicgpt.mobile.data.remote.dto.AlertResponse
+import com.glycemicgpt.mobile.data.remote.dto.AiProviderStatusResponse
 import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
 import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
 import com.glycemicgpt.mobile.data.remote.dto.DeviceRegistrationRequest
@@ -53,6 +54,9 @@ interface GlycemicGptApi {
 
     @POST("/api/ai/chat")
     suspend fun sendChatMessage(@Body request: ChatRequest): Response<ChatResponse>
+
+    @GET("/api/ai/provider")
+    suspend fun getAiProvider(): Response<AiProviderStatusResponse>
 
     // Device registration (Story 16.11)
     @POST("/api/v1/devices/register")

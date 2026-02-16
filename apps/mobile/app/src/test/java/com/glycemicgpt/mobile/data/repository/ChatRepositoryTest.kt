@@ -8,6 +8,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
+import com.glycemicgpt.mobile.data.remote.dto.AiProviderStatusResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,5 +66,56 @@ class ChatRepositoryTest {
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()!!.message!!.contains("No route to host"))
+    }
+
+    // --- checkProviderConfigured tests ---
+
+    @Test
+    fun `checkProviderConfigured returns success on 200`() = runTest {
+        val providerResponse = AiProviderStatusResponse(
+            providerType = "openai",
+            status = "active",
+        )
+        coEvery { api.getAiProvider() } returns Response.success(providerResponse)
+
+        val result = repository.checkProviderConfigured()
+
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `checkProviderConfigured returns failure on 404`() = runTest {
+        coEvery { api.getAiProvider() } returns Response.error(
+            404,
+            "Not found".toResponseBody(),
+        )
+
+        val result = repository.checkProviderConfigured()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("No AI provider"))
+    }
+
+    @Test
+    fun `checkProviderConfigured returns failure on 500`() = runTest {
+        coEvery { api.getAiProvider() } returns Response.error(
+            500,
+            "Internal server error".toResponseBody(),
+        )
+
+        val result = repository.checkProviderConfigured()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("500"))
+    }
+
+    @Test
+    fun `checkProviderConfigured returns failure on network exception`() = runTest {
+        coEvery { api.getAiProvider() } throws java.io.IOException("Connection refused")
+
+        val result = repository.checkProviderConfigured()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()!!.message!!.contains("Connection refused"))
     }
 }

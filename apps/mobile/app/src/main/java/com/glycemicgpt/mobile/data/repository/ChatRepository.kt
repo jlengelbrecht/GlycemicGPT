@@ -5,6 +5,9 @@ import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
 import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
+
+class NoProviderException(message: String) : Exception(message)
 
 @Singleton
 class ChatRepository @Inject constructor(
@@ -19,6 +22,25 @@ class ChatRepository @Inject constructor(
             } else {
                 Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun checkProviderConfigured(): Result<Unit> {
+        return try {
+            val response = api.getAiProvider()
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else if (response.code() == 404) {
+                Result.failure(NoProviderException("No AI provider configured"))
+            } else {
+                Result.failure(Exception("HTTP ${response.code()}: ${response.message()}"))
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
