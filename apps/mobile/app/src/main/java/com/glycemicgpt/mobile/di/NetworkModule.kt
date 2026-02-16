@@ -16,6 +16,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.glycemicgpt.mobile.BuildConfig
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -68,4 +69,20 @@ object NetworkModule {
     @Singleton
     fun provideGlycemicGptApi(retrofit: Retrofit): GlycemicGptApi =
         retrofit.create(GlycemicGptApi::class.java)
+
+    /** API instance with a 90-second read timeout for LLM inference calls. */
+    @Provides
+    @Singleton
+    @Named("chat")
+    fun provideChatApi(client: OkHttpClient, moshi: Moshi): GlycemicGptApi {
+        val chatClient = client.newBuilder()
+            .readTimeout(90, TimeUnit.SECONDS)
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("http://localhost/")
+            .client(chatClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(GlycemicGptApi::class.java)
+    }
 }
