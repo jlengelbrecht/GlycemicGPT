@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.91](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.90...v0.1.91) (2026-02-16)
+
+
+### 🐛 Bug Fixes
+
+* correct BLE status response opcodes and parser byte layouts ([#206](https://github.com/jlengelbrecht/GlycemicGPT/issues/206)) ([3de403d](https://github.com/jlengelbrecht/GlycemicGPT/commit/3de403dce99f9bbafeb4f8c4f72cf0db3b4a3d03))
+
 ## [0.1.90](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.89...v0.1.90) (2026-02-15)
 
 
