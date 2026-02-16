@@ -30,7 +30,6 @@ from src.models.pump_hardware_info import PumpHardwareInfo
 from src.models.pump_raw_event import PumpRawEvent
 from src.models.tandem_upload_state import TandemUploadState
 from src.schemas.auth import ErrorResponse
-from src.services.target_glucose_range import get_or_create_range
 from src.schemas.glucose import (
     CurrentGlucoseResponse,
     GlucoseHistoryResponse,
@@ -77,6 +76,7 @@ from src.services.tandem_sync import (
     get_latest_pump_event,
     sync_tandem_for_user,
 )
+from src.services.target_glucose_range import get_or_create_range
 
 logger = get_logger(__name__)
 
