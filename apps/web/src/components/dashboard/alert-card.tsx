@@ -123,7 +123,7 @@ export function AlertCard({
           {formatTimeAgo(alert.created_at)}
         </span>
         {alert.iob_value != null && (
-          <span>IoB: {alert.iob_value.toFixed(1)}u</span>
+          <span>IoB: {alert.iob_value.toFixed(2)}u</span>
         )}
         {alert.trend_rate != null && (
           <span>
