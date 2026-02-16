@@ -11,6 +11,9 @@ import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.util.TimeZone
 
 class StatusResponseParserTest {
 
@@ -284,18 +287,65 @@ class StatusResponseParserTest {
     }
 
     @Test
-    fun `parseCgmEgvResponse converts tandem epoch to unix timestamp`() {
-        // 471039176 seconds since Jan 1, 2008 = Unix 1670184776 = Dec 4, 2022
-        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(471039176)
-        buf.putShort(120)
-        buf.put(1) // VALID
-        buf.put(0)
-        val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
-        assertNotNull(result)
-        assertEquals(120, result!!.glucoseMgDl)
+    fun `parseCgmEgvResponse converts local pump time to UTC in negative offset zone`() {
+        // Pump time 471039176 + epoch 1199145600 = 1670184776
+        // As local date-time: 2022-12-04T18:32:56
+        // In America/New_York (UTC-5 in December): UTC = 2022-12-04T23:32:56 = 1670202776
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"))
+            val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(471039176)
+            buf.putShort(120)
+            buf.put(1) // VALID
+            buf.put(0)
+            val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+            assertNotNull(result)
+            assertEquals(120, result!!.glucoseMgDl)
+            assertEquals(1670202776L, result.timestamp.epochSecond)
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
+    }
+
+    @Test
+    fun `parseCgmEgvResponse converts local pump time to UTC in positive offset zone`() {
+        // Same pump time, but in Europe/Berlin (UTC+1 in December)
+        // Local 2022-12-04T18:32:56 CET = 2022-12-04T17:32:56 UTC = 1670181176
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("Europe/Berlin"))
+            val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(471039176)
+            buf.putShort(120)
+            buf.put(1) // VALID
+            buf.put(0)
+            val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+            assertNotNull(result)
+            assertEquals(1670181176L, result!!.timestamp.epochSecond)
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
+    }
+
+    @Test
+    fun `parseCgmEgvResponse converts local pump time to UTC in UTC zone`() {
+        // In UTC zone: local time IS UTC, so no offset applied
         // 471039176 + 1199145600 = 1670184776
-        assertEquals(1670184776L, result.timestamp.epochSecond)
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+            val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(471039176)
+            buf.putShort(120)
+            buf.put(1) // VALID
+            buf.put(0)
+            val result = StatusResponseParser.parseCgmEgvResponse(buf.array())
+            assertNotNull(result)
+            assertEquals(1670184776L, result!!.timestamp.epochSecond)
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
     }
 
     // -- HomeScreenMirror tests (opcode 57, 9-byte cargo) ---------------------
@@ -377,39 +427,55 @@ class StatusResponseParserTest {
     @Test
     fun `parseLastBolusStatusResponse with completed bolus`() {
         // 17-byte LastBolusStatusResponse
-        val recentPumpTime = (Instant.now().epochSecond - 1199145600L - 600).toInt()
-        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(42)             // bolusId
-        buf.putInt(recentPumpTime) // timestamp (Tandem epoch)
-        buf.putInt(3500)           // deliveredVolume (milliunits = 3.5 units)
-        buf.put(3)                 // bolusStatusId = COMPLETED
-        buf.put(1)                 // bolusSourceId = AUTO_PILOT
-        buf.put(0x09.toByte())     // bolusTypeBitmask = STANDARD | CORRECTION
-        buf.putShort(0)            // extendedBolusDuration
+        // Use a fixed timezone so pump time construction is deterministic
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"))
+            // Construct a pump time representing "10 minutes ago" in local time
+            val tenMinAgoLocal = LocalDateTime.now().minusMinutes(10)
+            val recentPumpTime = (tenMinAgoLocal.toEpochSecond(ZoneOffset.UTC) - 1199145600L).toInt()
+            val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(42)             // bolusId
+            buf.putInt(recentPumpTime) // timestamp (Tandem epoch, local time)
+            buf.putInt(3500)           // deliveredVolume (milliunits = 3.5 units)
+            buf.put(3)                 // bolusStatusId = COMPLETED
+            buf.put(1)                 // bolusSourceId = AUTO_PILOT
+            buf.put(0x09.toByte())     // bolusTypeBitmask = STANDARD | CORRECTION
+            buf.putShort(0)            // extendedBolusDuration
 
-        val since = Instant.now().minusSeconds(3600)
-        val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
-        assertEquals(1, events.size)
-        assertEquals(3.5f, events[0].units, 0.001f)
-        assertTrue(events[0].isAutomated) // AUTO_PILOT
-        assertTrue(events[0].isCorrection) // bitmask bit 3
+            val since = Instant.now().minusSeconds(3600)
+            val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+            assertEquals(1, events.size)
+            assertEquals(3.5f, events[0].units, 0.001f)
+            assertTrue(events[0].isAutomated) // AUTO_PILOT
+            assertTrue(events[0].isCorrection) // bitmask bit 3
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
     }
 
     @Test
     fun `parseLastBolusStatusResponse returns empty for canceled bolus`() {
-        val recentPumpTime = (Instant.now().epochSecond - 1199145600L - 60).toInt()
-        val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(43)             // bolusId
-        buf.putInt(recentPumpTime) // timestamp
-        buf.putInt(1000)           // deliveredVolume
-        buf.put(2)                 // bolusStatusId = CANCELED
-        buf.put(0)                 // bolusSourceId = GUI
-        buf.put(1)                 // bolusTypeBitmask = STANDARD
-        buf.putShort(0)
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"))
+            val oneMinAgoLocal = LocalDateTime.now().minusMinutes(1)
+            val recentPumpTime = (oneMinAgoLocal.toEpochSecond(ZoneOffset.UTC) - 1199145600L).toInt()
+            val buf = ByteBuffer.allocate(17).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(43)             // bolusId
+            buf.putInt(recentPumpTime) // timestamp (local time)
+            buf.putInt(1000)           // deliveredVolume
+            buf.put(2)                 // bolusStatusId = CANCELED
+            buf.put(0)                 // bolusSourceId = GUI
+            buf.put(1)                 // bolusTypeBitmask = STANDARD
+            buf.putShort(0)
 
-        val since = Instant.now().minusSeconds(3600)
-        val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
-        assertTrue(events.isEmpty())
+            val since = Instant.now().minusSeconds(3600)
+            val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+            assertTrue(events.isEmpty())
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
     }
 
     @Test
