@@ -4,7 +4,7 @@
  * Story 4.4: Time in Range Bar Component
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import {
   TimeInRangeBar,
   normalizePercentages,
@@ -48,10 +48,10 @@ beforeEach(() => {
 describe("PERIOD_LABELS constant", () => {
   it("contains all time periods", () => {
     expect(PERIOD_LABELS["24h"]).toBe("24 Hours");
+    expect(PERIOD_LABELS["3d"]).toBe("3 Days");
     expect(PERIOD_LABELS["7d"]).toBe("7 Days");
     expect(PERIOD_LABELS["14d"]).toBe("14 Days");
     expect(PERIOD_LABELS["30d"]).toBe("30 Days");
-    expect(PERIOD_LABELS["90d"]).toBe("90 Days");
   });
 });
 
@@ -77,11 +77,11 @@ describe("normalizePercentages", () => {
     expect(result.low + result.inRange + result.high).toBeCloseTo(100, 1);
   });
 
-  it("returns 100% inRange for all zeros", () => {
+  it("returns all zeros for all zeros (no data)", () => {
     const data: RangeData = { low: 0, inRange: 0, high: 0 };
     const result = normalizePercentages(data);
 
-    expect(result).toEqual({ low: 0, inRange: 100, high: 0 });
+    expect(result).toEqual({ low: 0, inRange: 0, high: 0 });
   });
 
   it("handles floating point near 100", () => {
@@ -298,8 +298,8 @@ describe("TimeInRangeBar component", () => {
     });
 
     it("displays all period options correctly", () => {
-      const periods: TimePeriod[] = ["24h", "7d", "14d", "30d", "90d"];
-      const labels = ["24 Hours", "7 Days", "14 Days", "30 Days", "90 Days"];
+      const periods: TimePeriod[] = ["24h", "3d", "7d", "14d", "30d"];
+      const labels = ["24 Hours", "3 Days", "7 Days", "14 Days", "30 Days"];
 
       periods.forEach((period, index) => {
         const { unmount } = render(
@@ -418,11 +418,11 @@ describe("TimeInRangeBar component", () => {
       expect(legend).toBeInTheDocument();
     });
 
-    it("handles all zeros gracefully", () => {
+    it("handles all zeros gracefully (no data)", () => {
       render(<TimeInRangeBar data={{ low: 0, inRange: 0, high: 0 }} />);
 
       const legend = screen.getByTestId("range-legend");
-      expect(legend).toHaveTextContent("In Range: 100%");
+      expect(legend).toHaveTextContent("In Range: 0%");
     });
 
     it("sanitizes NaN values", () => {
@@ -538,6 +538,68 @@ describe("TimeInRangeBar component", () => {
         "aria-label",
         "Loading time in range data"
       );
+    });
+  });
+
+  describe("period selector", () => {
+    it("renders period selector when onPeriodChange is provided", () => {
+      const onChange = jest.fn();
+      render(
+        <TimeInRangeBar data={defaultData} onPeriodChange={onChange} />
+      );
+
+      expect(screen.getByTestId("period-selector")).toBeInTheDocument();
+      expect(screen.queryByTestId("period-label")).not.toBeInTheDocument();
+    });
+
+    it("renders static label when onPeriodChange is not provided", () => {
+      render(<TimeInRangeBar data={defaultData} />);
+
+      expect(screen.getByTestId("period-label")).toBeInTheDocument();
+      expect(screen.queryByTestId("period-selector")).not.toBeInTheDocument();
+    });
+
+    it("calls onPeriodChange when a period button is clicked", () => {
+      const onChange = jest.fn();
+      render(
+        <TimeInRangeBar data={defaultData} period="24h" onPeriodChange={onChange} />
+      );
+
+      fireEvent.click(screen.getByRole("radio", { name: "7D" }));
+      expect(onChange).toHaveBeenCalledWith("7d");
+    });
+
+    it("marks the current period as checked", () => {
+      const onChange = jest.fn();
+      render(
+        <TimeInRangeBar data={defaultData} period="7d" onPeriodChange={onChange} />
+      );
+
+      expect(screen.getByRole("radio", { name: "7D" })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+      expect(screen.getByRole("radio", { name: "24H" })).toHaveAttribute(
+        "aria-checked",
+        "false"
+      );
+    });
+
+    it("renders all five period options", () => {
+      const onChange = jest.fn();
+      render(
+        <TimeInRangeBar data={defaultData} onPeriodChange={onChange} />
+      );
+
+      const radios = screen.getAllByRole("radio");
+      expect(radios).toHaveLength(5);
+      expect(radios.map((r) => r.textContent)).toEqual([
+        "24H",
+        "3D",
+        "7D",
+        "14D",
+        "30D",
+      ]);
     });
   });
 

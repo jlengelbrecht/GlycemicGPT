@@ -12,7 +12,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import clsx from "clsx";
 
 /** Time period options for the display */
-export type TimePeriod = "24h" | "7d" | "14d" | "30d" | "90d";
+export type TimePeriod = "24h" | "3d" | "7d" | "14d" | "30d";
 
 /** Data for each glucose range segment */
 export interface RangeData {
@@ -39,6 +39,8 @@ export interface TimeInRangeBarProps {
   targetRange?: string;
   /** Whether data is loading */
   isLoading?: boolean;
+  /** Callback when user selects a different period */
+  onPeriodChange?: (period: TimePeriod) => void;
   /** Additional CSS classes */
   className?: string;
 }
@@ -46,11 +48,14 @@ export interface TimeInRangeBarProps {
 /** Period display labels */
 export const PERIOD_LABELS: Record<TimePeriod, string> = {
   "24h": "24 Hours",
+  "3d": "3 Days",
   "7d": "7 Days",
   "14d": "14 Days",
   "30d": "30 Days",
-  "90d": "90 Days",
 };
+
+/** Ordered list of periods for the selector */
+const PERIOD_OPTIONS: TimePeriod[] = ["24h", "3d", "7d", "14d", "30d"];
 
 /** Color classes for each range */
 const RANGE_COLORS = {
@@ -76,7 +81,7 @@ export function normalizePercentages(data: RangeData): RangeData {
   const total = data.low + data.inRange + data.high;
 
   if (total === 0) {
-    return { low: 0, inRange: 100, high: 0 };
+    return { low: 0, inRange: 0, high: 0 };
   }
 
   if (Math.abs(total - 100) < 0.01) {
@@ -190,6 +195,7 @@ export function TimeInRangeBar({
   animated = true,
   targetRange = "70-180 mg/dL",
   isLoading = false,
+  onPeriodChange,
   className,
 }: TimeInRangeBarProps) {
   const prefersReducedMotion = useReducedMotion();
@@ -290,18 +296,44 @@ export function TimeInRangeBar({
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Time in Range</h2>
         <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold">Time in Range</h2>
           <span className={clsx("text-sm font-medium", quality.colorClass)}>
             {quality.label}
           </span>
+        </div>
+        {onPeriodChange ? (
+          <div
+            className="flex gap-1 bg-slate-800 rounded-lg p-1"
+            role="radiogroup"
+            aria-label="Time period"
+            data-testid="period-selector"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <button
+                key={p}
+                role="radio"
+                aria-checked={p === period}
+                onClick={() => onPeriodChange(p)}
+                className={clsx(
+                  "px-2 py-1 text-xs font-medium rounded transition-colors",
+                  p === period
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                )}
+              >
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        ) : (
           <span
             className="text-sm text-slate-400 bg-slate-800 px-2 py-1 rounded"
             data-testid="period-label"
           >
             {periodLabel}
           </span>
-        </div>
+        )}
       </div>
 
       {/* Bar */}

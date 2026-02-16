@@ -43,6 +43,17 @@ class GlucoseHistoryResponse(BaseModel):
     count: int = Field(..., description="Number of readings returned")
 
 
+class TimeInRangeResponse(BaseModel):
+    """Response schema for time-in-range statistics."""
+
+    low_pct: float = Field(..., description="Percentage of readings below range")
+    in_range_pct: float = Field(..., description="Percentage of readings in range")
+    high_pct: float = Field(..., description="Percentage of readings above range")
+    readings_count: int = Field(..., description="Total readings analyzed")
+    low_threshold: float = Field(..., description="Low target threshold (mg/dL)")
+    high_threshold: float = Field(..., description="High target threshold (mg/dL)")
+
+
 class SyncResponse(BaseModel):
     """Response schema for sync operation."""
 

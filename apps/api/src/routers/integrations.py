@@ -3,12 +3,12 @@
 API endpoints for managing third-party integrations (Dexcom, Tandem) and data sync.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydexcom import Dexcom
 from pydexcom import errors as dexcom_errors
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from tconnectsync.api.common import ApiException
@@ -30,12 +30,14 @@ from src.models.pump_hardware_info import PumpHardwareInfo
 from src.models.pump_raw_event import PumpRawEvent
 from src.models.tandem_upload_state import TandemUploadState
 from src.schemas.auth import ErrorResponse
+from src.services.target_glucose_range import get_or_create_range
 from src.schemas.glucose import (
     CurrentGlucoseResponse,
     GlucoseHistoryResponse,
     GlucoseReadingResponse,
     SyncResponse,
     SyncStatusResponse,
+    TimeInRangeResponse,
 )
 from src.schemas.integration import (
     DexcomCredentialsRequest,
@@ -732,6 +734,80 @@ async def get_glucose_history(
     return GlucoseHistoryResponse(
         readings=[GlucoseReadingResponse.model_validate(r) for r in readings],
         count=len(readings),
+    )
+
+
+@router.get(
+    "/glucose/time-in-range",
+    response_model=TimeInRangeResponse,
+    responses={
+        200: {"description": "Time in range statistics"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+@limiter.limit("30/minute")
+async def get_time_in_range(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    minutes: int = Query(
+        default=1440, ge=60, le=43200, description="Analysis window in minutes (max 30d)"
+    ),
+) -> TimeInRangeResponse:
+    """Get time-in-range statistics for the specified period.
+
+    Calculates the percentage of glucose readings that fall below, within,
+    and above the user's configured target range.
+    """
+    # Fetch user's target range thresholds
+    target_range = await get_or_create_range(current_user.id, db)
+    low_threshold = target_range.low_target
+    high_threshold = target_range.high_target
+
+    # Aggregate counts in SQL for efficiency (no Python-side iteration)
+    cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
+    result = await db.execute(
+        select(
+            func.count().label("total"),
+            func.sum(
+                case((GlucoseReading.value < low_threshold, 1), else_=0)
+            ).label("low_count"),
+            func.sum(
+                case((GlucoseReading.value > high_threshold, 1), else_=0)
+            ).label("high_count"),
+        ).where(
+            GlucoseReading.user_id == current_user.id,
+            GlucoseReading.reading_timestamp >= cutoff,
+        )
+    )
+    row = result.one()
+    count = row.total
+    low_count = row.low_count or 0
+    high_count = row.high_count or 0
+
+    if count == 0:
+        return TimeInRangeResponse(
+            low_pct=0.0,
+            in_range_pct=0.0,
+            high_pct=0.0,
+            readings_count=0,
+            low_threshold=low_threshold,
+            high_threshold=high_threshold,
+        )
+
+    # Round low and high independently, derive in_range to guarantee sum = 100
+    low_pct = round((low_count / count) * 100, 1)
+    high_pct = round((high_count / count) * 100, 1)
+    in_range_pct = round(100 - low_pct - high_pct, 1)
+
+    return TimeInRangeResponse(
+        low_pct=low_pct,
+        in_range_pct=in_range_pct,
+        high_pct=high_pct,
+        readings_count=count,
+        low_threshold=low_threshold,
+        high_threshold=high_threshold,
     )
 
 
