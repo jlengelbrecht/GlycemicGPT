@@ -121,3 +121,9 @@ data class ChatResponse(
     val response: String,
     val disclaimer: String,
 )
+
+@JsonClass(generateAdapter = true)
+data class AiProviderStatusResponse(
+    @Json(name = "provider_type") val providerType: String,
+    val status: String,
+)
