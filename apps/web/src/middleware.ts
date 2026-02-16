@@ -26,14 +26,14 @@ export function middleware(request: NextRequest) {
 
   // Auth pages: redirect authenticated users to dashboard
   if (pathname === "/login" || pathname === "/register") {
-    const isExpired = request.nextUrl.searchParams.get("expired") === "true";
-    if (hasSession && !isExpired) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-    if (hasSession && isExpired) {
+    // Clear stale httpOnly cookie when redirected here after session expiry
+    if (pathname === "/login" && hasSession && request.nextUrl.searchParams.get("expired") === "true") {
       const response = NextResponse.next();
       response.cookies.delete(SESSION_COOKIE);
       return response;
+    }
+    if (hasSession) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 

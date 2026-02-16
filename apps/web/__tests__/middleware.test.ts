@@ -210,6 +210,16 @@ describe("Auth Middleware", () => {
       expect(mockRedirect).not.toHaveBeenCalled();
       expect(mockCookieDelete).not.toHaveBeenCalled();
     });
+
+    it("does not clear cookie on /register?expired=true (only /login handles expiry)", () => {
+      const request = createMockRequest("/register?expired=true", true);
+      middleware(request);
+
+      expect(mockRedirect).toHaveBeenCalledTimes(1);
+      expect(mockCookieDelete).not.toHaveBeenCalled();
+      const redirectUrl = mockRedirect.mock.calls[0][0];
+      expect(getRedirectPath(redirectUrl)).toBe("/dashboard");
+    });
   });
 
   describe("edge cases", () => {
