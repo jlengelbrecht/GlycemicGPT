@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.93](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.92...v0.1.93) (2026-02-16)
+
+
+### 🐛 Bug Fixes
+
+* resolve web app cross-origin cookie and redirect loop bugs ([#211](https://github.com/jlengelbrecht/GlycemicGPT/issues/211)) ([d88c799](https://github.com/jlengelbrecht/GlycemicGPT/commit/d88c79975d7ac529dcc710e05313fc6a75d61ac4))
+
 ## [0.1.92](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.91...v0.1.92) (2026-02-16)
 
 
