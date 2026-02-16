@@ -15,6 +15,9 @@ import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * Parses response cargo bytes from Tandem pump BLE status responses into
@@ -25,8 +28,28 @@ import java.time.Instant
  */
 object StatusResponseParser {
 
-    /** Tandem pump epoch: January 1, 2008 00:00:00 UTC */
+    /** Unix timestamp of January 1, 2008 00:00:00 UTC.
+     *  Used as a base offset for pump timestamps. The pump counts seconds
+     *  since local midnight Jan 1, 2008; the UTC value is used here because
+     *  pumpTimeToInstant() extracts wall-clock digits via ZoneOffset.UTC. */
     private const val TANDEM_EPOCH_OFFSET = 1199145600L
+
+    /**
+     * Convert pump timestamp to UTC Instant.
+     *
+     * The Tandem pump reports timestamps as seconds since Jan 1, 2008 in the
+     * user's local timezone (the pump syncs its clock with the phone via
+     * t:connect). We interpret the computed epoch as a local date-time and
+     * convert to UTC using the device's timezone.
+     */
+    private fun pumpTimeToInstant(pumpTimeSec: Long): Instant {
+        val rawEpochSec = pumpTimeSec + TANDEM_EPOCH_OFFSET
+        // ZoneOffset.UTC is intentional: rawEpochSec encodes local wall-clock
+        // digits (pump counts local seconds + UTC-based epoch constant), so
+        // interpreting at UTC offset extracts the correct LocalDateTime fields.
+        val localDateTime = LocalDateTime.ofEpochSecond(rawEpochSec, 0, ZoneOffset.UTC)
+        return localDateTime.atZone(ZoneId.systemDefault()).toInstant()
+    }
 
     /**
      * Parse ControlIQIOBResponse (opcode 109).
@@ -161,7 +184,7 @@ object StatusResponseParser {
         if (egvStatus !in 1..3) return null
         if (glucoseMgDl == 0 || glucoseMgDl > 500) return null
 
-        val timestamp = Instant.ofEpochSecond(pumpTimeSec + TANDEM_EPOCH_OFFSET)
+        val timestamp = pumpTimeToInstant(pumpTimeSec)
 
         // trendRate at byte 7 is a signed rate-of-change, not an arrow enum.
         // Trend arrow is set separately via HomeScreenMirror. Default to UNKNOWN here.
@@ -267,7 +290,7 @@ object StatusResponseParser {
         // Only report completed boluses (status 3)
         if (bolusStatusId != 3) return emptyList()
 
-        val timestamp = Instant.ofEpochSecond(pumpTimeSec + TANDEM_EPOCH_OFFSET)
+        val timestamp = pumpTimeToInstant(pumpTimeSec)
         if (timestamp.isBefore(since)) return emptyList()
 
         val units = deliveredMilliUnits / 1000f
@@ -308,7 +331,11 @@ object StatusResponseParser {
             val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
 
             if (seqNum > sinceSequence) {
-                // Encode the entire raw record as base64 for cloud upload
+                // Encode the entire raw record as base64 for cloud upload.
+                // NOTE: pumpTimeSeconds is intentionally stored as raw pump-local
+                // time (seconds since Tandem epoch, Jan 1, 2008 local). This value
+                // is sent to the backend for Tandem cloud upload where the raw binary
+                // format is required. Do NOT convert with pumpTimeToInstant().
                 val rawBytes = cargo.copyOfRange(offset, offset + recordSize)
                 val rawB64 = Base64.encodeToString(rawBytes, Base64.NO_WRAP)
                 records.add(
