@@ -177,7 +177,7 @@ describe("GlucoseHero", () => {
     it("displays IoB value with unit", () => {
       render(<GlucoseHero {...defaultProps} iob={2.4} />);
 
-      expect(screen.getByTestId("iob-value")).toHaveTextContent("2.4u");
+      expect(screen.getByTestId("iob-value")).toHaveTextContent("2.40u");
     });
 
     it("displays CoB value with unit", () => {
@@ -198,10 +198,10 @@ describe("GlucoseHero", () => {
       expect(screen.getByTestId("cob-value")).toHaveTextContent("--");
     });
 
-    it("formats IoB to 1 decimal place", () => {
+    it("formats IoB to 2 decimal places", () => {
       render(<GlucoseHero {...defaultProps} iob={2.456} />);
 
-      expect(screen.getByTestId("iob-value")).toHaveTextContent("2.5u");
+      expect(screen.getByTestId("iob-value")).toHaveTextContent("2.46u");
     });
 
     it("rounds CoB to nearest integer", () => {
@@ -441,7 +441,7 @@ describe("GlucoseHero", () => {
     it("allows negative IoB (rare but possible)", () => {
       render(<GlucoseHero {...defaultProps} iob={-0.5} />);
 
-      expect(screen.getByTestId("iob-value")).toHaveTextContent("-0.5u");
+      expect(screen.getByTestId("iob-value")).toHaveTextContent("-0.50u");
     });
   });
 

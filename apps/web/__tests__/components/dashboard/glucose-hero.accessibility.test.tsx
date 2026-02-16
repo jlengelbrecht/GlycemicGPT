@@ -154,7 +154,7 @@ describe("GlucoseHero Accessibility", () => {
       const iobContainer = metricsGroup.querySelector('[aria-label*="Insulin on board"]');
       expect(iobContainer).toHaveAttribute(
         "aria-label",
-        "Insulin on board: 2.5 units"
+        "Insulin on board: 2.50 units"
       );
     });
 
