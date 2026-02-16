@@ -27,8 +27,10 @@ import {
   ConnectionStatusBanner,
   GlucoseTrendChart,
 } from "@/components/dashboard";
+import { PERIOD_LABELS } from "@/components/dashboard/time-in-range-bar";
 import { useGlucoseStreamContext, useUserContext } from "@/providers";
 import { getTargetGlucoseRange } from "@/lib/api";
+import { useTimeInRangeStats } from "@/hooks/use-time-in-range-stats";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -82,17 +84,18 @@ export default function DashboardPage() {
     }
   }, [user, router]);
 
+  // Story 18.6: Fetch time-in-range stats from API
+  const {
+    stats: tirStats,
+    isLoading: tirLoading,
+    period: tirPeriod,
+    setPeriod: setTirPeriod,
+  } = useTimeInRangeStats("24h");
+
   // Prevent flash of diabetic dashboard while caregiver redirect is pending
   if (isUserLoading || user?.role === "caregiver") {
     return null;
   }
-
-  // Fallback data for when no real-time data is available
-  const mockTimeInRangeData = {
-    low: 5,
-    inRange: 78,
-    high: 17,
-  };
 
   // Determine data to display
   // Issue 2 & 3 fix: The hook now returns the mapped frontend trend directly
@@ -156,9 +159,11 @@ export default function DashboardPage() {
               <div className="p-2 bg-green-500/10 rounded-lg">
                 <Activity className="h-5 w-5 text-green-400" aria-hidden="true" />
               </div>
-              <h3 className="text-slate-400 text-sm">Time in Range (24h)</h3>
+              <h3 className="text-slate-400 text-sm">Time in Range ({PERIOD_LABELS[tirPeriod]})</h3>
             </div>
-            <p className="text-3xl font-bold text-green-400" aria-label="Time in range: 78 percent">78%</p>
+            <p className="text-3xl font-bold text-green-400" aria-label={`Time in range: ${tirStats && tirStats.readings_count > 0 ? Math.round(tirStats.in_range_pct) : "--"} percent`}>
+              {tirStats && tirStats.readings_count > 0 ? `${Math.round(tirStats.in_range_pct)}%` : "--"}
+            </p>
             <p className="text-slate-500 text-xs mt-1">Target: {targetRange}</p>
           </article>
 
@@ -178,8 +183,14 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Time in Range bar - Story 4.4 */}
-      <TimeInRangeBar data={mockTimeInRangeData} period="24h" targetRange={targetRange} />
+      {/* Time in Range bar - Story 4.4, 18.6 */}
+      <TimeInRangeBar
+        data={tirStats ? { low: tirStats.low_pct, inRange: tirStats.in_range_pct, high: tirStats.high_pct } : { low: 0, inRange: 0, high: 0 }}
+        period={tirPeriod}
+        onPeriodChange={setTirPeriod}
+        targetRange={targetRange}
+        isLoading={tirLoading}
+      />
     </main>
   );
 }

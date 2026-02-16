@@ -119,7 +119,7 @@ describe("Dashboard Page Accessibility", () => {
     it("provides accessible label for time in range value", () => {
       render(<DashboardPage />);
 
-      const tirValue = screen.getByLabelText(/time in range.*78.*percent/i);
+      const tirValue = screen.getByLabelText(/time in range.*percent/i);
       expect(tirValue).toBeInTheDocument();
     });
 
