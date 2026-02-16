@@ -8,6 +8,7 @@
 // Mock next/server before importing middleware
 const mockRedirect = jest.fn();
 const mockNext = jest.fn();
+const mockCookieDelete = jest.fn();
 
 jest.mock("next/server", () => ({
   NextResponse: {
@@ -19,11 +20,13 @@ jest.mock("next/server", () => ({
       };
     },
     next: () => {
-      mockNext();
-      return {
+      const response = {
         status: 200,
         headers: new Map(),
+        cookies: { delete: mockCookieDelete },
       };
+      mockNext(response);
+      return response;
     },
   },
 }));
@@ -52,6 +55,7 @@ function getRedirectPath(url: string): string {
 describe("Auth Middleware", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCookieDelete.mockClear();
   });
 
   describe("protected routes (unauthenticated)", () => {
@@ -175,6 +179,44 @@ describe("Auth Middleware", () => {
       middleware(request);
 
       expect(mockRedirect).toHaveBeenCalledTimes(1);
+      const redirectUrl = mockRedirect.mock.calls[0][0];
+      expect(getRedirectPath(redirectUrl)).toBe("/dashboard");
+    });
+  });
+
+  describe("expired session handling", () => {
+    it("clears cookie and shows login when authenticated user hits /login?expired=true", () => {
+      const request = createMockRequest("/login?expired=true", true);
+      middleware(request);
+
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(mockRedirect).not.toHaveBeenCalled();
+      expect(mockCookieDelete).toHaveBeenCalledWith("glycemicgpt_session");
+    });
+
+    it("redirects authenticated user to /dashboard on /login without expired param", () => {
+      const request = createMockRequest("/login", true);
+      middleware(request);
+
+      expect(mockRedirect).toHaveBeenCalledTimes(1);
+      expect(mockCookieDelete).not.toHaveBeenCalled();
+    });
+
+    it("allows unauthenticated user to /login?expired=true without cookie deletion", () => {
+      const request = createMockRequest("/login?expired=true", false);
+      middleware(request);
+
+      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(mockRedirect).not.toHaveBeenCalled();
+      expect(mockCookieDelete).not.toHaveBeenCalled();
+    });
+
+    it("does not clear cookie on /register?expired=true (only /login handles expiry)", () => {
+      const request = createMockRequest("/register?expired=true", true);
+      middleware(request);
+
+      expect(mockRedirect).toHaveBeenCalledTimes(1);
+      expect(mockCookieDelete).not.toHaveBeenCalled();
       const redirectUrl = mockRedirect.mock.calls[0][0];
       expect(getRedirectPath(redirectUrl)).toBe("/dashboard");
     });
