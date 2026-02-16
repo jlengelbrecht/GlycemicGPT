@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.92](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.91...v0.1.92) (2026-02-16)
+
+
+### 🐛 Bug Fixes
+
+* correct CGM and bolus timestamp timezone conversion ([#209](https://github.com/jlengelbrecht/GlycemicGPT/issues/209)) ([ba13da6](https://github.com/jlengelbrecht/GlycemicGPT/commit/ba13da672bd6de7de82dbb43d6a511457fce45c9))
+
 ## [0.1.91](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.90...v0.1.91) (2026-02-16)
 
 
