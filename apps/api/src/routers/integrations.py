@@ -752,7 +752,10 @@ async def get_time_in_range(
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
     minutes: int = Query(
-        default=1440, ge=60, le=43200, description="Analysis window in minutes (max 30d)"
+        default=1440,
+        ge=60,
+        le=43200,
+        description="Analysis window in minutes (max 30d)",
     ),
 ) -> TimeInRangeResponse:
     """Get time-in-range statistics for the specified period.
@@ -770,12 +773,12 @@ async def get_time_in_range(
     result = await db.execute(
         select(
             func.count().label("total"),
-            func.sum(
-                case((GlucoseReading.value < low_threshold, 1), else_=0)
-            ).label("low_count"),
-            func.sum(
-                case((GlucoseReading.value > high_threshold, 1), else_=0)
-            ).label("high_count"),
+            func.sum(case((GlucoseReading.value < low_threshold, 1), else_=0)).label(
+                "low_count"
+            ),
+            func.sum(case((GlucoseReading.value > high_threshold, 1), else_=0)).label(
+                "high_count"
+            ),
         ).where(
             GlucoseReading.user_id == current_user.id,
             GlucoseReading.reading_timestamp >= cutoff,
