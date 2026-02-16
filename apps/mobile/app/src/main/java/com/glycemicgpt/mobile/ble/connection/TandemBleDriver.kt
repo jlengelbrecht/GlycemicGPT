@@ -7,6 +7,7 @@ import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
+import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -68,9 +69,9 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getBolusHistory(since: Instant): Result<List<BolusEvent>> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_BOLUS_CALC_DATA_REQ,
+        opcode = TandemProtocol.OPCODE_LAST_BOLUS_STATUS_REQ,
     ) { cargo ->
-        StatusResponseParser.parseBolusHistoryResponse(cargo, since)
+        StatusResponseParser.parseLastBolusStatusResponse(cargo, since)
     }
 
     override suspend fun getPumpSettings(): Result<PumpSettings> = runStatusRequest(
@@ -80,11 +81,24 @@ class TandemBleDriver @Inject constructor(
             ?: throw IllegalStateException("Failed to parse pump settings response")
     }
 
-    override suspend fun getBatteryStatus(): Result<BatteryStatus> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_REQ,
-    ) { cargo ->
-        StatusResponseParser.parseBatteryResponse(cargo)
-            ?: throw IllegalStateException("Failed to parse battery response")
+    override suspend fun getBatteryStatus(): Result<BatteryStatus> {
+        // Use V1 first (universally supported). V2 (opcode 144) is only for
+        // Mobi pumps and causes GATT_ERROR (133) on tslim X2, killing the
+        // connection before fallback can execute.
+        val v1Result = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V1_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseBatteryV1Response(cargo)
+                ?: throw IllegalStateException("Failed to parse battery V1 response")
+        }
+        if (v1Result.isSuccess) return v1Result
+        // Fall back to V2 only if V1 fails (e.g., on Mobi pumps)
+        return runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CURRENT_BATTERY_V2_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseBatteryV2Response(cargo)
+                ?: throw IllegalStateException("Failed to parse battery V2 response")
+        }
     }
 
     override suspend fun getReservoirLevel(): Result<ReservoirReading> = runStatusRequest(
@@ -94,16 +108,38 @@ class TandemBleDriver @Inject constructor(
             ?: throw IllegalStateException("Failed to parse insulin status response")
     }
 
-    override suspend fun getCgmStatus(): Result<CgmReading> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_CGM_STATUS_REQ,
-    ) { cargo ->
-        StatusResponseParser.parseCgmStatusResponse(cargo)
-            ?: throw IllegalStateException("Failed to parse CGM status response")
+    override suspend fun getCgmStatus(): Result<CgmReading> {
+        // Get glucose value from CurrentEGVGuiData
+        val egvResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_CGM_EGV_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseCgmEgvResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse CGM EGV response")
+        }
+        if (egvResult.isFailure) return egvResult
+
+        // Get trend arrow from HomeScreenMirror (failure degrades to UNKNOWN)
+        val mirrorResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_HOME_SCREEN_MIRROR_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseHomeScreenMirrorResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse HomeScreenMirror response")
+        }
+
+        val egv = egvResult.getOrThrow()
+        val trend = mirrorResult.getOrNull()?.trendArrow ?: CgmTrend.UNKNOWN
+
+        return Result.success(egv.copy(trendArrow = trend))
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_LOG_ENTRY_SEQ_REQ,
+        opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
     ) { cargo ->
+        // HistoryLogStatusResponse returns 8 bytes (firstSeq + lastSeq).
+        // The record parser expects 18-byte records, so it safely returns
+        // emptyList() for the status response. Full log fetching via
+        // OPCODE_HISTORY_LOG_REQ (60) with 5-byte cargo will be added
+        // when we implement incremental log download.
         StatusResponseParser.parseHistoryLogResponse(cargo, sinceSequence)
     }
 

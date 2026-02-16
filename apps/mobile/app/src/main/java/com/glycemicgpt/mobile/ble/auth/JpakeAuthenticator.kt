@@ -218,6 +218,7 @@ class JpakeAuthenticator @Inject constructor() {
 
     /**
      * Build the Jpake3SessionKeyRequest (triggers session key derivation).
+     * Used after a full bootstrap (rounds 1a, 1b, 2 complete).
      */
     fun buildJpake3Request(txId: Int): List<ByteArray> {
         check(_step.value == JpakeStep.ROUND_2_RECEIVED) { "Invalid state: ${_step.value}" }
@@ -238,6 +239,36 @@ class JpakeAuthenticator @Inject constructor() {
 
         Timber.d("JPAKE: Sending session key request, derived secret computed")
         return Packetize.encode(TandemProtocol.OPCODE_JPAKE_3_SESSION_KEY_REQ, txId, cargo, TandemProtocol.CHUNK_SIZE_SHORT)
+    }
+
+    /**
+     * Start JPAKE in CONFIRMATION mode (reconnect).
+     *
+     * Uses a previously derived secret from a successful bootstrap to skip
+     * rounds 1a, 1b, and 2 entirely. Only rounds 3 (session key) and 4
+     * (key confirmation) are performed, reducing the handshake from 5 to 2
+     * round trips.
+     *
+     * The pump accepts this because the derived secret proves the client
+     * previously completed a full JPAKE handshake with the correct pairing code.
+     * The pump does not need to be in pairing mode for confirmation.
+     */
+    fun buildJpake3RequestFromDerivedSecret(
+        savedDerivedSecret: ByteArray,
+        txId: Int,
+    ): List<ByteArray> {
+        derivedSecret = savedDerivedSecret.copyOf()
+        // No EcJpake instance needed -- we already have the derived secret.
+        // Jump directly to round 3: session key request.
+        val cargo = ByteArray(2)
+        putShortLE(cargo, 0, appInstanceId)
+        _step.value = JpakeStep.CONFIRM_3_SENT
+
+        Timber.d("JPAKE CONFIRM: Sending session key request (skipped rounds 1-2)")
+        return Packetize.encode(
+            TandemProtocol.OPCODE_JPAKE_3_SESSION_KEY_REQ,
+            txId, cargo, TandemProtocol.CHUNK_SIZE_SHORT,
+        )
     }
 
     /**
@@ -322,6 +353,12 @@ class JpakeAuthenticator @Inject constructor() {
         }
         return valid
     }
+
+    /** Get the derived secret for persistence (returns a copy, or null if not yet computed). */
+    fun getDerivedSecret(): ByteArray? = derivedSecret?.copyOf()
+
+    /** Get the server nonce from round 3 for persistence (returns a copy, or null). */
+    fun getServerNonce(): ByteArray? = serverNonce3?.copyOf()
 
     // -- Helper methods -------------------------------------------------------
 
