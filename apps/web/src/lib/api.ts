@@ -2134,3 +2134,31 @@ export async function getGlucoseHistory(
   }
   return response.json();
 }
+
+// ============================================================================
+// Time in Range Statistics
+// ============================================================================
+
+export interface TimeInRangeStats {
+  low_pct: number;
+  in_range_pct: number;
+  high_pct: number;
+  readings_count: number;
+  low_threshold: number;
+  high_threshold: number;
+}
+
+export async function getTimeInRangeStats(
+  minutes: number = 1440
+): Promise<TimeInRangeStats> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/glucose/time-in-range?minutes=${minutes}`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch time in range: ${response.status}`
+    );
+  }
+  return response.json();
+}
