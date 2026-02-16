@@ -13,6 +13,9 @@ import javax.inject.Inject
  *
  * Complements the auto-start in GlycemicGptApp.onCreate() which handles
  * cold app starts but not device reboots.
+ *
+ * Uses [goAsync] to extend the broadcast window beyond the default 10-second
+ * ANR limit, since Hilt injection may trigger Application.onCreate().
  */
 @AndroidEntryPoint
 class BootCompletedReceiver : BroadcastReceiver() {
@@ -25,11 +28,16 @@ class BootCompletedReceiver : BroadcastReceiver() {
             intent.action != "android.intent.action.QUICKBOOT_POWERON"
         ) return
 
-        if (pumpCredentialStore.isPaired()) {
-            Timber.d("Boot completed, starting PumpConnectionService (pump is paired)")
-            PumpConnectionService.start(context)
-        } else {
-            Timber.d("Boot completed, pump not paired -- skipping service start")
+        val pendingResult = goAsync()
+        try {
+            if (pumpCredentialStore.isPaired()) {
+                Timber.d("Boot completed, starting PumpConnectionService (pump is paired)")
+                PumpConnectionService.start(context)
+            } else {
+                Timber.d("Boot completed, pump not paired -- skipping service start")
+            }
+        } finally {
+            pendingResult.finish()
         }
     }
 }

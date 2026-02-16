@@ -76,7 +76,8 @@
         <receiver
             android:name=".service.BootCompletedReceiver"
             android:exported="true"
-            android:enabled="true">
+            android:enabled="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />

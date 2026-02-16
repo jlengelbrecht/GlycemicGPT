@@ -50,17 +50,21 @@ interface SyncDao {
     @Query("SELECT COUNT(*) FROM sync_queue WHERE status != 'sending'")
     fun observePendingCount(): Flow<Int>
 
-    /** Count all items in the sync queue. */
+    /** Count all items in the sync queue (all statuses, for queue size bounds). */
     @Query("SELECT COUNT(*) FROM sync_queue")
     suspend fun countAll(): Int
 
-    /** Delete the oldest pending items to keep the queue under the given limit. */
+    /**
+     * Delete the oldest expendable items (pending or exhausted-failed) to keep queue bounded.
+     * Pending items are safe to drop; exhausted-failed items (retryCount >= 5) will never
+     * succeed so they are also prunable. Items in 'sending' status are preserved.
+     */
     @Query(
         """
         DELETE FROM sync_queue
         WHERE id IN (
             SELECT id FROM sync_queue
-            WHERE status = 'pending'
+            WHERE status = 'pending' OR (status = 'failed' AND retryCount >= 5)
             ORDER BY createdAtMs ASC
             LIMIT :excess
         )

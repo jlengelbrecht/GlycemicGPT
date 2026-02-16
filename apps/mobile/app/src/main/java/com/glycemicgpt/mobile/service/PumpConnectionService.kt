@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
@@ -33,6 +34,9 @@ import javax.inject.Inject
  * Holds a PARTIAL_WAKE_LOCK while the pump is connected to prevent the CPU
  * from sleeping and missing the 15-second keep-alive polls (the pump drops
  * idle BLE connections after ~30 seconds).
+ *
+ * The wake lock uses a 20-minute safety timeout as a leak guard, and a
+ * renewal loop re-acquires it every 15 minutes while connected.
  *
  * Polling pauses when BLE connection is lost and resumes on reconnect.
  * Reduces poll frequency when phone battery drops below 15%.
@@ -47,7 +51,8 @@ class PumpConnectionService : Service() {
         private const val LOW_BATTERY_THRESHOLD = 15
         private const val CRITICAL_BATTERY_THRESHOLD = 5
         private const val WAKE_LOCK_TAG = "GlycemicGPT:PumpBleConnection"
-        private const val WAKE_LOCK_TIMEOUT_MS = 30L * 60 * 1000 // 30 minutes safety timeout
+        private const val WAKE_LOCK_TIMEOUT_MS = 20L * 60 * 1000 // 20-minute safety timeout
+        private const val WAKE_LOCK_RENEW_MS = 15L * 60 * 1000 // renew every 15 minutes
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, PumpConnectionService::class.java))
@@ -72,6 +77,8 @@ class PumpConnectionService : Service() {
     private val wakeLockSync = Any()
     private var wakeLock: PowerManager.WakeLock? = null
     private var connectionWatcherJob: Job? = null
+    private var wakeLockRenewalJob: Job? = null
+    private var started = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -126,27 +133,30 @@ class PumpConnectionService : Service() {
         val notification = buildNotification()
         startForeground(NOTIFICATION_ID, notification)
 
-        pollingOrchestrator.backendSyncManager = backendSyncManager
-        pollingOrchestrator.start(serviceScope)
-        backendSyncManager.start(serviceScope)
-        connectionManager.autoReconnectIfPaired()
+        // Guard: only start orchestrators and watchers once per service lifecycle.
+        // onStartCommand may be called multiple times (re-delivery, duplicate starts).
+        if (!started) {
+            started = true
+            pollingOrchestrator.backendSyncManager = backendSyncManager
+            pollingOrchestrator.start(serviceScope)
+            backendSyncManager.start(serviceScope)
+            connectionManager.autoReconnectIfPaired()
 
-        // Watch connection state to acquire/release wake lock
-        if (connectionWatcherJob == null) {
+            // Watch connection state to acquire/release wake lock
             connectionWatcherJob = serviceScope.launch {
                 connectionManager.connectionState.collect { state ->
                     synchronized(wakeLockSync) {
                         if (state == ConnectionState.CONNECTED) {
                             acquireWakeLockLocked()
+                            startWakeLockRenewalLocked()
                         } else {
+                            stopWakeLockRenewalLocked()
                             releaseWakeLockLocked()
                         }
                     }
                 }
             }
-        }
 
-        if (!batteryReceiverRegistered) {
             ContextCompat.registerReceiver(
                 this,
                 batteryReceiver,
@@ -167,7 +177,10 @@ class PumpConnectionService : Service() {
         backendSyncManager.stop()
         connectionWatcherJob?.cancel()
         connectionWatcherJob = null
-        synchronized(wakeLockSync) { releaseWakeLockLocked() }
+        synchronized(wakeLockSync) {
+            stopWakeLockRenewalLocked()
+            releaseWakeLockLocked()
+        }
         if (batteryReceiverRegistered) {
             try {
                 unregisterReceiver(batteryReceiver)
@@ -176,6 +189,7 @@ class PumpConnectionService : Service() {
             }
             batteryReceiverRegistered = false
         }
+        started = false
         serviceScope.cancel()
         Timber.d("PumpConnectionService destroyed")
         super.onDestroy()
@@ -183,7 +197,10 @@ class PumpConnectionService : Service() {
 
     /** Must be called under [wakeLockSync]. */
     private fun acquireWakeLockLocked() {
-        if (wakeLock?.isHeld == true) return
+        // Release old instance first to avoid orphaned WakeLock objects
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
             setReferenceCounted(false)
@@ -201,6 +218,32 @@ class PumpConnectionService : Service() {
             }
         }
         wakeLock = null
+    }
+
+    /**
+     * Starts a coroutine that periodically re-acquires the wake lock before the
+     * safety timeout expires. This ensures continuous CPU wakefulness during
+     * overnight BLE monitoring. Must be called under [wakeLockSync].
+     */
+    private fun startWakeLockRenewalLocked() {
+        if (wakeLockRenewalJob?.isActive == true) return
+        wakeLockRenewalJob = serviceScope.launch {
+            while (true) {
+                delay(WAKE_LOCK_RENEW_MS)
+                synchronized(wakeLockSync) {
+                    if (connectionManager.connectionState.value == ConnectionState.CONNECTED) {
+                        acquireWakeLockLocked()
+                        Timber.d("Wake lock renewed")
+                    }
+                }
+            }
+        }
+    }
+
+    /** Must be called under [wakeLockSync]. */
+    private fun stopWakeLockRenewalLocked() {
+        wakeLockRenewalJob?.cancel()
+        wakeLockRenewalJob = null
     }
 
     private fun createNotificationChannel() {

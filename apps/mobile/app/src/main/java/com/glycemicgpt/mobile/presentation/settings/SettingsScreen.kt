@@ -21,10 +21,10 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,8 +46,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,6 +69,11 @@ fun SettingsScreen(
 ) {
     val state by settingsViewModel.uiState.collectAsState()
     val cloudSyncState by tandemCloudSyncViewModel.uiState.collectAsState()
+
+    // Re-check battery optimization when returning from system settings
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        settingsViewModel.checkBatteryOptimization()
+    }
 
     Column(
         modifier = Modifier
@@ -1113,7 +1121,11 @@ private fun BatteryOptimizationCard(
                     try {
                         context.startActivity(onRequestExemption())
                     } catch (_: android.content.ActivityNotFoundException) {
-                        // Some OEMs don't support this intent; user must exempt manually
+                        Toast.makeText(
+                            context,
+                            "Please disable battery optimization for GlycemicGPT in your phone's Settings > Battery",
+                            Toast.LENGTH_LONG,
+                        ).show()
                     }
                 },
                 modifier = Modifier

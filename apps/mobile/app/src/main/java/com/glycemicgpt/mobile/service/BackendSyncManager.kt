@@ -55,7 +55,7 @@ class BackendSyncManager @Inject constructor(
         const val MAX_RETRIES = 5
         const val MAX_QUEUE_SIZE = 5000
         private const val STALE_SENDING_TIMEOUT_MS = 60_000L // 1 minute
-        private const val CLEANUP_INTERVAL_MS = 60 * 60 * 1000L // 1 hour
+        private const val CLEANUP_INTERVAL_MS = 3_600_000L // 1 hour
     }
 
     /** Cached pump hardware info, set by PumpPollingOrchestrator on first connect. */
