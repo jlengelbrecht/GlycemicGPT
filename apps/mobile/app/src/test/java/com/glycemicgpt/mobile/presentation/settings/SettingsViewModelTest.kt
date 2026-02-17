@@ -2,6 +2,8 @@ package com.glycemicgpt.mobile.presentation.settings
 
 import android.content.Context
 import android.os.PowerManager
+import com.glycemicgpt.mobile.data.auth.AuthManager
+import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
@@ -22,6 +24,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -63,6 +66,9 @@ class SettingsViewModelTest {
     private val api = mockk<GlycemicGptApi>()
     private val deviceRepository = mockk<DeviceRepository>(relaxed = true)
     private val appUpdateChecker = mockk<AppUpdateChecker>()
+    private val authManager = mockk<AuthManager>(relaxed = true) {
+        every { authState } returns MutableStateFlow(AuthState.Unauthenticated)
+    }
 
     @Before
     fun setup() {
@@ -75,7 +81,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, deviceRepository, appUpdateChecker)
+        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, deviceRepository, appUpdateChecker, authManager)
 
     @Test
     fun `loadState initializes from stores`() {
@@ -196,6 +202,7 @@ class SettingsViewModelTest {
         assertNull(vm.uiState.value.loginError)
         verify { authTokenStore.saveCredentials(any(), "jwt123", any(), "user@test.com") }
         verify { authTokenStore.saveRefreshToken("refresh123") }
+        verify { authManager.onLoginSuccess(any()) }
     }
 
     @Test
@@ -245,7 +252,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `logout clears token`() {
+    fun `logout clears token and notifies AuthManager`() {
         every { authTokenStore.isLoggedIn() } returns true
         val vm = createViewModel()
 
@@ -254,6 +261,7 @@ class SettingsViewModelTest {
         assertFalse(vm.uiState.value.isLoggedIn)
         assertNull(vm.uiState.value.userEmail)
         verify { authTokenStore.clearToken() }
+        verify { authManager.onLogout() }
     }
 
     @Test
@@ -404,5 +412,11 @@ class SettingsViewModelTest {
         every { powerManager.isIgnoringBatteryOptimizations(any()) } returns true
         val vm = createViewModel()
         assertFalse(vm.uiState.value.isBatteryOptimized)
+    }
+
+    @Test
+    fun `authState is exposed from AuthManager`() {
+        val vm = createViewModel()
+        assertEquals(AuthState.Unauthenticated, vm.authState.value)
     }
 }

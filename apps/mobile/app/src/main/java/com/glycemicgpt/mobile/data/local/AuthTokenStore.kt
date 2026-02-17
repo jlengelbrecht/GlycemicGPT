@@ -5,13 +5,16 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKeys
 import dagger.hilt.android.qualifiers.ApplicationContext
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Securely stores backend authentication credentials using EncryptedSharedPreferences.
  *
- * Stores the GlycemicGPT server base URL, JWT token, and expiration.
+ * Stores the GlycemicGPT server base URL, JWT token, refresh token, and their expirations.
+ * Base URL is stored independently of the token lifecycle and is never cleared by
+ * token operations (only by explicit user action).
  */
 @Singleton
 class AuthTokenStore @Inject constructor(
@@ -65,15 +68,43 @@ class AuthTokenStore @Inject constructor(
         return token
     }
 
+    /** Returns the access token expiration timestamp in milliseconds, or 0 if not set. */
+    fun getTokenExpiresAtMs(): Long = prefs.getLong(KEY_EXPIRES_AT, 0L)
+
     fun isLoggedIn(): Boolean = getToken() != null
 
     fun saveRefreshToken(token: String) {
+        val expiresAtMs = extractJwtExpiration(token)
         prefs.edit()
             .putString(KEY_REFRESH_TOKEN, token)
+            .apply {
+                if (expiresAtMs > 0) putLong(KEY_REFRESH_TOKEN_EXPIRES_AT, expiresAtMs)
+            }
             .apply()
     }
 
     fun getRefreshToken(): String? = prefs.getString(KEY_REFRESH_TOKEN, null)
+
+    /** Returns the refresh token expiration in milliseconds, or 0 if unknown. */
+    fun getRefreshTokenExpiresAtMs(): Long = prefs.getLong(KEY_REFRESH_TOKEN_EXPIRES_AT, 0L)
+
+    /** Returns true if the refresh token is expired or missing. */
+    fun isRefreshTokenExpired(): Boolean {
+        val refreshToken = getRefreshToken() ?: return true
+        if (refreshToken.isBlank()) return true
+        val expiresAt = getRefreshTokenExpiresAtMs()
+        if (expiresAt <= 0) return false // Unknown expiry, assume valid
+        return System.currentTimeMillis() >= expiresAt
+    }
+
+    /** Returns true if the access token will expire within the given milliseconds. */
+    fun isTokenExpiringSoon(withinMs: Long): Boolean {
+        val token = prefs.getString(KEY_TOKEN, null) ?: return false
+        if (token.isBlank()) return false
+        val expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L)
+        if (expiresAt <= 0) return false
+        return System.currentTimeMillis() >= (expiresAt - withinMs)
+    }
 
     fun clearAccessToken() {
         prefs.edit()
@@ -82,15 +113,18 @@ class AuthTokenStore @Inject constructor(
             .apply()
     }
 
+    /** Clears all token data but preserves the base URL. */
     fun clearToken() {
         prefs.edit()
             .remove(KEY_TOKEN)
             .remove(KEY_EXPIRES_AT)
             .remove(KEY_USER_EMAIL)
             .remove(KEY_REFRESH_TOKEN)
+            .remove(KEY_REFRESH_TOKEN_EXPIRES_AT)
             .apply()
     }
 
+    /** Clears everything including base URL. Use only for full reset. */
     fun clearCredentials() {
         prefs.edit().clear().apply()
     }
@@ -103,5 +137,31 @@ class AuthTokenStore @Inject constructor(
         private const val KEY_EXPIRES_AT = "expires_at_ms"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_REFRESH_TOKEN_EXPIRES_AT = "refresh_token_expires_at_ms"
+
+        /** Proactive refresh window: refresh token 5 minutes before expiry. */
+        const val PROACTIVE_REFRESH_WINDOW_MS = 5 * 60 * 1000L
+
+        /**
+         * Extracts the `exp` claim from a JWT token payload.
+         * Returns expiration as milliseconds since epoch, or 0 if parsing fails.
+         */
+        /** Regex to extract the "exp" numeric claim from a JWT payload JSON string. */
+        private val EXP_PATTERN = Regex(""""exp"\s*:\s*(\d+)""")
+
+        internal fun extractJwtExpiration(jwt: String): Long {
+            return try {
+                val parts = jwt.split(".")
+                if (parts.size != 3) return 0L
+                val decoder = java.util.Base64.getUrlDecoder()
+                val payload = String(decoder.decode(parts[1]))
+                val match = EXP_PATTERN.find(payload) ?: return 0L
+                val exp = match.groupValues[1].toLongOrNull() ?: return 0L
+                if (exp > 0) exp * 1000L else 0L // JWT exp is in seconds
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to extract JWT expiration")
+                0L
+            }
+        }
     }
 }

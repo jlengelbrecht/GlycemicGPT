@@ -152,6 +152,7 @@ dependencies {
     // Unit tests
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
+    testImplementation(libs.mockwebserver)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.turbine)
 
