@@ -9,18 +9,14 @@ import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
-import com.glycemicgpt.mobile.domain.model.HistoryLogRange
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
 import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -137,12 +133,12 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> {
-        // Phase 1: Get the available sequence range from the pump.
+        // Get the available sequence range from the pump (opcode 58).
         val rangeResult = runStatusRequest(
             opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
         ) { cargo ->
             StatusResponseParser.parseHistoryLogStatusResponse(cargo)
-                ?: throw IllegalStateException("Failed to parse history log status (need 8 bytes, got ${cargo.size})")
+                ?: throw IllegalStateException("Failed to parse history log status (need 12 bytes, got ${cargo.size})")
         }
         if (rangeResult.isFailure) return Result.failure(rangeResult.exceptionOrNull()!!)
 
@@ -150,47 +146,12 @@ class TandemBleDriver @Inject constructor(
         Timber.d("History log range: firstSeq=%d lastSeq=%d sinceSequence=%d",
             range.firstSeq, range.lastSeq, sinceSequence)
 
-        if (range.lastSeq <= sinceSequence) return Result.success(emptyList())
-
-        // Phase 2: Fetch records in batches via opcode 60.
-        // Cap total records per poll to avoid monopolizing the BLE link.
-        // The next poll cycle will continue from where we left off.
-        val startSeq = maxOf(sinceSequence + 1, range.firstSeq)
-        val allRecords = mutableListOf<HistoryLogRecord>()
-        var cursor = startSeq
-
-        while (cursor <= range.lastSeq && allRecords.size < MAX_RECORDS_PER_POLL) {
-            val count = minOf(HISTORY_LOG_BATCH_SIZE, range.lastSeq - cursor + 1)
-            val cargo = buildHistoryLogCargo(cursor, count)
-
-            val batchResult = runStatusRequest(
-                opcode = TandemProtocol.OPCODE_HISTORY_LOG_REQ,
-                cargo = cargo,
-                timeoutMs = TandemProtocol.HISTORY_LOG_TIMEOUT_MS,
-            ) { responseCargo ->
-                StatusResponseParser.parseHistoryLogResponse(responseCargo, sinceSequence)
-            }
-
-            if (batchResult.isFailure) {
-                Timber.w(batchResult.exceptionOrNull(), "History log batch failed at cursor=%d", cursor)
-                break
-            }
-
-            val records = batchResult.getOrThrow()
-            if (records.isEmpty()) break
-
-            allRecords.addAll(records)
-            cursor = records.maxOf { it.sequenceNumber } + 1
-
-            // Brief pause between batches to avoid overwhelming the pump
-            // and to let other BLE requests interleave.
-            if (cursor <= range.lastSeq) {
-                delay(INTER_BATCH_DELAY_MS)
-            }
-        }
-
-        Timber.d("Fetched %d history log records total (cap=%d)", allRecords.size, MAX_RECORDS_PER_POLL)
-        return Result.success(allRecords)
+        // TODO: Fetching individual records requires opcode 60, which sends a
+        // 2-byte ACK on CURRENT_STATUS_UUID (FFF6) and streams actual records
+        // on HISTORY_LOG_UUID (FFF8, opcode 0x81). The FFF8 streaming protocol
+        // (flow control, record framing, ACKs) needs further reverse-engineering.
+        // For now we report the range for diagnostics and return empty.
+        return Result.success(emptyList())
     }
 
     override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> {
@@ -239,30 +200,5 @@ class TandemBleDriver @Inject constructor(
             debugStore.updateLast(opcode, BleDebugStore.Direction.RX, error = e.message ?: e.javaClass.simpleName)
             Result.failure(e)
         }
-    }
-
-    /** Build the 5-byte cargo for HistoryLogRequest (opcode 60). */
-    private fun buildHistoryLogCargo(startSeq: Int, count: Int): ByteArray {
-        require(count in 1..MAX_RECORDS_PER_REQUEST) {
-            "count must be 1..$MAX_RECORDS_PER_REQUEST, got $count"
-        }
-        val buf = ByteBuffer.allocate(5).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(startSeq)
-        buf.put(count.toByte())
-        return buf.array()
-    }
-
-    companion object {
-        /** Number of records to request per BLE round-trip (max 14 due to 255-byte cargo limit). */
-        private const val HISTORY_LOG_BATCH_SIZE = 10
-
-        /** Absolute max records per request (255 bytes / 18 bytes per record). */
-        private const val MAX_RECORDS_PER_REQUEST = 14
-
-        /** Max records fetched per poll call to avoid monopolizing the BLE link. */
-        private const val MAX_RECORDS_PER_POLL = 200
-
-        /** Delay between batch requests to let other BLE operations interleave. */
-        private const val INTER_BATCH_DELAY_MS = 150L
     }
 }

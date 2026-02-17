@@ -311,15 +311,17 @@ object StatusResponseParser {
     /**
      * Parse HistoryLogStatusResponse (opcode 59).
      *
-     * Cargo layout (8 bytes, little-endian):
-     *   bytes 0-3: firstSeq (uint32 LE) -- oldest available log sequence
-     *   bytes 4-7: lastSeq (uint32 LE) -- newest available log sequence
+     * Cargo layout (12 bytes, little-endian):
+     *   bytes 0-3:  numEntries (uint32 LE) -- total available entries
+     *   bytes 4-7:  firstSeq   (uint32 LE) -- oldest available log sequence
+     *   bytes 8-11: lastSeq    (uint32 LE) -- newest available log sequence
      *
      * @return [HistoryLogRange] or null if cargo is too short.
      */
     fun parseHistoryLogStatusResponse(cargo: ByteArray): HistoryLogRange? {
-        if (cargo.size < 8) return null
-        val buf = ByteBuffer.wrap(cargo, 0, 8).order(ByteOrder.LITTLE_ENDIAN)
+        if (cargo.size < 12) return null
+        val buf = ByteBuffer.wrap(cargo, 0, 12).order(ByteOrder.LITTLE_ENDIAN)
+        buf.int // numEntries -- skip, we derive count from firstSeq/lastSeq
         val firstSeq = buf.int
         val lastSeq = buf.int
         return HistoryLogRange(firstSeq, lastSeq)
