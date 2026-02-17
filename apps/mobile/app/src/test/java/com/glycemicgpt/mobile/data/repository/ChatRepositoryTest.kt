@@ -17,7 +17,8 @@ import retrofit2.Response
 class ChatRepositoryTest {
 
     private val api = mockk<GlycemicGptApi>()
-    private val repository = ChatRepository(api)
+    private val chatApi = mockk<GlycemicGptApi>()
+    private val repository = ChatRepository(api, chatApi)
 
     @Test
     fun `sendMessage returns success on 200`() = runTest {
@@ -25,19 +26,19 @@ class ChatRepositoryTest {
             response = "Your levels look stable.",
             disclaimer = "Not medical advice.",
         )
-        coEvery { api.sendChatMessage(any()) } returns Response.success(chatResponse)
+        coEvery { chatApi.sendChatMessage(any()) } returns Response.success(chatResponse)
 
         val result = repository.sendMessage("How are my levels?")
 
         assertTrue(result.isSuccess)
         assertEquals("Your levels look stable.", result.getOrNull()!!.response)
         assertEquals("Not medical advice.", result.getOrNull()!!.disclaimer)
-        coVerify { api.sendChatMessage(ChatRequest(message = "How are my levels?")) }
+        coVerify { chatApi.sendChatMessage(ChatRequest(message = "How are my levels?")) }
     }
 
     @Test
     fun `sendMessage returns failure on HTTP error`() = runTest {
-        coEvery { api.sendChatMessage(any()) } returns Response.error(
+        coEvery { chatApi.sendChatMessage(any()) } returns Response.error(
             500,
             "Internal server error".toResponseBody(),
         )
@@ -50,7 +51,7 @@ class ChatRepositoryTest {
 
     @Test
     fun `sendMessage returns failure on null body`() = runTest {
-        coEvery { api.sendChatMessage(any()) } returns Response.success(null)
+        coEvery { chatApi.sendChatMessage(any()) } returns Response.success(null)
 
         val result = repository.sendMessage("test")
 
@@ -60,7 +61,7 @@ class ChatRepositoryTest {
 
     @Test
     fun `sendMessage returns failure on network exception`() = runTest {
-        coEvery { api.sendChatMessage(any()) } throws java.io.IOException("No route to host")
+        coEvery { chatApi.sendChatMessage(any()) } throws java.io.IOException("No route to host")
 
         val result = repository.sendMessage("test")
 

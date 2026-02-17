@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Watch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -45,8 +46,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,6 +69,11 @@ fun SettingsScreen(
 ) {
     val state by settingsViewModel.uiState.collectAsState()
     val cloudSyncState by tandemCloudSyncViewModel.uiState.collectAsState()
+
+    // Re-check battery optimization when returning from system settings
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        settingsViewModel.checkBatteryOptimization()
+    }
 
     Column(
         modifier = Modifier
@@ -100,6 +109,14 @@ fun SettingsScreen(
             onNavigateToPairing = onNavigateToPairing,
             onShowUnpair = settingsViewModel::showUnpairConfirm,
         )
+
+        // Battery optimization warning (between Pump and Sync)
+        if (state.isPumpPaired && state.isBatteryOptimized) {
+            Spacer(modifier = Modifier.height(8.dp))
+            BatteryOptimizationCard(
+                onRequestExemption = settingsViewModel::createBatteryOptimizationIntent,
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -1059,6 +1076,63 @@ private fun WatchSection(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Check Watch Status")
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryOptimizationCard(
+    onRequestExemption: () -> android.content.Intent,
+) {
+    val context = LocalContext.current
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Battery Optimization Active",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = "Android may stop the pump connection when the screen is off. Disable battery optimization for reliable overnight monitoring.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    try {
+                        context.startActivity(onRequestExemption())
+                    } catch (_: android.content.ActivityNotFoundException) {
+                        Toast.makeText(
+                            context,
+                            "Please disable battery optimization for GlycemicGPT in your phone's Settings > Battery",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("disable_battery_optimization_button"),
+            ) {
+                Text("Disable Battery Optimization")
             }
         }
     }

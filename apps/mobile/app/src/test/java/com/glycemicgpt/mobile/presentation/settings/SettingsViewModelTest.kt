@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.presentation.settings
 
 import android.content.Context
+import android.os.PowerManager
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
@@ -53,7 +54,12 @@ class SettingsViewModelTest {
         every { backendSyncEnabled } returns true
         every { dataRetentionDays } returns 7
     }
-    private val appContext = mockk<Context>(relaxed = true)
+    private val powerManager = mockk<PowerManager>(relaxed = true) {
+        every { isIgnoringBatteryOptimizations(any()) } returns false
+    }
+    private val appContext = mockk<Context>(relaxed = true) {
+        every { getSystemService(Context.POWER_SERVICE) } returns powerManager
+    }
     private val api = mockk<GlycemicGptApi>()
     private val deviceRepository = mockk<DeviceRepository>(relaxed = true)
     private val appUpdateChecker = mockk<AppUpdateChecker>()
@@ -384,5 +390,19 @@ class SettingsViewModelTest {
         vm.dismissUpdateState()
 
         assertTrue(vm.uiState.value.updateState is UpdateUiState.Idle)
+    }
+
+    @Test
+    fun `isBatteryOptimized defaults to true when not exempt`() {
+        every { powerManager.isIgnoringBatteryOptimizations(any()) } returns false
+        val vm = createViewModel()
+        assertTrue(vm.uiState.value.isBatteryOptimized)
+    }
+
+    @Test
+    fun `isBatteryOptimized is false when exempt`() {
+        every { powerManager.isIgnoringBatteryOptimizations(any()) } returns true
+        val vm = createViewModel()
+        assertFalse(vm.uiState.value.isBatteryOptimized)
     }
 }

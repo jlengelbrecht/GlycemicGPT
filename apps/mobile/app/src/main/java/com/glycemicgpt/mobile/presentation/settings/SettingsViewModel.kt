@@ -1,6 +1,10 @@
 package com.glycemicgpt.mobile.presentation.settings
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.BuildConfig
@@ -73,6 +77,8 @@ data class SettingsUiState(
     // Watch
     val watchAppInstalled: Boolean? = null,
     val watchConnected: Boolean = false,
+    // Battery optimization
+    val isBatteryOptimized: Boolean = true,
 )
 
 @HiltViewModel
@@ -106,6 +112,8 @@ class SettingsViewModel @Inject constructor(
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
         )
+
+        checkBatteryOptimization()
 
         // Start services on app startup if conditions are met
         if (loggedIn) {
@@ -371,6 +379,19 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun checkBatteryOptimization() {
+        val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val isIgnoring = pm.isIgnoringBatteryOptimizations(appContext.packageName)
+        _uiState.value = _uiState.value.copy(isBatteryOptimized = !isIgnoring)
+    }
+
+    fun createBatteryOptimizationIntent(): Intent {
+        return Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:${appContext.packageName}"),
+        )
     }
 
     private fun isValidUrl(url: String): Boolean {
