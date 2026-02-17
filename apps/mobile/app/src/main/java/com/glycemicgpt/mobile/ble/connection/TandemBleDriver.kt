@@ -143,11 +143,24 @@ class TandemBleDriver @Inject constructor(
         StatusResponseParser.parseHistoryLogResponse(cargo, sinceSequence)
     }
 
-    override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_PUMP_GLOBALS_REQ,
-    ) { cargo ->
-        StatusResponseParser.parsePumpGlobalsResponse(cargo)
-            ?: throw IllegalStateException("Failed to parse pump globals response")
+    override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> {
+        val versionResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_PUMP_VERSION_REQ,
+        ) { cargo ->
+            StatusResponseParser.parsePumpVersionResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse pump version response")
+        }
+        if (versionResult.isFailure) return versionResult
+
+        // Fetch features separately; degrade gracefully to empty map on failure
+        val featuresResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_PUMP_FEATURES_V1_REQ,
+        ) { cargo ->
+            StatusResponseParser.parsePumpFeaturesResponse(cargo)
+        }
+        val features = featuresResult.getOrDefault(emptyMap())
+
+        return Result.success(versionResult.getOrThrow().copy(pumpFeatures = features))
     }
 
     override fun observeConnectionState(): Flow<ConnectionState> =

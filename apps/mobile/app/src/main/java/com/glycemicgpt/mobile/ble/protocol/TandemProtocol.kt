@@ -94,6 +94,8 @@ object TandemProtocol {
     const val OPCODE_CURRENT_BATTERY_V2_RESP = 145
     const val OPCODE_LAST_BOLUS_STATUS_REQ = 48     // LastBolusStatusRequest (17-byte resp)
     const val OPCODE_LAST_BOLUS_STATUS_RESP = 49    // LastBolusStatusResponse
+    const val OPCODE_PUMP_FEATURES_V1_REQ = 78        // PumpFeaturesV1Request (8-byte bitmask resp)
+    const val OPCODE_PUMP_FEATURES_V1_RESP = 79
     const val OPCODE_PUMP_SETTINGS_REQ = 82          // PumpSettingsRequest (was 90 -- wrong)
     const val OPCODE_PUMP_SETTINGS_RESP = 83
     // Note: value 34/35 overlap with JPAKE_1B on AUTHORIZATION characteristic.
@@ -173,6 +175,8 @@ object TandemProtocol {
         OPCODE_CURRENT_BATTERY_V2_RESP -> "BatteryV2_RESP"
         OPCODE_LAST_BOLUS_STATUS_REQ -> "LastBolus_REQ"
         OPCODE_LAST_BOLUS_STATUS_RESP -> "LastBolus_RESP"
+        OPCODE_PUMP_FEATURES_V1_REQ -> "PumpFeaturesV1_REQ"
+        OPCODE_PUMP_FEATURES_V1_RESP -> "PumpFeaturesV1_RESP"
         OPCODE_PUMP_SETTINGS_REQ -> "PumpSettings_REQ"
         OPCODE_PUMP_SETTINGS_RESP -> "PumpSettings_RESP"
         OPCODE_CGM_EGV_REQ -> "CGM_EGV_REQ"
