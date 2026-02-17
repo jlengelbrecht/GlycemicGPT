@@ -88,6 +88,10 @@ class BleConnectionManager @Inject constructor(
     // If this happens repeatedly, the pump is not responding (likely needs re-pairing).
     @Volatile
     private var zeroResponseConnectionCount = 0
+    // Tracks consecutive INSUFFICIENT_ENCRYPTION disconnects during active sessions.
+    // After MAX_ENCRYPTION_FAILURES, the bond is considered genuinely stale.
+    @Volatile
+    private var encryptionFailureCount = 0
     @Volatile
     private var receivedAnyNotification = false
 
@@ -144,6 +148,7 @@ class BleConnectionManager @Inject constructor(
         autoReconnect = true
         reconnectAttempt = 0
         rapidDisconnectCount = 0
+        encryptionFailureCount = 0
         receivedAnyNotification = false
         pendingPairingCode = pairingCode
         authenticator.reset()
@@ -484,13 +489,15 @@ class BleConnectionManager @Inject constructor(
                         return
                     }
                     // Insufficient encryption handling depends on whether we had
-                    // an active session. During an active connection (wasConnected),
-                    // status 8 often means the phone woke from deep sleep and the
-                    // BLE link needs to renegotiate encryption -- the bond is still
-                    // valid, so just allow auto-reconnect. Only remove the bond if
-                    // we hadn't reached CONNECTED, which indicates genuinely stale keys.
+                    // a fully established session. During CONNECTED state, status 8
+                    // often means the phone woke from deep sleep and the BLE link
+                    // needs to renegotiate encryption -- the bond is still valid,
+                    // so allow auto-reconnect. Remove the bond if we hadn't reached
+                    // CONNECTED (genuinely stale keys) or if repeated encryption
+                    // failures indicate the bond is not recoverable.
                     if (status == GATT_INSUFFICIENT_ENCRYPTION) {
-                        if (!wasConnected) {
+                        val wasFullyConnected = _connectionState.value == ConnectionState.CONNECTED
+                        if (!wasFullyConnected) {
                             Timber.e("Pump reports insufficient encryption before connected -- bond keys stale, removing bond for re-pairing")
                             val addr = credentialStore.getPairedAddress()
                             if (addr != null) removeBond(addr)
@@ -500,7 +507,21 @@ class BleConnectionManager @Inject constructor(
                             _connectionState.value = ConnectionState.AUTH_FAILED
                             return
                         }
-                        Timber.w("Insufficient encryption during active session -- reconnecting (bond preserved)")
+                        encryptionFailureCount++
+                        if (encryptionFailureCount >= MAX_ENCRYPTION_FAILURES) {
+                            Timber.e("Encryption failed %d consecutive times during active sessions -- bond likely stale, removing for re-pairing",
+                                encryptionFailureCount)
+                            val addr = credentialStore.getPairedAddress()
+                            if (addr != null) removeBond(addr)
+                            autoReconnect = false
+                            authTimeoutJob?.cancel()
+                            reconnectJob?.cancel()
+                            _connectionState.value = ConnectionState.AUTH_FAILED
+                            return
+                        }
+                        rapidDisconnectCount = 0
+                        Timber.d("Insufficient encryption during active session (%d/%d) -- reconnecting (bond preserved)",
+                            encryptionFailureCount, MAX_ENCRYPTION_FAILURES)
                         // Fall through to normal disconnect/reconnect path
                     }
 
@@ -755,6 +776,7 @@ class BleConnectionManager @Inject constructor(
         authTimeoutJob = null
         reconnectAttempt = 0
         rapidDisconnectCount = 0
+        encryptionFailureCount = 0
         // Save credentials on first successful pairing
         val address = synchronized(gattLock) { gatt?.device?.address }
         val code = pendingPairingCode
@@ -957,6 +979,10 @@ class BleConnectionManager @Inject constructor(
 
         /** Max connections with zero pump responses before giving up. */
         const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
+
+        /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects during active sessions
+         *  before treating the bond as genuinely stale and removing it. */
+        const val MAX_ENCRYPTION_FAILURES = 3
 
         // Named GATT status codes used in bond-loss detection
         private const val GATT_INSUFFICIENT_AUTHENTICATION = 0x05

@@ -276,8 +276,8 @@ class PumpPollingOrchestrator @Inject constructor(
         const val MEDIUM_LOOP_INITIAL_DELAY_MS = 60_000L  // 60 seconds
 
         /** Wait before starting the slow loop (battery, reservoir, history).
-         *  These are lower priority and can wait until the connection is
-         *  well-established. */
+         *  Gives the fast loop a couple of cycles to stabilize BLE before
+         *  introducing additional lightweight status reads. */
         const val SLOW_LOOP_INITIAL_DELAY_MS = 30_000L    // 30 seconds
 
         // When phone battery is low, slow everything down by this factor
