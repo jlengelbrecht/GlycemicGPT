@@ -353,53 +353,41 @@ object StatusResponseParser {
     }
 
     /**
-     * Parse PumpGlobals response (opcode 87).
+     * Parse PumpVersionResponse (opcode 85).
      *
-     * Cargo layout (packed, little-endian):
-     *   bytes 0-7: serial number (Int64 LE)
-     *   bytes 8-15: model number (Int64 LE)
-     *   bytes 16-23: part number (Int64 LE)
-     *   bytes 24-27: pump_rev string length, then string bytes
-     *   followed by: arm_sw_ver (Int64), msp_sw_ver (Int64),
-     *   config_a_bits (Int64), config_b_bits (Int64),
-     *   pcba_sn (Int64), pcba_rev string (length-prefixed),
-     *   pump_features bitmap (1 byte)
+     * Cargo layout (48 bytes, all little-endian unsigned):
+     *   bytes  0- 3: armSwVer (uint32 LE)
+     *   bytes  4- 7: mspSwVer (uint32 LE)
+     *   bytes  8-11: configABits (uint32 LE)
+     *   bytes 12-15: configBBits (uint32 LE)
+     *   bytes 16-19: serialNum (uint32 LE)
+     *   bytes 20-23: partNum (uint32 LE)
+     *   bytes 24-31: pumpRev (fixed 8-char string, null-padded)
+     *   bytes 32-35: pcbaSN (uint32 LE)
+     *   bytes 36-43: pcbaRev (fixed 8-char string, null-padded)
+     *   bytes 44-47: modelNum (uint32 LE)
+     *
+     * Verified against pumpX2 PumpVersionResponse.java (opCode=85, size=48).
+     * Returns PumpHardwareInfo with empty pumpFeatures (features come from
+     * PumpFeaturesV1Response via a separate request).
      */
-    fun parsePumpGlobalsResponse(cargo: ByteArray): PumpHardwareInfo? {
-        if (cargo.size < 24) return null
+    fun parsePumpVersionResponse(cargo: ByteArray): PumpHardwareInfo? {
+        if (cargo.size < 48) return null
         try {
             val buf = ByteBuffer.wrap(cargo).order(ByteOrder.LITTLE_ENDIAN)
-            val serialNumber = buf.long
-            val modelNumber = buf.long
-            val partNumber = buf.long
-
-            var offset = 24
-            val (pumpRev, pumpRevLen) = readLengthPrefixedString(cargo, offset) ?: return null
-            offset += 4 + pumpRevLen
-
-            if (offset + 40 > cargo.size) return null
-            val buf2 = ByteBuffer.wrap(cargo, offset, 40).order(ByteOrder.LITTLE_ENDIAN)
-            val armSwVer = buf2.long
-            val mspSwVer = buf2.long
-            val configABits = buf2.long
-            val configBBits = buf2.long
-            val pcbaSn = buf2.long
-            offset += 40
-
-            val (pcbaRev, pcbaRevLen) = readLengthPrefixedString(cargo, offset) ?: ("A" to 0)
-            offset += 4 + pcbaRevLen
-
-            // Parse pump features bitmap if present
-            val featureNames = listOf("dexcomG5", "basalIQ", "dexcomG6", "controlIQ", "dexcomG7", "abbottFsl2")
-            val features = mutableMapOf<String, Boolean>()
-            if (offset < cargo.size) {
-                val bitmap = cargo[offset].toInt() and 0xFF
-                featureNames.forEachIndexed { index, name ->
-                    features[name] = (bitmap and (1 shl index)) != 0
-                }
-            } else {
-                featureNames.forEach { features[it] = false }
-            }
+            val armSwVer = buf.int.toLong() and 0xFFFFFFFFL
+            val mspSwVer = buf.int.toLong() and 0xFFFFFFFFL
+            val configABits = buf.int.toLong() and 0xFFFFFFFFL
+            val configBBits = buf.int.toLong() and 0xFFFFFFFFL
+            val serialNumber = buf.int.toLong() and 0xFFFFFFFFL
+            val partNumber = buf.int.toLong() and 0xFFFFFFFFL
+            val pumpRev = readFixedString(cargo, 24, 8)
+            // skip buf position past pumpRev bytes
+            buf.position(32)
+            val pcbaSn = buf.int.toLong() and 0xFFFFFFFFL
+            val pcbaRev = readFixedString(cargo, 36, 8)
+            buf.position(44)
+            val modelNumber = buf.int.toLong() and 0xFFFFFFFFL
 
             return PumpHardwareInfo(
                 serialNumber = serialNumber,
@@ -412,11 +400,43 @@ object StatusResponseParser {
                 configBBits = configBBits,
                 pcbaSn = pcbaSn,
                 pcbaRev = pcbaRev,
-                pumpFeatures = features,
+                pumpFeatures = emptyMap(),
             )
         } catch (_: Exception) {
             return null
         }
+    }
+
+    /**
+     * Parse PumpFeaturesV1Response (opcode 79).
+     *
+     * Cargo layout (8 bytes):
+     *   bytes 0-7: feature bitmask (uint64 LE)
+     *
+     * Bit positions (from pumpX2 PumpFeatureType enum):
+     *   bit  0: DEXCOM_G5_SUPPORTED
+     *   bit  1: DEXCOM_G6_SUPPORTED
+     *   bit  2: BASAL_IQ_SUPPORTED
+     *   bit 10: CONTROL_IQ_SUPPORTED
+     *
+     * Returns a map of feature name to enabled status.
+     */
+    fun parsePumpFeaturesResponse(cargo: ByteArray): Map<String, Boolean> {
+        if (cargo.size < 8) return emptyMap()
+        val buf = ByteBuffer.wrap(cargo).order(ByteOrder.LITTLE_ENDIAN)
+        val bitmask = buf.long
+        return mapOf(
+            "dexcomG5" to ((bitmask and (1L shl 0)) != 0L),
+            "dexcomG6" to ((bitmask and (1L shl 1)) != 0L),
+            "basalIQ" to ((bitmask and (1L shl 2)) != 0L),
+            "controlIQ" to ((bitmask and (1L shl 10)) != 0L),
+        )
+    }
+
+    /** Read a fixed-width string field, trimming trailing nulls and whitespace. */
+    private fun readFixedString(data: ByteArray, offset: Int, length: Int): String {
+        if (offset + length > data.size) return ""
+        return String(data, offset, length, Charsets.UTF_8).trimEnd('\u0000', ' ')
     }
 
     /** Returns Pair(string, byteLength) or null on malformed data. */
