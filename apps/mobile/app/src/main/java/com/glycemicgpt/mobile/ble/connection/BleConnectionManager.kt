@@ -73,7 +73,9 @@ class BleConnectionManager @Inject constructor(
     private val txId = AtomicInteger(0)
     private val assemblers = ConcurrentHashMap<UUID, PacketAssembler>()
 
+    @Volatile
     private var reconnectAttempt = 0
+    @Volatile
     private var reconnectJob: Job? = null
     @Volatile
     private var autoReconnect = true
@@ -94,6 +96,22 @@ class BleConnectionManager @Inject constructor(
     private var encryptionFailureCount = 0
     @Volatile
     private var receivedAnyNotification = false
+
+    // Tracks whether we have ever reached CONNECTED+authenticated in this
+    // service session. Distinguishes idle-timeout disconnects (status 19
+    // after a prior successful session) from genuine bond-loss disconnects
+    // (status 19 when the pump has never accepted our connection).
+    // Reset only on user-initiated disconnect() or unpair(), NOT on connect()
+    // so it survives reconnect cycles.
+    @Volatile
+    private var hadSuccessfulSession = false
+
+    // Tracks consecutive reconnect failures (auth timeout, status 19, etc.)
+    // even when hadSuccessfulSession is true. If the pump genuinely loses its
+    // bond mid-session (factory reset, battery pull), we need a fallback to
+    // detect this and stop futile reconnection attempts.
+    @Volatile
+    private var consecutiveReconnectFailures = 0
 
     // GATT operation queue -- only one GATT write at a time
     private val operationQueue = ConcurrentLinkedQueue<GattOperation>()
@@ -128,9 +146,14 @@ class BleConnectionManager @Inject constructor(
         ) : GattOperation()
     }
 
-    /** Connect to the pump at [address]. */
+    /**
+     * Connect to the pump at [address].
+     *
+     * @param resetCounters If true (default), resets reconnect attempt and error counters.
+     *   Set to false when called from [scheduleReconnect] to preserve exponential backoff.
+     */
     @SuppressLint("MissingPermission")
-    fun connect(address: String, pairingCode: String? = null) {
+    fun connect(address: String, pairingCode: String? = null, resetCounters: Boolean = true) {
         val adapter = bluetoothManager?.adapter ?: run {
             Timber.e("BluetoothAdapter not available")
             return
@@ -144,11 +167,17 @@ class BleConnectionManager @Inject constructor(
             BluetoothDevice.BOND_BONDED -> "BONDED"
             else -> "UNKNOWN($bondState)"
         })
+        // Cancel any pending scheduled reconnect to avoid racing with this connect
+        reconnectJob?.cancel()
+        reconnectJob = null
         _connectionState.value = ConnectionState.CONNECTING
         autoReconnect = true
-        reconnectAttempt = 0
-        rapidDisconnectCount = 0
-        encryptionFailureCount = 0
+        if (resetCounters) {
+            reconnectAttempt = 0
+            rapidDisconnectCount = 0
+            encryptionFailureCount = 0
+            zeroResponseConnectionCount = 0
+        }
         receivedAnyNotification = false
         pendingPairingCode = pairingCode
         authenticator.reset()
@@ -176,6 +205,7 @@ class BleConnectionManager @Inject constructor(
     @SuppressLint("MissingPermission")
     fun disconnect() {
         autoReconnect = false
+        hadSuccessfulSession = false
         reconnectJob?.cancel()
         reconnectJob = null
         authTimeoutJob?.cancel()
@@ -421,8 +451,13 @@ class BleConnectionManager @Inject constructor(
             delay(delayMs)
             if (autoReconnect && _connectionState.value == ConnectionState.RECONNECTING) {
                 // Pass null for pairingCode -- reconnects use JPAKE confirmation mode
-                // with the saved derived secret (or bootstrap if no secret saved)
-                connect(address, pairingCode = null)
+                // with the saved derived secret (or bootstrap if no secret saved).
+                // resetCounters=false preserves exponential backoff across attempts.
+                connect(address, pairingCode = null, resetCounters = false)
+            } else if (_connectionState.value == ConnectionState.RECONNECTING) {
+                // autoReconnect was toggled off while we were waiting. Clean up
+                // the stale RECONNECTING state so the UI doesn't show it forever.
+                _connectionState.value = ConnectionState.DISCONNECTED
             }
         }
     }
@@ -463,15 +498,33 @@ class BleConnectionManager @Inject constructor(
                     val wasConnected = _connectionState.value == ConnectionState.CONNECTED ||
                         _connectionState.value == ConnectionState.AUTHENTICATING
                     if (!wasConnected && status == GATT_CONN_TERMINATE_PEER_USER) {
-                        rapidDisconnectCount++
-                        if (rapidDisconnectCount >= MAX_RAPID_DISCONNECTS) {
-                            Timber.e("Pump rejected %d consecutive connections -- BLE bond likely lost, re-pairing required",
-                                rapidDisconnectCount)
-                            autoReconnect = false
-                            authTimeoutJob?.cancel()
-                            reconnectJob?.cancel()
-                            _connectionState.value = ConnectionState.AUTH_FAILED
-                            return
+                        if (hadSuccessfulSession) {
+                            // Idle-timeout during reconnection, not bond loss.
+                            // The pump previously accepted our connection this session,
+                            // so status 19 means it dropped idle -- not bond rejection.
+                            consecutiveReconnectFailures++
+                            Timber.d("Status 19 during reconnect after prior successful session (%d/%d) -- treating as idle-timeout",
+                                consecutiveReconnectFailures, MAX_RECONNECT_FAILURES)
+                            if (consecutiveReconnectFailures >= MAX_RECONNECT_FAILURES) {
+                                Timber.e("Pump unreachable after %d consecutive reconnect failures -- possible bond loss mid-session",
+                                    consecutiveReconnectFailures)
+                                autoReconnect = false
+                                authTimeoutJob?.cancel()
+                                reconnectJob?.cancel()
+                                _connectionState.value = ConnectionState.AUTH_FAILED
+                                return
+                            }
+                        } else {
+                            rapidDisconnectCount++
+                            if (rapidDisconnectCount >= MAX_RAPID_DISCONNECTS) {
+                                Timber.e("Pump rejected %d consecutive connections -- BLE bond likely lost, re-pairing required",
+                                    rapidDisconnectCount)
+                                autoReconnect = false
+                                authTimeoutJob?.cancel()
+                                reconnectJob?.cancel()
+                                _connectionState.value = ConnectionState.AUTH_FAILED
+                                return
+                            }
                         }
                     }
                     // Insufficient authentication before CONNECTED = bond definitely lost.
@@ -787,6 +840,8 @@ class BleConnectionManager @Inject constructor(
         reconnectAttempt = 0
         rapidDisconnectCount = 0
         encryptionFailureCount = 0
+        consecutiveReconnectFailures = 0
+        hadSuccessfulSession = true
         // Save credentials on first successful pairing
         val address = synchronized(gattLock) { gatt?.device?.address }
         val code = pendingPairingCode
@@ -993,6 +1048,12 @@ class BleConnectionManager @Inject constructor(
         /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects during active sessions
          *  before treating the bond as genuinely stale and removing it. */
         const val MAX_ENCRYPTION_FAILURES = 3
+
+        /** Max consecutive reconnect failures (even with hadSuccessfulSession) before
+         *  declaring the pump unreachable. Covers mid-session bond loss scenarios
+         *  like pump factory reset or battery pull. With 32s max backoff, 10 attempts
+         *  takes ~5 minutes -- enough to survive transient radio issues. */
+        const val MAX_RECONNECT_FAILURES = 10
 
         // Named GATT status codes used in bond-loss detection
         private const val GATT_INSUFFICIENT_AUTHENTICATION = 0x05
