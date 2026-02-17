@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
+import java.net.SocketTimeoutException
 import java.util.UUID
 import javax.inject.Inject
 
@@ -136,10 +137,11 @@ class AiChatViewModel @Inject constructor(
 
     private fun userFriendlyError(e: Throwable): String {
         return when {
+            e is SocketTimeoutException -> "AI response took too long. Please try again"
             e is IOException -> "Check your internet connection and try again"
             e.message?.contains("401") == true -> "Session expired. Please sign in again"
-            e.message?.contains("5") == true &&
-                e.message?.contains("HTTP") == true -> "Server error. Please try again later"
+            e.message?.let { Regex("HTTP 5\\d{2}").containsMatchIn(it) } == true ->
+                "Server error. Please try again later"
             else -> e.message ?: "Failed to get response"
         }
     }

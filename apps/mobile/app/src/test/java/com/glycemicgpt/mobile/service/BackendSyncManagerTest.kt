@@ -28,6 +28,7 @@ class BackendSyncManagerTest {
     private val authTokenStore = mockk<AuthTokenStore>()
     private val appSettingsStore = mockk<AppSettingsStore> {
         every { backendSyncEnabled } returns true
+        every { dataRetentionDays } returns 7
     }
     private val moshi = Moshi.Builder().add(InstantAdapter()).build()
 
