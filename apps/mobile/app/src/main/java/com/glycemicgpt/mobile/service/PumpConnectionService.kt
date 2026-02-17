@@ -53,6 +53,8 @@ class PumpConnectionService : Service() {
         private const val WAKE_LOCK_TAG = "GlycemicGPT:PumpBleConnection"
         private const val WAKE_LOCK_TIMEOUT_MS = 20L * 60 * 1000 // 20-minute safety timeout
         private const val WAKE_LOCK_RENEW_MS = 15L * 60 * 1000 // renew every 15 minutes
+        // Shorter wake lock for reconnection: covers max 32s backoff + GATT + JPAKE auth
+        private const val RECONNECT_WAKE_LOCK_TIMEOUT_MS = 2L * 60 * 1000 // 2 minutes
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, PumpConnectionService::class.java))
@@ -103,12 +105,21 @@ class PumpConnectionService : Service() {
                     }
                 } else {
                     synchronized(wakeLockSync) {
-                        if (wakeLock?.isHeld != true &&
-                            connectionManager.connectionState.value == ConnectionState.CONNECTED
-                        ) {
-                            // Re-acquire if battery recovered and pump is still connected
-                            acquireWakeLockLocked()
-                            Timber.d("Phone battery recovered (%d%%), wake lock re-acquired", pct)
+                        if (wakeLock?.isHeld != true) {
+                            val currentState = connectionManager.connectionState.value
+                            when (currentState) {
+                                ConnectionState.CONNECTED -> {
+                                    acquireWakeLockLocked()
+                                    Timber.d("Phone battery recovered (%d%%), wake lock re-acquired", pct)
+                                }
+                                ConnectionState.RECONNECTING,
+                                ConnectionState.CONNECTING,
+                                ConnectionState.AUTHENTICATING -> {
+                                    acquireReconnectWakeLockLocked()
+                                    Timber.d("Phone battery recovered (%d%%), reconnect wake lock re-acquired", pct)
+                                }
+                                else -> { /* No wake lock needed */ }
+                            }
                         }
                     }
                 }
@@ -143,16 +154,27 @@ class PumpConnectionService : Service() {
             backendSyncManager.start(serviceScope)
             connectionManager.autoReconnectIfPaired()
 
-            // Watch connection state to acquire/release wake lock
+            // Watch connection state to acquire/release wake lock.
+            // Hold wake lock during reconnection to keep CPU awake for the
+            // backoff delay coroutine and GATT/JPAKE handshake.
             connectionWatcherJob = serviceScope.launch {
                 connectionManager.connectionState.collect { state ->
                     synchronized(wakeLockSync) {
-                        if (state == ConnectionState.CONNECTED) {
-                            acquireWakeLockLocked()
-                            startWakeLockRenewalLocked()
-                        } else {
-                            stopWakeLockRenewalLocked()
-                            releaseWakeLockLocked()
+                        when (state) {
+                            ConnectionState.CONNECTED -> {
+                                acquireWakeLockLocked()
+                                startWakeLockRenewalLocked()
+                            }
+                            ConnectionState.RECONNECTING,
+                            ConnectionState.CONNECTING,
+                            ConnectionState.AUTHENTICATING -> {
+                                stopWakeLockRenewalLocked()
+                                acquireReconnectWakeLockLocked()
+                            }
+                            else -> {
+                                stopWakeLockRenewalLocked()
+                                releaseWakeLockLocked()
+                            }
                         }
                     }
                 }
@@ -210,6 +232,26 @@ class PumpConnectionService : Service() {
             }
         }
         Timber.d("Wake lock acquired for BLE connection")
+    }
+
+    /**
+     * Short-lived wake lock for reconnection attempts. Uses a 2-minute timeout:
+     * long enough for the max 32-second backoff plus GATT connection + JPAKE auth
+     * handshake, but short enough to limit battery drain if reconnection fails.
+     * Must be called under [wakeLockSync].
+     */
+    private fun acquireReconnectWakeLockLocked() {
+        val existing = wakeLock
+        if (existing != null) {
+            existing.acquire(RECONNECT_WAKE_LOCK_TIMEOUT_MS)
+        } else {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                setReferenceCounted(false)
+                acquire(RECONNECT_WAKE_LOCK_TIMEOUT_MS)
+            }
+        }
+        Timber.d("Reconnect wake lock acquired (timeout=%d ms)", RECONNECT_WAKE_LOCK_TIMEOUT_MS)
     }
 
     /** Must be called under [wakeLockSync]. */
