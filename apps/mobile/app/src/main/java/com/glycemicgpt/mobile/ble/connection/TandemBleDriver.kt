@@ -132,15 +132,26 @@ class TandemBleDriver @Inject constructor(
         return Result.success(egv.copy(trendArrow = trend))
     }
 
-    override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> = runStatusRequest(
-        opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
-    ) { cargo ->
-        // HistoryLogStatusResponse returns 8 bytes (firstSeq + lastSeq).
-        // The record parser expects 18-byte records, so it safely returns
-        // emptyList() for the status response. Full log fetching via
-        // OPCODE_HISTORY_LOG_REQ (60) with 5-byte cargo will be added
-        // when we implement incremental log download.
-        StatusResponseParser.parseHistoryLogResponse(cargo, sinceSequence)
+    override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> {
+        // Get the available sequence range from the pump (opcode 58).
+        val rangeResult = runStatusRequest(
+            opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
+        ) { cargo ->
+            StatusResponseParser.parseHistoryLogStatusResponse(cargo)
+                ?: throw IllegalStateException("Failed to parse history log status (need 12 bytes, got ${cargo.size})")
+        }
+        if (rangeResult.isFailure) return Result.failure(rangeResult.exceptionOrNull()!!)
+
+        val range = rangeResult.getOrThrow()
+        Timber.d("History log range: firstSeq=%d lastSeq=%d sinceSequence=%d",
+            range.firstSeq, range.lastSeq, sinceSequence)
+
+        // TODO: Fetching individual records requires opcode 60, which sends a
+        // 2-byte ACK on CURRENT_STATUS_UUID (FFF6) and streams actual records
+        // on HISTORY_LOG_UUID (FFF8, opcode 0x81). The FFF8 streaming protocol
+        // (flow control, record framing, ACKs) needs further reverse-engineering.
+        // For now we report the range for diagnostics and return empty.
+        return Result.success(emptyList())
     }
 
     override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> {
@@ -173,10 +184,12 @@ class TandemBleDriver @Inject constructor(
      */
     private suspend fun <T> runStatusRequest(
         opcode: Int,
+        cargo: ByteArray = ByteArray(0),
+        timeoutMs: Long = TandemProtocol.STATUS_READ_TIMEOUT_MS,
         parser: (ByteArray) -> T,
     ): Result<T> {
         return try {
-            val responseCargo = connectionManager.sendStatusRequest(opcode)
+            val responseCargo = connectionManager.sendStatusRequest(opcode, cargo, timeoutMs)
             val result = parser(responseCargo)
             val parsedStr = result.toString()
             Timber.d("BLE_RAW PARSED opcode=0x%02x result=%s", opcode, parsedStr)

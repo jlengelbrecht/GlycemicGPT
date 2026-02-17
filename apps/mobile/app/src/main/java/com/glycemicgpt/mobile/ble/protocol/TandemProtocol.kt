@@ -108,6 +108,9 @@ object TandemProtocol {
     /** Default timeout for a status read request (milliseconds). */
     const val STATUS_READ_TIMEOUT_MS = 5000L
 
+    /** Timeout for history log fetch requests (longer due to multi-packet responses). */
+    const val HISTORY_LOG_TIMEOUT_MS = 10_000L
+
     // -- V1 Authentication opcodes (firmware < v7.7) -------------------------
 
     const val OPCODE_CENTRAL_CHALLENGE_REQ = 16
