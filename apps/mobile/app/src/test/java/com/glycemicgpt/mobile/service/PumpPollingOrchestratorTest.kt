@@ -77,10 +77,12 @@ class PumpPollingOrchestratorTest {
 
     /**
      * Time to advance past ALL loop initial delays + staggers.
-     * Slow loop has the largest delay (120s) and 4 reads with stagger.
+     * Uses the largest initial delay across all loops as the base.
      */
-    private val ALL_SETTLE_MS = PumpPollingOrchestrator.SLOW_LOOP_INITIAL_DELAY_MS +
-        PumpPollingOrchestrator.REQUEST_STAGGER_MS * 4 + 100
+    private val ALL_SETTLE_MS = maxOf(
+        PumpPollingOrchestrator.MEDIUM_LOOP_INITIAL_DELAY_MS,
+        PumpPollingOrchestrator.SLOW_LOOP_INITIAL_DELAY_MS,
+    ) + PumpPollingOrchestrator.REQUEST_STAGGER_MS * 4 + 100
 
     /** Alias for tests that only need fast loop data. */
     private val SETTLE_TIME_MS = FAST_SETTLE_MS
@@ -121,7 +123,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        // Advance past ALL loop initial delays (slow loop takes 120s)
+        // Advance past ALL loop initial delays (medium loop takes 60s)
         advanceTimeBy(ALL_SETTLE_MS)
 
         coVerify(atLeast = 1) { pumpDriver.getIoB() }
@@ -138,7 +140,7 @@ class PumpPollingOrchestratorTest {
         orchestrator.start(this)
 
         connectionStateFlow.value = ConnectionState.CONNECTED
-        // Advance past ALL loop initial delays (slow loop takes 120s)
+        // Advance past ALL loop initial delays (medium loop takes 60s)
         advanceTimeBy(ALL_SETTLE_MS)
 
         coVerify(atLeast = 1) { repository.saveIoB(any()) }

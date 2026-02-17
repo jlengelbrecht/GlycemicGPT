@@ -24,7 +24,7 @@ import javax.inject.Singleton
  * Poll intervals:
  * - IoB + basal rate + CGM: every 15 seconds (keep-alive; pump drops idle connections at ~30s)
  * - Bolus history: every 5 minutes (AC2)
- * - Battery + reservoir: every 15 minutes (AC3)
+ * - Battery + reservoir: every 5 minutes (AC3)
  *
  * Polling pauses when BLE connection is lost and resumes on reconnect (AC7).
  * Reduces frequency when phone battery is low (AC8).
@@ -154,10 +154,11 @@ class PumpPollingOrchestrator @Inject constructor(
         }
     }
 
-    /** Slow loop: battery + reservoir + raw history logs at least every ~15 min. */
+    /** Slow loop: battery + reservoir + raw history logs at least every ~5 min. */
     private suspend fun pollSlowLoop() {
-        // Wait even longer before slow-loop requests. These are lower priority
-        // and we want the connection well-established first.
+        // Wait for the fast loop to run a couple of cycles before introducing
+        // battery/reservoir/history reads. Starts before the medium loop (60s)
+        // since these are lightweight status reads the pump handles readily.
         delay(SLOW_LOOP_INITIAL_DELAY_MS)
         while (true) {
             pollBattery()
@@ -258,7 +259,7 @@ class PumpPollingOrchestrator @Inject constructor(
     companion object {
         const val INTERVAL_FAST_MS = 15_000L       // IoB + basal + CGM (keep-alive: pump drops idle connections at ~30s)
         const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
-        const val INTERVAL_SLOW_MS = 900_000L       // battery + reservoir (15 min)
+        const val INTERVAL_SLOW_MS = 300_000L       // battery + reservoir (5 min)
 
         /** Delay before first poll after connection to let the pump settle.
          *  Keep short to avoid idle-timeout disconnects (pump drops idle at ~3-5s). */
@@ -277,7 +278,7 @@ class PumpPollingOrchestrator @Inject constructor(
         /** Wait before starting the slow loop (battery, reservoir, history).
          *  These are lower priority and can wait until the connection is
          *  well-established. */
-        const val SLOW_LOOP_INITIAL_DELAY_MS = 120_000L   // 2 minutes
+        const val SLOW_LOOP_INITIAL_DELAY_MS = 30_000L    // 30 seconds
 
         // When phone battery is low, slow everything down by this factor
         const val LOW_BATTERY_MULTIPLIER = 3
