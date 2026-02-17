@@ -1,8 +1,9 @@
 """Story 16.6: Tandem cloud upload service.
 
-Handles authenticating with Tandem's Okta SSO, building the upload payload
-(matching the official app's JSON schema), HMAC-SHA1 signing, and POSTing
-data to the Tandem cloud so the endocrinologist's portal stays updated.
+Handles authenticating with Tandem via tconnectsync's OIDC PKCE flow,
+building the upload payload (matching the official app's JSON schema),
+HMAC-SHA1 signing, and POSTing data to the Tandem cloud so the
+endocrinologist's portal stays updated.
 
 Protocol reference: _bmad-output/planning-artifacts/tandem-reverse-engineering.md
 """
@@ -32,19 +33,11 @@ from src.models.tandem_upload_state import TandemUploadState
 logger = get_logger(__name__)
 
 
-def _get_hmac_key() -> bytes:
-    """Get the HMAC-SHA1 signing key from config.
-
-    The key is used as raw UTF-8 bytes (NOT base64-decoded).
-    Must be provided via TANDEM_UPLOAD_HMAC_KEY env var.
-    """
-    key = settings.tandem_upload_hmac_key
-    if not key:
-        raise RuntimeError(
-            "TANDEM_UPLOAD_HMAC_KEY not configured. "
-            "Set the env var to enable Tandem cloud uploads."
-        )
-    return key.encode("utf-8")
+# HMAC-SHA1 signing key for the TDCToken header.
+# This is a public protocol constant embedded in the official t:connect
+# mobile app binary (com.tandemdiabetes.tconnect). It is NOT a user secret.
+# The key is used as raw UTF-8 bytes (NOT base64-decoded).
+_HMAC_KEY = b"1hvigLmZyCUBMQxn37SO7Iwn9EoTB1rBUBQg1CFyxcU="
 
 
 # Upload limits
@@ -62,7 +55,7 @@ def sign_tdc_token(json_body_bytes: bytes, hmac_key: bytes | None = None) -> str
     This produces the value for the TDCToken header:
         TDCToken: token {return_value}
     """
-    key = hmac_key or _get_hmac_key()
+    key = hmac_key or _HMAC_KEY
     signature = hmac.new(key, json_body_bytes, hashlib.sha1).digest()
     return base64.b64encode(signature).decode("ascii")
 
@@ -95,44 +88,28 @@ async def _authenticate_tandem(
     db: AsyncSession,
     user_id: uuid.UUID,
     state: TandemUploadState,
-) -> str:
+) -> dict:
     """Get a valid Tandem access token for the user.
 
     Strategy:
     1. If cached token in upload_state is not expired, use it
     2. If expired but refresh_token exists, try refresh
     3. Otherwise, authenticate fresh using stored Tandem credentials
-       via tconnectsync's TandemSourceApi
+       via tconnectsync's TandemSourceApi (OIDC PKCE flow)
 
-    Returns the access token string.
+    Returns a dict with 'access_token', 'pumper_id', and 'region'.
+    The pumper_id is persisted in TandemUploadState so it survives
+    across cached-token and refresh-token paths.
+
+    Note: tconnectsync does not expose refresh tokens, so the refresh path
+    (step 2) is currently unreachable. Kept for future compatibility.
     """
     now = datetime.now(UTC)
 
-    # 1. Check cached token
-    if (
-        state.tandem_access_token
-        and state.tandem_token_expires_at
-        and state.tandem_token_expires_at > now + timedelta(minutes=5)
-    ):
-        return decrypt_credential(state.tandem_access_token)
+    # Helper: pumper_id from state (cached from a previous fresh auth)
+    cached_pumper_id = state.tandem_pumper_id or ""
 
-    # 2. Try refresh token
-    if state.tandem_refresh_token:
-        try:
-            token_data = await _refresh_tandem_token(
-                decrypt_credential(state.tandem_refresh_token)
-            )
-            _cache_tokens(state, token_data)
-            await db.commit()
-            logger.info("Refreshed Tandem token", user_id=str(user_id))
-            return token_data["access_token"]
-        except Exception:
-            logger.warning(
-                "Tandem token refresh failed, will re-authenticate",
-                user_id=str(user_id),
-            )
-
-    # 3. Fresh authentication using stored credentials
+    # Look up region early so it's available for all code paths
     cred_result = await db.execute(
         select(IntegrationCredential).where(
             IntegrationCredential.user_id == user_id,
@@ -140,36 +117,90 @@ async def _authenticate_tandem(
         )
     )
     credential = cred_result.scalar_one_or_none()
+    region = getattr(credential, "region", "US") or "US" if credential else "US"
+
+    # 1. Check cached token
+    if (
+        state.tandem_access_token
+        and state.tandem_token_expires_at
+        and state.tandem_token_expires_at > now + timedelta(minutes=5)
+    ):
+        return {
+            "access_token": decrypt_credential(state.tandem_access_token),
+            "pumper_id": cached_pumper_id,
+            "region": region,
+        }
+
+    # 2. Try refresh token (currently unreachable -- see docstring)
+    if state.tandem_refresh_token:
+        try:
+            token_data = await _refresh_tandem_token(
+                decrypt_credential(state.tandem_refresh_token),
+                region=region,
+            )
+            _cache_tokens(state, token_data)
+            await db.commit()
+            logger.info("Refreshed Tandem token", user_id=str(user_id))
+            return {
+                "access_token": token_data["access_token"],
+                "pumper_id": cached_pumper_id,
+                "region": region,
+            }
+        except Exception:
+            logger.warning(
+                "Tandem token refresh failed, will re-authenticate",
+                user_id=str(user_id),
+            )
+
+    # 3. Fresh authentication using stored credentials
     if not credential:
         raise RuntimeError("Tandem integration not configured")
 
     username = decrypt_credential(credential.encrypted_username)
     password = decrypt_credential(credential.encrypted_password)
-    region = getattr(credential, "region", "US") or "US"
 
     token_data = await _authenticate_fresh(username, password, region)
     _cache_tokens(state, token_data)
+
+    # Persist pumper_id so it's available on cached-token paths
+    pumper_id = token_data.get("pumper_id", "")
+    if pumper_id:
+        state.tandem_pumper_id = pumper_id
+
     await db.commit()
-    logger.info("Authenticated with Tandem via ROPC", user_id=str(user_id))
-    return token_data["access_token"]
+    logger.info("Authenticated with Tandem via OIDC PKCE", user_id=str(user_id))
+    return {
+        "access_token": token_data["access_token"],
+        "pumper_id": pumper_id,
+        "region": region,
+    }
 
 
-async def _refresh_tandem_token(refresh_token: str) -> dict:
-    """Refresh the Tandem access token using the refresh_token grant."""
-    # Get the token endpoint from OpenID config
-    sso_base = settings.tandem_upload_sso_base
-    async with httpx.AsyncClient(timeout=15) as client:
-        oidc_resp = await client.get(
-            f"{sso_base}/oauth2/default/.well-known/openid-configuration"
+async def _refresh_tandem_token(refresh_token: str, region: str = "US") -> dict:
+    """Refresh the Tandem access token using the refresh_token grant.
+
+    NOTE: Currently unreachable. tconnectsync does not expose refresh tokens,
+    so _authenticate_fresh always returns refresh_token=None, and _cache_tokens
+    never sets state.tandem_refresh_token. Kept for future use.
+    """
+    # Region-specific endpoints matching tconnectsync's TandemSourceApi.
+    if region == "EU":
+        token_endpoint = (
+            "https://tdcservices.eu.tandemdiabetes.com/accounts/api/connect/token"
         )
-        oidc_resp.raise_for_status()
-        token_endpoint = oidc_resp.json()["token_endpoint"]
+        client_id = "1519e414-eeec-492e-8c5e-97bea4815a10"
+    else:
+        token_endpoint = (
+            "https://tdcservices.tandemdiabetes.com/accounts/api/connect/token"
+        )
+        client_id = "0oa27ho9tpZE9Arjy4h7"
 
+    async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             token_endpoint,
             data={
                 "grant_type": "refresh_token",
-                "client_id": settings.tandem_upload_client_id,
+                "client_id": client_id,
                 "refresh_token": refresh_token,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -181,8 +212,11 @@ async def _refresh_tandem_token(refresh_token: str) -> dict:
 async def _authenticate_fresh(username: str, password: str, region: str) -> dict:
     """Authenticate with Tandem using stored credentials.
 
-    Uses tconnectsync's TandemSourceApi which handles the ROPC flow.
-    We extract the access_token from the API instance.
+    Uses tconnectsync's TandemSourceApi which handles the OIDC PKCE flow
+    (login + authorization code exchange via tdcservices.tandemdiabetes.com).
+
+    Extracts accessToken (camelCase), accessTokenExpiresAt, and pumperId
+    from the API instance after successful login.
     """
     import asyncio
 
@@ -190,30 +224,39 @@ async def _authenticate_fresh(username: str, password: str, region: str) -> dict
 
     def _login():
         api = TandemSourceApi(email=username, password=password, region=region)
-        # Extract token from the api instance
-        # tconnectsync stores the access token internally
-        access_token = getattr(api, "_access_token", None)
-        if access_token is None:
-            # Try alternative attribute names
-            for attr in ("access_token", "token", "_token"):
-                access_token = getattr(api, attr, None)
-                if access_token:
-                    break
-        if access_token is None:
-            # Last resort: check the session headers
-            session = getattr(api, "session", None) or getattr(api, "_session", None)
-            if session:
-                auth_header = session.headers.get("Authorization", "")
-                if auth_header.startswith("Bearer "):
-                    access_token = auth_header[7:]
 
+        # tconnectsync stores the token as self.accessToken (camelCase).
+        # See: tconnectsync/api/tandemsource.py line 204
+        access_token = getattr(api, "accessToken", None)
         if not access_token:
-            raise RuntimeError("Could not extract Tandem access token from API")
+            raise RuntimeError(
+                "Could not extract Tandem access token from TandemSourceApi. "
+                "Expected attribute 'accessToken' not found."
+            )
+
+        # Compute real expires_in from accessTokenExpiresAt (arrow datetime)
+        expires_in = 3600
+        token_expiry = getattr(api, "accessTokenExpiresAt", None)
+        if token_expiry is not None:
+            try:
+                import arrow as arrow_lib
+
+                diff = (arrow_lib.get(token_expiry) - arrow_lib.get()).total_seconds()
+                if diff > 0:
+                    expires_in = int(diff)
+            except Exception:
+                logger.warning(
+                    "Failed to parse accessTokenExpiresAt, using default 3600s"
+                )
+
+        # Extract pumperId for deviceAssignmentId in upload payloads
+        pumper_id = getattr(api, "pumperId", None) or ""
 
         return {
             "access_token": access_token,
-            "expires_in": 3600,
-            "refresh_token": None,
+            "expires_in": expires_in,
+            "refresh_token": None,  # tconnectsync does not expose refresh tokens
+            "pumper_id": str(pumper_id),
         }
 
     return await asyncio.to_thread(_login)
@@ -382,7 +425,7 @@ async def upload_to_tandem(
 
     # Authenticate
     try:
-        access_token = await _authenticate_tandem(db, user_id, state)
+        auth_result = await _authenticate_tandem(db, user_id, state)
     except Exception as e:
         msg = f"Tandem authentication failed: {e!s}"
         state.last_upload_status = "error"
@@ -391,15 +434,9 @@ async def upload_to_tandem(
         logger.error("Tandem upload auth failed", user_id=str(user_id), error=str(e))
         return {"message": msg, "events_uploaded": 0, "status": "error"}
 
-    # Get Tandem region from credentials
-    cred_result = await db.execute(
-        select(IntegrationCredential).where(
-            IntegrationCredential.user_id == user_id,
-            IntegrationCredential.integration_type == IntegrationType.TANDEM,
-        )
-    )
-    credential = cred_result.scalar_one_or_none()
-    region = getattr(credential, "region", "US") or "US" if credential else "US"
+    access_token = auth_result["access_token"]
+    pumper_id = auth_result.get("pumper_id", "")
+    region = auth_result.get("region", "US")
 
     # Fetch endpoint config
     try:
@@ -453,7 +490,9 @@ async def upload_to_tandem(
         }
 
     # Build and upload payload
-    payload = build_upload_payload(pump_info, raw_events)
+    payload = build_upload_payload(
+        pump_info, raw_events, device_assignment_id=pumper_id
+    )
 
     try:
         await _post_upload(access_token, config, payload)

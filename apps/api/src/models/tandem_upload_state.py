@@ -87,6 +87,12 @@ class TandemUploadState(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Tandem pumperId from JWT claims (for deviceAssignmentId in uploads)
+    tandem_pumper_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     # Relationship to user
     user = relationship("User", back_populates="tandem_upload_state")
 
