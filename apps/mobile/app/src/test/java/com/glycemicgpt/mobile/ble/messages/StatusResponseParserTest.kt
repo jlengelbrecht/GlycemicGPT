@@ -554,6 +554,68 @@ class StatusResponseParserTest {
         assertNull(StatusResponseParser.parsePumpVersionResponse(ByteArray(0)))
     }
 
+    // -- HistoryLogStatusResponse tests (opcode 59, 8-byte cargo) ---------------
+
+    @Test
+    fun `parseHistoryLogStatusResponse with valid range`() {
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(100) // firstSeq
+        buf.putInt(500) // lastSeq
+        val result = StatusResponseParser.parseHistoryLogStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(100, result!!.firstSeq)
+        assertEquals(500, result.lastSeq)
+    }
+
+    @Test
+    fun `parseHistoryLogStatusResponse with zero range`() {
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(0)
+        buf.putInt(0)
+        val result = StatusResponseParser.parseHistoryLogStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(0, result!!.firstSeq)
+        assertEquals(0, result.lastSeq)
+    }
+
+    @Test
+    fun `parseHistoryLogStatusResponse returns null for short cargo`() {
+        assertNull(StatusResponseParser.parseHistoryLogStatusResponse(ByteArray(7)))
+    }
+
+    @Test
+    fun `parseHistoryLogStatusResponse returns null for empty cargo`() {
+        assertNull(StatusResponseParser.parseHistoryLogStatusResponse(ByteArray(0)))
+    }
+
+    @Test
+    fun `parseHistoryLogStatusResponse ignores extra bytes`() {
+        val buf = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(10) // firstSeq
+        buf.putInt(99) // lastSeq
+        buf.putInt(42) // extra garbage
+        val result = StatusResponseParser.parseHistoryLogStatusResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(10, result!!.firstSeq)
+        assertEquals(99, result.lastSeq)
+    }
+
+    // -- HistoryLogResponse tests (opcode 61, N x 18-byte records) ------------
+    // NOTE: parseHistoryLogResponse uses android.util.Base64 internally,
+    // which is not available in JVM unit tests. Edge-case tests (short cargo,
+    // empty cargo) that return before hitting Base64 are kept here. Full
+    // record parsing is covered by on-device instrumented tests.
+
+    @Test
+    fun `parseHistoryLogResponse returns empty for short cargo`() {
+        assertTrue(StatusResponseParser.parseHistoryLogResponse(ByteArray(17), sinceSequence = 0).isEmpty())
+    }
+
+    @Test
+    fun `parseHistoryLogResponse returns empty for empty cargo`() {
+        assertTrue(StatusResponseParser.parseHistoryLogResponse(ByteArray(0), sinceSequence = 0).isEmpty())
+    }
+
     // -- PumpFeatures tests (opcode 79, 8-byte cargo) -------------------------
 
     @Test

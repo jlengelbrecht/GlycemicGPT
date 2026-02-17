@@ -61,6 +61,11 @@ enum class CgmTrend {
     UNKNOWN,
 }
 
+data class HistoryLogRange(
+    val firstSeq: Int,
+    val lastSeq: Int,
+)
+
 data class HistoryLogRecord(
     val sequenceNumber: Int,
     val rawBytesB64: String,
