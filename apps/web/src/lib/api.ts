@@ -1824,6 +1824,89 @@ export async function disconnectTandem(): Promise<void> {
   }
 }
 
+// ============================================================================
+// Story 18.3: Tandem Cloud Upload
+// ============================================================================
+
+export interface TandemUploadStatusResponse {
+  enabled: boolean;
+  upload_interval_minutes: number;
+  last_upload_at: string | null;
+  last_upload_status: string | null;
+  last_error: string | null;
+  max_event_index_uploaded: number;
+  pending_raw_events: number;
+}
+
+export interface TandemUploadTriggerResponse {
+  message: string;
+  events_uploaded: number;
+  status: string;
+}
+
+/**
+ * Get the Tandem cloud upload status for the current user.
+ */
+export async function getTandemUploadStatus(): Promise<TandemUploadStatusResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/tandem/cloud-upload/status`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch upload status: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Update Tandem cloud upload settings (enable/disable, interval).
+ */
+export async function updateTandemUploadSettings(data: {
+  enabled: boolean;
+  interval_minutes: number;
+}): Promise<TandemUploadStatusResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/tandem/cloud-upload/settings`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to update upload settings: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
+/**
+ * Trigger an immediate Tandem cloud upload.
+ */
+export async function triggerTandemUpload(): Promise<TandemUploadTriggerResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/tandem/cloud-upload/trigger`,
+    { method: "POST" }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to trigger upload: ${response.status}`
+    );
+  }
+
+  return response.json();
+}
+
 /**
  * AI Provider Configuration API (Story 11.1)
  */

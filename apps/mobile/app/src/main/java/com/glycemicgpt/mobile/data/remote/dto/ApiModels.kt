@@ -89,29 +89,6 @@ data class PumpPushResponse(
 )
 
 @JsonClass(generateAdapter = true)
-data class TandemUploadStatus(
-    val enabled: Boolean,
-    @Json(name = "upload_interval_minutes") val uploadIntervalMinutes: Int,
-    @Json(name = "last_upload_at") val lastUploadAt: String?,
-    @Json(name = "last_upload_status") val lastUploadStatus: String?,
-    @Json(name = "last_error") val lastError: String?,
-    @Json(name = "pending_raw_events") val pendingEvents: Int = 0,
-)
-
-@JsonClass(generateAdapter = true)
-data class TandemUploadTriggerResponse(
-    val message: String,
-    @Json(name = "events_uploaded") val eventsUploaded: Int = 0,
-    val status: String = "pending",
-)
-
-@JsonClass(generateAdapter = true)
-data class TandemUploadSettingsRequest(
-    val enabled: Boolean,
-    @Json(name = "interval_minutes") val intervalMinutes: Int,
-)
-
-@JsonClass(generateAdapter = true)
 data class ChatRequest(
     val message: String,
 )
