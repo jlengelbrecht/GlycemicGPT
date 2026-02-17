@@ -61,6 +61,18 @@ enum class CgmTrend {
     UNKNOWN,
 }
 
+/**
+ * Sequence range from HistoryLogStatusResponse (opcode 59).
+ *
+ * Sequence numbers are unsigned 32-bit on the wire but stored as signed Int
+ * (Kotlin has no unsigned int). Current pump values (~1.3M) are well within
+ * the signed Int max (2,147,483,647), so this is safe for the foreseeable future.
+ */
+data class HistoryLogRange(
+    val firstSeq: Int,
+    val lastSeq: Int,
+)
+
 data class HistoryLogRecord(
     val sequenceNumber: Int,
     val rawBytesB64: String,

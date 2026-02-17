@@ -646,6 +646,7 @@ class BleConnectionManager @Inject constructor(
         when (uuid) {
             TandemProtocol.AUTHORIZATION_UUID -> handleAuthNotification(data)
             TandemProtocol.CURRENT_STATUS_UUID -> handleStatusNotification(data)
+            TandemProtocol.HISTORY_LOG_UUID -> handleHistoryLogNotification(data)
             else -> Timber.d("BLE_RAW NOTIFY unhandled char=%s", uuid)
         }
     }
@@ -706,6 +707,15 @@ class BleConnectionManager @Inject constructor(
             Timber.w("Received unsolicited status response txId=%d opcode=0x%02x",
                 responseTxId, opcode)
         }
+    }
+
+    /**
+     * Log FFF8 (HISTORY_LOG_UUID) notifications for debugging. The FFF8
+     * streaming protocol (opcode 0x81, flow control, record format) needs
+     * further reverse-engineering before we can parse records from it.
+     */
+    private fun handleHistoryLogNotification(data: ByteArray) {
+        Timber.d("BLE_RAW RX_HIST len=%d hex=%s", data.size, data.toHexString())
     }
 
     private fun startAuthentication() {
