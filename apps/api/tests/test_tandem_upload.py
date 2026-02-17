@@ -6,11 +6,17 @@ import hmac
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from src.main import app
-from src.services.tandem_upload import build_upload_payload, sign_tdc_token
+from src.services.tandem_upload import (
+    _authenticate_fresh,
+    build_upload_payload,
+    sign_tdc_token,
+)
 
 
 def _email() -> str:
@@ -147,6 +153,20 @@ class TestBuildUploadPayload:
         payload = build_upload_payload(pump_info, [], settings_b64="abc123")
         data = payload["package"]["device"]["data"]
         assert data["settings"] == "abc123"
+
+    def test_device_assignment_id_included(self):
+        pump_info = self._make_mock_pump_info()
+        payload = build_upload_payload(
+            pump_info, [], device_assignment_id="abc-123-pump"
+        )
+        misc = payload["package"]["device"]["data"]["misc"]
+        assert misc["deviceAssignmentId"] == "abc-123-pump"
+
+    def test_device_assignment_id_defaults_to_empty(self):
+        pump_info = self._make_mock_pump_info()
+        payload = build_upload_payload(pump_info, [])
+        misc = payload["package"]["device"]["data"]["misc"]
+        assert misc["deviceAssignmentId"] == ""
 
     def test_payload_is_json_serializable(self):
         pump_info = self._make_mock_pump_info()
@@ -349,3 +369,78 @@ class TestTandemUploadStatusEndpoints:
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 422  # Validation error
+
+
+class TestAuthenticateFresh:
+    """Test _authenticate_fresh extracts correct attributes from TandemSourceApi."""
+
+    @pytest.mark.asyncio
+    async def test_extracts_access_token_camelcase(self):
+        """Verify we read api.accessToken (camelCase), not _access_token."""
+        mock_api = MagicMock()
+        mock_api.accessToken = "test-token-12345"
+        mock_api.accessTokenExpiresAt = None
+        mock_api.pumperId = "pump-123"
+
+        with patch(
+            "tconnectsync.api.tandemsource.TandemSourceApi",
+            return_value=mock_api,
+        ):
+            result = await _authenticate_fresh("user@test.com", "pass", "US")
+
+        assert result["access_token"] == "test-token-12345"
+        assert result["pumper_id"] == "pump-123"
+        assert result["refresh_token"] is None
+
+    @pytest.mark.asyncio
+    async def test_raises_if_no_access_token(self):
+        """Verify clear error if accessToken is missing/None."""
+        mock_api = MagicMock()
+        mock_api.accessToken = None
+        mock_api.accessTokenExpiresAt = None
+        mock_api.pumperId = None
+
+        with (
+            patch(
+                "tconnectsync.api.tandemsource.TandemSourceApi",
+                return_value=mock_api,
+            ),
+            pytest.raises(RuntimeError, match="accessToken"),
+        ):
+            await _authenticate_fresh("user@test.com", "pass", "US")
+
+    @pytest.mark.asyncio
+    async def test_defaults_expires_in_when_no_expiry(self):
+        """Verify fallback to 3600 when accessTokenExpiresAt is None."""
+        mock_api = MagicMock()
+        mock_api.accessToken = "tok"
+        mock_api.accessTokenExpiresAt = None
+        mock_api.pumperId = None
+
+        with patch(
+            "tconnectsync.api.tandemsource.TandemSourceApi",
+            return_value=mock_api,
+        ):
+            result = await _authenticate_fresh("user@test.com", "pass", "US")
+
+        assert result["expires_in"] == 3600
+
+    @pytest.mark.asyncio
+    async def test_computes_real_expires_in(self):
+        """Verify computed TTL from arrow datetime."""
+        import arrow
+
+        future = arrow.get().shift(minutes=+30)
+        mock_api = MagicMock()
+        mock_api.accessToken = "tok"
+        mock_api.accessTokenExpiresAt = future
+        mock_api.pumperId = None
+
+        with patch(
+            "tconnectsync.api.tandemsource.TandemSourceApi",
+            return_value=mock_api,
+        ):
+            result = await _authenticate_fresh("user@test.com", "pass", "US")
+
+        # Should be approximately 1800 seconds (30 minutes), allow some slack
+        assert 1750 < result["expires_in"] < 1850
