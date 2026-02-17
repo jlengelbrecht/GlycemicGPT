@@ -78,6 +78,7 @@ class PumpConnectionService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var connectionWatcherJob: Job? = null
     private var wakeLockRenewalJob: Job? = null
+    @Volatile
     private var started = false
 
     private val batteryReceiver = object : BroadcastReceiver() {
@@ -197,14 +198,16 @@ class PumpConnectionService : Service() {
 
     /** Must be called under [wakeLockSync]. */
     private fun acquireWakeLockLocked() {
-        // Release old instance first to avoid orphaned WakeLock objects
-        wakeLock?.let {
-            if (it.isHeld) it.release()
-        }
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
-            setReferenceCounted(false)
-            acquire(WAKE_LOCK_TIMEOUT_MS)
+        val existing = wakeLock
+        if (existing != null) {
+            // Re-acquire existing lock with fresh timeout (cheaper than creating a new one)
+            existing.acquire(WAKE_LOCK_TIMEOUT_MS)
+        } else {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                setReferenceCounted(false)
+                acquire(WAKE_LOCK_TIMEOUT_MS)
+            }
         }
         Timber.d("Wake lock acquired for BLE connection")
     }

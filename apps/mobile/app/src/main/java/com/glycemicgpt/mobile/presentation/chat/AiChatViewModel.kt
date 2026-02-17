@@ -140,8 +140,8 @@ class AiChatViewModel @Inject constructor(
             e is SocketTimeoutException -> "AI response took too long. Please try again"
             e is IOException -> "Check your internet connection and try again"
             e.message?.contains("401") == true -> "Session expired. Please sign in again"
-            e.message?.contains("5") == true &&
-                e.message?.contains("HTTP") == true -> "Server error. Please try again later"
+            e.message?.let { Regex("HTTP 5\\d{2}").containsMatchIn(it) } == true ->
+                "Server error. Please try again later"
             else -> e.message ?: "Failed to get response"
         }
     }

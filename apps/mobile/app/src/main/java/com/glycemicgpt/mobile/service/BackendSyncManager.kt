@@ -69,6 +69,7 @@ class BackendSyncManager @Inject constructor(
     private var pendingCountJob: Job? = null
 
     private val triggerChannel = Channel<Unit>(Channel.CONFLATED)
+    @Volatile
     private var lastCleanupMs = 0L
 
     fun start(scope: CoroutineScope) {

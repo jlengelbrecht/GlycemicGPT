@@ -5,6 +5,7 @@ import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.dao.SyncDao
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
+import com.glycemicgpt.mobile.data.remote.InstantAdapter
 import com.squareup.moshi.Moshi
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -24,7 +25,7 @@ class SyncQueuePruningTest {
     private val appSettingsStore = mockk<AppSettingsStore> {
         every { backendSyncEnabled } returns true
     }
-    private val moshi = Moshi.Builder().build()
+    private val moshi = Moshi.Builder().add(InstantAdapter()).build()
 
     private val manager = BackendSyncManager(
         syncDao, rawHistoryLogDao, api, authTokenStore, appSettingsStore, moshi,

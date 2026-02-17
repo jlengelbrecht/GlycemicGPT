@@ -10,6 +10,11 @@ import kotlin.coroutines.cancellation.CancellationException
 
 class NoProviderException(message: String) : Exception(message)
 
+/**
+ * Two API instances by design:
+ * - [api] (15s timeout) for fast endpoint calls like [checkProviderConfigured]
+ * - [chatApi] (90s timeout) for [sendMessage] where LLM inference takes 20-60s
+ */
 @Singleton
 class ChatRepository @Inject constructor(
     private val api: GlycemicGptApi,
