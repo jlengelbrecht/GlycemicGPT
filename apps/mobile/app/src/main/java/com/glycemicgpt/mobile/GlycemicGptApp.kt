@@ -6,11 +6,15 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.logging.ReleaseTree
 import com.glycemicgpt.mobile.service.DataRetentionWorker
 import com.glycemicgpt.mobile.service.PumpConnectionService
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -23,6 +27,11 @@ class GlycemicGptApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var pumpCredentialStore: PumpCredentialStore
+
+    @Inject
+    lateinit var authManager: AuthManager
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -37,6 +46,9 @@ class GlycemicGptApp : Application(), Configuration.Provider {
             Timber.plant(ReleaseTree())
         }
         scheduleDataRetention()
+
+        // Validate auth tokens on startup and schedule proactive refresh
+        authManager.validateOnStartup(appScope)
 
         // Start pump connection service on cold start if already paired.
         // This ensures polling and auto-reconnect resume after app restart.

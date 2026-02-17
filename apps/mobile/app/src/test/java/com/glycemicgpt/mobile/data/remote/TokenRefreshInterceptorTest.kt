@@ -1,5 +1,7 @@
 package com.glycemicgpt.mobile.data.remote
 
+import com.glycemicgpt.mobile.data.auth.AuthManager
+import com.glycemicgpt.mobile.data.auth.RefreshClientProvider
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.squareup.moshi.Moshi
 import io.mockk.every
@@ -12,15 +14,18 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import javax.inject.Provider
 
 class TokenRefreshInterceptorTest {
 
     private val authTokenStore = mockk<AuthTokenStore>(relaxed = true)
-    private val baseUrlInterceptor = mockk<BaseUrlInterceptor>(relaxed = true)
+    private val refreshClientProvider = mockk<RefreshClientProvider>(relaxed = true)
     private val moshi = Moshi.Builder().build()
+    private val authManager = mockk<AuthManager>(relaxed = true)
+    private val authManagerProvider = Provider { authManager }
 
     private fun createInterceptor() =
-        TokenRefreshInterceptor(authTokenStore, baseUrlInterceptor, moshi)
+        TokenRefreshInterceptor(authTokenStore, refreshClientProvider, moshi, authManagerProvider)
 
     private fun buildResponse(code: Int, request: Request): Response =
         Response.Builder()
@@ -79,5 +84,49 @@ class TokenRefreshInterceptorTest {
         assertEquals(401, response.code)
         // Should NOT attempt refresh for the refresh endpoint itself
         verify(exactly = 0) { authTokenStore.clearToken() }
+    }
+
+    @Test
+    fun `401 with expired refresh token notifies AuthManager`() {
+        every { authTokenStore.getRefreshToken() } returns "expired-refresh"
+        every { authTokenStore.isRefreshTokenExpired() } returns true
+
+        val interceptor = createInterceptor()
+        val request = Request.Builder()
+            .url("http://localhost/api/test")
+            .header("Authorization", "Bearer expired-token")
+            .build()
+        val chain = mockk<Interceptor.Chain> {
+            every { request() } returns request
+            every { proceed(any()) } returns buildResponse(401, request)
+        }
+
+        val response = interceptor.intercept(chain)
+        assertEquals(401, response.code)
+        verify { authTokenStore.clearToken() }
+        verify { authManager.onRefreshFailed() }
+    }
+
+    @Test
+    fun `401 retries with refreshed token when another thread already refreshed`() {
+        every { authTokenStore.getRefreshToken() } returns "valid-refresh"
+        every { authTokenStore.isRefreshTokenExpired() } returns false
+        // Simulate another thread already refreshed
+        every { authTokenStore.getRawToken() } returns "new-token-from-other-thread"
+
+        val interceptor = createInterceptor()
+        val request = Request.Builder()
+            .url("http://localhost/api/test")
+            .header("Authorization", "Bearer old-token")
+            .build()
+
+        val retryResponse = buildResponse(200, request)
+        val chain = mockk<Interceptor.Chain> {
+            every { request() } returns request
+            every { proceed(any()) } returnsMany listOf(buildResponse(401, request), retryResponse)
+        }
+
+        val response = interceptor.intercept(chain)
+        assertEquals(200, response.code)
     }
 }

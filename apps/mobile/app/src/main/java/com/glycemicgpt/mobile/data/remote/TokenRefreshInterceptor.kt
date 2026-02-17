@@ -1,16 +1,19 @@
 package com.glycemicgpt.mobile.data.remote
 
+import com.glycemicgpt.mobile.data.auth.AuthManager
+import com.glycemicgpt.mobile.data.auth.RefreshClientProvider
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
 import com.glycemicgpt.mobile.data.remote.dto.RefreshTokenRequest
 import com.squareup.moshi.Moshi
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import timber.log.Timber
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -18,27 +21,23 @@ import javax.inject.Singleton
  *
  * When a request receives a 401 response and a refresh token is available,
  * this interceptor:
- * 1. Calls the /api/auth/mobile/refresh endpoint (using a separate OkHttpClient)
- * 2. On success: saves new tokens and retries the original request
- * 3. On failure: clears all tokens (user must re-login)
+ * 1. Checks if the refresh token is still valid
+ * 2. Calls the /api/auth/mobile/refresh endpoint (using a separate OkHttpClient)
+ * 3. On success: saves new tokens, notifies AuthManager, and retries the original request
+ * 4. On failure: clears tokens, notifies AuthManager of session expiry
  *
  * Uses synchronized block to prevent concurrent refresh attempts.
  */
 @Singleton
 class TokenRefreshInterceptor @Inject constructor(
     private val authTokenStore: AuthTokenStore,
-    private val baseUrlInterceptor: BaseUrlInterceptor,
+    private val refreshClientProvider: RefreshClientProvider,
     private val moshi: Moshi,
+    // Use Provider to break circular dependency (AuthManager -> this -> AuthManager)
+    private val authManagerProvider: Provider<AuthManager>,
 ) : Interceptor {
 
     private val lock = Any()
-
-    // Separate OkHttpClient for refresh calls to avoid interceptor recursion
-    private val refreshClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .addInterceptor(baseUrlInterceptor)
-            .build()
-    }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
@@ -52,11 +51,20 @@ class TokenRefreshInterceptor @Inject constructor(
 
         val refreshToken = authTokenStore.getRefreshToken() ?: return response
 
+        // Check if refresh token is expired before attempting
+        if (authTokenStore.isRefreshTokenExpired()) {
+            Timber.w("Refresh token expired, cannot auto-refresh")
+            authTokenStore.clearToken()
+            authManagerProvider.get().onRefreshFailed()
+            return response
+        }
+
         synchronized(lock) {
             // Double-check: another thread may have already refreshed
             val currentToken = authTokenStore.getRawToken()
             val originalAuth = original.header("Authorization")
-            if (currentToken != null && originalAuth != "Bearer $currentToken") {
+            val originalToken = originalAuth?.removePrefix("Bearer ")
+            if (currentToken != null && originalToken != null && currentToken != originalToken) {
                 // Token was already refreshed by another thread; retry with new token
                 response.close()
                 val retryRequest = original.newBuilder()
@@ -84,6 +92,13 @@ class TokenRefreshInterceptor @Inject constructor(
      * Returns the new access token, or null on failure.
      */
     private fun performRefresh(refreshToken: String): String? {
+        val baseUrl = authTokenStore.getBaseUrl()
+        if (baseUrl.isNullOrBlank()) {
+            Timber.w("No base URL configured, cannot refresh via interceptor")
+            authManagerProvider.get().onRefreshFailed()
+            return null
+        }
+
         return try {
             val body = RefreshTokenRequest(refreshToken = refreshToken)
             val adapter = moshi.adapter(RefreshTokenRequest::class.java)
@@ -94,34 +109,39 @@ class TokenRefreshInterceptor @Inject constructor(
                 .post(json.toRequestBody("application/json".toMediaType()))
                 .build()
 
-            val refreshResponse = refreshClient.newCall(request).execute()
+            val refreshResponse = refreshClientProvider.refreshClient.newCall(request).execute()
 
-            if (refreshResponse.isSuccessful) {
-                val responseBody = refreshResponse.body?.string() ?: return null
-                val loginAdapter = moshi.adapter(
-                    com.glycemicgpt.mobile.data.remote.dto.LoginResponse::class.java,
-                )
-                val loginResponse = loginAdapter.fromJson(responseBody) ?: return null
+            refreshResponse.use { resp ->
+                if (resp.isSuccessful) {
+                    val responseBody = resp.body?.string() ?: return null
+                    val loginAdapter = moshi.adapter(LoginResponse::class.java)
+                    val loginResponse = loginAdapter.fromJson(responseBody) ?: return null
 
-                val expiresAtMs = System.currentTimeMillis() + (loginResponse.expiresIn * 1000L)
-                authTokenStore.saveCredentials(
-                    authTokenStore.getBaseUrl() ?: "",
-                    loginResponse.accessToken,
-                    expiresAtMs,
-                    loginResponse.user.email,
-                )
-                authTokenStore.saveRefreshToken(loginResponse.refreshToken)
+                    val expiresAtMs = System.currentTimeMillis() + (loginResponse.expiresIn * 1000L)
+                    authTokenStore.saveCredentials(
+                        baseUrl,
+                        loginResponse.accessToken,
+                        expiresAtMs,
+                        loginResponse.user.email,
+                    )
+                    authTokenStore.saveRefreshToken(loginResponse.refreshToken)
 
-                Timber.d("Token refreshed successfully")
-                loginResponse.accessToken
-            } else {
-                Timber.w("Token refresh failed with HTTP ${refreshResponse.code}")
-                authTokenStore.clearToken()
-                null
+                    Timber.d("Token refreshed successfully via interceptor")
+                    authManagerProvider.get().onInterceptorRefreshSuccess(
+                        kotlinx.coroutines.MainScope(),
+                    )
+                    loginResponse.accessToken
+                } else {
+                    Timber.w("Token refresh failed with HTTP ${resp.code}")
+                    authTokenStore.clearToken()
+                    authManagerProvider.get().onRefreshFailed()
+                    null
+                }
             }
         } catch (e: Exception) {
             Timber.w(e, "Token refresh failed")
             authTokenStore.clearToken()
+            authManagerProvider.get().onRefreshFailed()
             null
         }
     }

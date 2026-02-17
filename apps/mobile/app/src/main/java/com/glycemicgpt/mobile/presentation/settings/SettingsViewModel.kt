@@ -8,6 +8,8 @@ import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.BuildConfig
+import com.glycemicgpt.mobile.data.auth.AuthManager
+import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
@@ -90,10 +92,14 @@ class SettingsViewModel @Inject constructor(
     private val api: GlycemicGptApi,
     private val deviceRepository: DeviceRepository,
     private val appUpdateChecker: AppUpdateChecker,
+    private val authManager: AuthManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    /** Observable auth state for UI-level session expiry handling. */
+    val authState: StateFlow<AuthState> = authManager.authState
 
     init {
         loadState()
@@ -210,6 +216,7 @@ class SettingsViewModel @Inject constructor(
                     val expiresAtMs = System.currentTimeMillis() + (body.expiresIn * 1000L)
                     authTokenStore.saveCredentials(url, body.accessToken, expiresAtMs, body.user.email)
                     authTokenStore.saveRefreshToken(body.refreshToken)
+                    authManager.onLoginSuccess(viewModelScope)
                     _uiState.value = _uiState.value.copy(
                         isLoggingIn = false,
                         isLoggedIn = true,
@@ -257,6 +264,7 @@ class SettingsViewModel @Inject constructor(
                 .onFailure { e -> Timber.w(e, "Device unregistration failed") }
         }
         authTokenStore.clearToken()
+        authManager.onLogout()
         _uiState.value = _uiState.value.copy(
             isLoggedIn = false,
             userEmail = null,
