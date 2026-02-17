@@ -1,0 +1,12 @@
+#!/bin/sh
+# Strips AI tool co-author attribution from commit messages.
+# Install: cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+MSG_FILE="$1"
+if [ -f "$MSG_FILE" ]; then
+    sed -i '/^Co-[Aa]uthored-[Bb]y:.*\([Cc]laude\|[Aa]nthropic\|noreply@anthropic\)/d' "$MSG_FILE"
+    # Remove trailing blank lines
+    while [ "$(tail -c 2 "$MSG_FILE" | od -An -tx1 | tr -d ' ')" = "0a0a" ]; do
+        truncate -s -1 "$MSG_FILE"
+    done
+fi

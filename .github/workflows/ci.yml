@@ -145,6 +145,31 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+  check-attribution:
+    name: Attribution Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for prohibited Co-Authored-By lines
+        run: |
+          if git log --format="%B" origin/main..HEAD 2>/dev/null | grep -qiE '^Co-Authored-By:.*(claude|anthropic|noreply@anthropic)'; then
+            echo "ERROR: Found prohibited Co-Authored-By attribution in commit messages."
+            echo "The following commits contain AI tool attribution:"
+            git log --format="%h %s" origin/main..HEAD | while read -r hash rest; do
+              if git log -1 --format="%B" "$hash" | grep -qiE '^Co-Authored-By:.*(claude|anthropic|noreply@anthropic)'; then
+                echo "  - $hash $rest"
+              fi
+            done
+            echo ""
+            echo "Install the commit-msg hook: cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg"
+            exit 1
+          fi
+          echo "No prohibited attribution found."
+
   test-sidecar:
     name: Sidecar Tests
     runs-on: ubuntu-latest
