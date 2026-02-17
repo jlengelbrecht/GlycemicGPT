@@ -485,6 +485,105 @@ class StatusResponseParserTest {
         )
     }
 
+    // -- PumpVersion tests (opcode 85, 48-byte cargo) -------------------------
+
+    @Test
+    fun `parsePumpVersionResponse tslim X2 test vector`() {
+        // Values from pumpX2 PumpVersionResponseTest
+        val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(105900)     // armSwVer
+        buf.putInt(105900)     // mspSwVer
+        buf.putInt(0)          // configABits
+        buf.putInt(0)          // configBBits
+        buf.putInt(90556643)   // serialNum
+        buf.putInt(1005279)    // partNum
+        buf.put("0\u0000\u0000\u0000\u0000\u0000\u0000\u0000".toByteArray(Charsets.UTF_8)) // pumpRev (8 bytes)
+        buf.putInt(1088111696) // pcbaSN
+        buf.put("A\u0000\u0000\u0000\u0000\u0000\u0000\u0000".toByteArray(Charsets.UTF_8)) // pcbaRev (8 bytes)
+        buf.putInt(1000354)    // modelNum
+
+        val result = StatusResponseParser.parsePumpVersionResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(105900L, result!!.armSwVer)
+        assertEquals(105900L, result.mspSwVer)
+        assertEquals(0L, result.configABits)
+        assertEquals(0L, result.configBBits)
+        assertEquals(90556643L, result.serialNumber)
+        assertEquals(1005279L, result.partNumber)
+        assertEquals("0", result.pumpRev)
+        assertEquals(1088111696L, result.pcbaSn)
+        assertEquals("A", result.pcbaRev)
+        assertEquals(1000354L, result.modelNumber)
+        assertTrue(result.pumpFeatures.isEmpty())
+    }
+
+    @Test
+    fun `parsePumpVersionResponse Mobi test vector`() {
+        // Values from pumpX2 PumpVersionResponseTest (Mobi)
+        val buf = ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt((-666269539).toInt()) // armSwVer = 3628697757 as uint32 (overflows signed int)
+        buf.putInt(0)          // mspSwVer
+        buf.putInt(0)          // configABits
+        buf.putInt(0)          // configBBits
+        buf.putInt(1226976)    // serialNum
+        buf.putInt(1013045)    // partNum
+        buf.put("0\u0000\u0000\u0000\u0000\u0000\u0000\u0000".toByteArray(Charsets.UTF_8))
+        buf.putInt(232700077)  // pcbaSN
+        buf.put("0\u0000\u0000\u0000\u0000\u0000\u0000\u0000".toByteArray(Charsets.UTF_8))
+        buf.putInt(1004000)    // modelNum
+
+        val result = StatusResponseParser.parsePumpVersionResponse(buf.array())
+        assertNotNull(result)
+        assertEquals(3628697757L, result!!.armSwVer)
+        assertEquals(0L, result.mspSwVer)
+        assertEquals(1226976L, result.serialNumber)
+        assertEquals(1013045L, result.partNumber)
+        assertEquals("0", result.pumpRev)
+        assertEquals(232700077L, result.pcbaSn)
+        assertEquals("0", result.pcbaRev)
+        assertEquals(1004000L, result.modelNumber)
+    }
+
+    @Test
+    fun `parsePumpVersionResponse returns null for short cargo`() {
+        assertNull(StatusResponseParser.parsePumpVersionResponse(ByteArray(47)))
+    }
+
+    @Test
+    fun `parsePumpVersionResponse returns null for empty cargo`() {
+        assertNull(StatusResponseParser.parsePumpVersionResponse(ByteArray(0)))
+    }
+
+    // -- PumpFeatures tests (opcode 79, 8-byte cargo) -------------------------
+
+    @Test
+    fun `parsePumpFeaturesResponse with controlIQ and dexcomG6 and basalIQ`() {
+        // Bits: 0=dexcomG5, 1=dexcomG6, 2=basalIQ, 10=controlIQ
+        // Set bits 1, 2, 10 = (1 shl 1) or (1 shl 2) or (1 shl 10) = 1030
+        val buf = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putLong(1030L)
+        val result = StatusResponseParser.parsePumpFeaturesResponse(buf.array())
+        assertFalse(result["dexcomG5"]!!)
+        assertTrue(result["dexcomG6"]!!)
+        assertTrue(result["basalIQ"]!!)
+        assertTrue(result["controlIQ"]!!)
+    }
+
+    @Test
+    fun `parsePumpFeaturesResponse with zero bitmask`() {
+        val result = StatusResponseParser.parsePumpFeaturesResponse(ByteArray(8))
+        assertEquals(4, result.size)
+        assertFalse(result["dexcomG5"]!!)
+        assertFalse(result["dexcomG6"]!!)
+        assertFalse(result["basalIQ"]!!)
+        assertFalse(result["controlIQ"]!!)
+    }
+
+    @Test
+    fun `parsePumpFeaturesResponse returns empty map for short cargo`() {
+        assertTrue(StatusResponseParser.parsePumpFeaturesResponse(ByteArray(7)).isEmpty())
+    }
+
     // -- Helper ---------------------------------------------------------------
 
     private fun hexToBytes(hex: String): ByteArray {
