@@ -483,18 +483,25 @@ class BleConnectionManager @Inject constructor(
                         _connectionState.value = ConnectionState.AUTH_FAILED
                         return
                     }
-                    // Insufficient encryption = stale bond encryption keys.
-                    // The BLE bond exists but the keys are no longer valid.
-                    // Remove the bond so the next connection triggers fresh bonding.
+                    // Insufficient encryption handling depends on whether we had
+                    // an active session. During an active connection (wasConnected),
+                    // status 8 often means the phone woke from deep sleep and the
+                    // BLE link needs to renegotiate encryption -- the bond is still
+                    // valid, so just allow auto-reconnect. Only remove the bond if
+                    // we hadn't reached CONNECTED, which indicates genuinely stale keys.
                     if (status == GATT_INSUFFICIENT_ENCRYPTION) {
-                        Timber.e("Pump reports insufficient encryption -- bond keys stale, removing bond for re-pairing")
-                        val addr = credentialStore.getPairedAddress()
-                        if (addr != null) removeBond(addr)
-                        autoReconnect = false
-                        authTimeoutJob?.cancel()
-                        reconnectJob?.cancel()
-                        _connectionState.value = ConnectionState.AUTH_FAILED
-                        return
+                        if (!wasConnected) {
+                            Timber.e("Pump reports insufficient encryption before connected -- bond keys stale, removing bond for re-pairing")
+                            val addr = credentialStore.getPairedAddress()
+                            if (addr != null) removeBond(addr)
+                            autoReconnect = false
+                            authTimeoutJob?.cancel()
+                            reconnectJob?.cancel()
+                            _connectionState.value = ConnectionState.AUTH_FAILED
+                            return
+                        }
+                        Timber.w("Insufficient encryption during active session -- reconnecting (bond preserved)")
+                        // Fall through to normal disconnect/reconnect path
                     }
 
                     // Track connections where we reached CONNECTED but got zero
