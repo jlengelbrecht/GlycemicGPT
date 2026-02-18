@@ -196,7 +196,8 @@ async def get_target_glucose_range(
 ) -> TargetGlucoseRangeResponse:
     """Get the current user's target glucose range.
 
-    Returns defaults (70-180 mg/dL) if no range has been configured yet.
+    Returns all four thresholds (urgent_low, low_target, high_target,
+    urgent_high). Creates defaults if no range has been configured yet.
     """
     target_range = await get_or_create_range(user.id, db)
     return TargetGlucoseRangeResponse.model_validate(target_range)
@@ -214,8 +215,9 @@ async def patch_target_glucose_range(
 ) -> TargetGlucoseRangeResponse:
     """Update the current user's target glucose range.
 
-    Only provided fields are updated. Validates that
-    low_target < high_target after merge with existing values.
+    Only provided fields are updated. Validates ordering:
+    urgent_low < low_target < high_target < urgent_high
+    after merge with existing values.
     """
     try:
         target_range = await update_range(user.id, body, db)

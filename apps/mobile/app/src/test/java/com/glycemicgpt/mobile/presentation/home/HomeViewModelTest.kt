@@ -1,5 +1,8 @@
 package com.glycemicgpt.mobile.presentation.home
 
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
+import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
+import com.glycemicgpt.mobile.data.remote.dto.GlucoseRangeResponse
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
@@ -17,6 +20,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import retrofit2.Response
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,6 +90,16 @@ class HomeViewModelTest {
         every { syncStatus } returns syncStatusFlow
     }
 
+    private val glucoseRangeStore = mockk<GlucoseRangeStore>(relaxed = true) {
+        every { urgentLow } returns GlucoseRangeStore.DEFAULT_URGENT_LOW
+        every { low } returns GlucoseRangeStore.DEFAULT_LOW
+        every { high } returns GlucoseRangeStore.DEFAULT_HIGH
+        every { urgentHigh } returns GlucoseRangeStore.DEFAULT_URGENT_HIGH
+        every { isStale(any()) } returns false
+    }
+
+    private val api = mockk<GlycemicGptApi>(relaxed = true)
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -95,7 +110,7 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel() = HomeViewModel(pumpDriver, repository, backendSyncManager)
+    private fun createViewModel() = HomeViewModel(pumpDriver, repository, backendSyncManager, glucoseRangeStore, api)
 
     @Test
     fun `initial state has null readings and not refreshing`() = runTest {
@@ -178,6 +193,20 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `glucoseThresholds returns values from store`() {
+        every { glucoseRangeStore.urgentLow } returns 50
+        every { glucoseRangeStore.low } returns 65
+        every { glucoseRangeStore.high } returns 200
+        every { glucoseRangeStore.urgentHigh } returns 280
+        val vm = createViewModel()
+        val t = vm.glucoseThresholds.value
+        assertEquals(50, t.urgentLow)
+        assertEquals(65, t.low)
+        assertEquals(200, t.high)
+        assertEquals(280, t.urgentHigh)
+    }
+
+    @Test
     fun `connection state flows from pump driver`() = runTest {
         val vm = createViewModel()
 
@@ -237,5 +266,67 @@ class HomeViewModelTest {
         assertEquals(200, result.totalReadings)
 
         job.cancel()
+    }
+
+    // -- Glucose range sync ---------------------------------------------------
+
+    @Test
+    fun `refreshData updates glucose thresholds from API`() = runTest {
+        val rangeResponse = GlucoseRangeResponse(
+            urgentLow = 55f,
+            lowTarget = 80f,
+            highTarget = 200f,
+            urgentHigh = 300f,
+        )
+        coEvery { api.getGlucoseRange() } returns Response.success(rangeResponse)
+        every { glucoseRangeStore.urgentLow } returns 55
+        every { glucoseRangeStore.low } returns 80
+        every { glucoseRangeStore.high } returns 200
+        every { glucoseRangeStore.urgentHigh } returns 300
+
+        val vm = createViewModel()
+        vm.refreshData()
+        advanceUntilIdle()
+
+        verify { glucoseRangeStore.updateAll(urgentLow = 55, low = 80, high = 200, urgentHigh = 300) }
+        val t = vm.glucoseThresholds.value
+        assertEquals(55, t.urgentLow)
+        assertEquals(80, t.low)
+        assertEquals(200, t.high)
+        assertEquals(300, t.urgentHigh)
+    }
+
+    @Test
+    fun `refreshGlucoseRange failure preserves existing thresholds`() = runTest {
+        coEvery { api.getGlucoseRange() } throws RuntimeException("Network error")
+        val vm = createViewModel()
+
+        vm.refreshData()
+        advanceUntilIdle()
+
+        val t = vm.glucoseThresholds.value
+        assertEquals(GlucoseRangeStore.DEFAULT_URGENT_LOW, t.urgentLow)
+        assertEquals(GlucoseRangeStore.DEFAULT_LOW, t.low)
+        assertEquals(GlucoseRangeStore.DEFAULT_HIGH, t.high)
+        assertEquals(GlucoseRangeStore.DEFAULT_URGENT_HIGH, t.urgentHigh)
+        assertFalse(vm.isRefreshing.value)
+    }
+
+    @Test
+    fun `init refreshes glucose range when store is stale`() = runTest {
+        every { glucoseRangeStore.isStale(any()) } returns true
+        val rangeResponse = GlucoseRangeResponse(
+            urgentLow = 60f,
+            lowTarget = 85f,
+            highTarget = 190f,
+            urgentHigh = 290f,
+        )
+        coEvery { api.getGlucoseRange() } returns Response.success(rangeResponse)
+
+        createViewModel()
+        advanceUntilIdle()
+
+        coVerify(atLeast = 1) { api.getGlucoseRange() }
+        verify { glucoseRangeStore.updateAll(urgentLow = 60, low = 85, high = 190, urgentHigh = 290) }
     }
 }

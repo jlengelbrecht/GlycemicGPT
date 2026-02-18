@@ -31,18 +31,32 @@ import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 
-object GlucoseThresholds {
-    const val URGENT_LOW = 55
-    const val LOW = 70
-    const val HIGH = 180
-    const val URGENT_HIGH = 250
+/**
+ * Glucose threshold container. Defaults match the backend's default settings.
+ * Use [GlucoseRangeStore] values at runtime for dynamic thresholds.
+ */
+data class GlucoseThresholds(
+    val urgentLow: Int = DEFAULT_URGENT_LOW,
+    val low: Int = DEFAULT_LOW,
+    val high: Int = DEFAULT_HIGH,
+    val urgentHigh: Int = DEFAULT_URGENT_HIGH,
+) {
+    companion object {
+        const val DEFAULT_URGENT_LOW = 55
+        const val DEFAULT_LOW = 70
+        const val DEFAULT_HIGH = 180
+        const val DEFAULT_URGENT_HIGH = 250
+    }
 }
 
-fun glucoseColor(mgDl: Int): Color = when {
-    mgDl < GlucoseThresholds.URGENT_LOW -> GlucoseColors.UrgentLow
-    mgDl < GlucoseThresholds.LOW -> GlucoseColors.Low
-    mgDl <= GlucoseThresholds.HIGH -> GlucoseColors.InRange
-    mgDl <= GlucoseThresholds.URGENT_HIGH -> GlucoseColors.High
+fun glucoseColor(
+    mgDl: Int,
+    thresholds: GlucoseThresholds = GlucoseThresholds(),
+): Color = when {
+    mgDl <= thresholds.urgentLow -> GlucoseColors.UrgentLow
+    mgDl <= thresholds.low -> GlucoseColors.Low
+    mgDl < thresholds.high -> GlucoseColors.InRange
+    mgDl < thresholds.urgentHigh -> GlucoseColors.High
     else -> GlucoseColors.UrgentHigh
 }
 
@@ -64,6 +78,7 @@ fun GlucoseHero(
     basalRate: BasalReading?,
     battery: BatteryStatus?,
     reservoir: ReservoirReading?,
+    thresholds: GlucoseThresholds = GlucoseThresholds(),
     modifier: Modifier = Modifier,
 ) {
     val a11yDescription = if (cgm != null) {
@@ -94,7 +109,7 @@ fun GlucoseHero(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (cgm != null) {
-                val color = glucoseColor(cgm.glucoseMgDl)
+                val color = glucoseColor(cgm.glucoseMgDl, thresholds)
 
                 // Primary: large glucose value + trend arrow
                 Row(

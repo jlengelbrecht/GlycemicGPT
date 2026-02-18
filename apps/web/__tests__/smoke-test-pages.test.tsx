@@ -199,13 +199,18 @@ describe("Page smoke tests - all pages render without crashing", () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ low_threshold: 70, high_threshold: 180 }),
+      json: async () => ({
+        urgent_low: 55,
+        low_target: 70,
+        high_target: 180,
+        urgent_high: 250,
+      }),
     });
     await act(async () => {
       render(<GlucoseRangePage />);
     });
     await waitFor(() => {
-      expect(screen.getByText("Target Glucose Range")).toBeInTheDocument();
+      expect(screen.getByText("Glucose Thresholds")).toBeInTheDocument();
     });
   });
 

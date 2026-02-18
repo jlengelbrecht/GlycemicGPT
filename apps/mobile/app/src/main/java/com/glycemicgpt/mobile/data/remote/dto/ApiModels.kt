@@ -104,3 +104,11 @@ data class AiProviderStatusResponse(
     @Json(name = "provider_type") val providerType: String,
     val status: String,
 )
+
+@JsonClass(generateAdapter = true)
+data class GlucoseRangeResponse(
+    @Json(name = "urgent_low") val urgentLow: Float,
+    @Json(name = "low_target") val lowTarget: Float,
+    @Json(name = "high_target") val highTarget: Float,
+    @Json(name = "urgent_high") val urgentHigh: Float,
+)

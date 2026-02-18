@@ -6,6 +6,7 @@ import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
@@ -65,6 +66,9 @@ class SettingsViewModelTest {
     }
     private val api = mockk<GlycemicGptApi>()
     private val deviceRepository = mockk<DeviceRepository>(relaxed = true)
+    private val glucoseRangeStore = mockk<GlucoseRangeStore>(relaxed = true) {
+        every { isStale(any()) } returns false
+    }
     private val appUpdateChecker = mockk<AppUpdateChecker>()
     private val authManager = mockk<AuthManager>(relaxed = true) {
         every { authState } returns MutableStateFlow(AuthState.Unauthenticated)
@@ -81,7 +85,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, api, deviceRepository, appUpdateChecker, authManager)
+        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, glucoseRangeStore, api, deviceRepository, appUpdateChecker, authManager)
 
     @Test
     fun `loadState initializes from stores`() {

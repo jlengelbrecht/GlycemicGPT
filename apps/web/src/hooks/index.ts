@@ -15,3 +15,8 @@ export {
 } from "./use-glucose-stream";
 
 export { useCurrentUser } from "./use-current-user";
+
+export {
+  useGlucoseRange,
+  type GlucoseThresholds,
+} from "./use-glucose-range";
