@@ -125,12 +125,11 @@ class HomeViewModel @Inject constructor(
      * discipline as PumpPollingOrchestrator).
      */
     fun refreshData() {
-        if (_isRefreshing.value) return
+        if (!_isRefreshing.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
-            _isRefreshing.value = true
             try {
-                // Refresh glucose range from backend on every pull-to-refresh
-                refreshGlucoseRange()
+                // Refresh glucose range concurrently -- don't block BLE reads
+                launch { refreshGlucoseRange() }
 
                 pumpDriver.getIoB().onSuccess { repository.saveIoB(it) }
                 delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
@@ -161,15 +160,21 @@ class HomeViewModel @Inject constructor(
             val response = api.getGlucoseRange()
             if (response.isSuccessful) {
                 response.body()?.let { range ->
+                    val urgentLow = range.urgentLow.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val low = range.lowTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val high = range.highTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val urgentHigh = range.urgentHigh.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
                     glucoseRangeStore.updateAll(
-                        urgentLow = range.urgentLow.toInt(),
-                        low = range.lowTarget.toInt(),
-                        high = range.highTarget.toInt(),
-                        urgentHigh = range.urgentHigh.toInt(),
+                        urgentLow = urgentLow,
+                        low = low,
+                        high = high,
+                        urgentHigh = urgentHigh,
                     )
                     _glucoseThresholds.value = thresholdsFromStore()
                     Timber.d("Glucose range refreshed: %s", _glucoseThresholds.value)
                 }
+            } else {
+                Timber.w("Glucose range refresh failed: HTTP %d", response.code())
             }
         } catch (e: Exception) {
             Timber.w(e, "Failed to refresh glucose range")
@@ -177,7 +182,8 @@ class HomeViewModel @Inject constructor(
     }
 
     companion object {
-        /** Refresh glucose range from backend every 15 minutes. */
-        const val RANGE_REFRESH_INTERVAL_MS = 900_000L
+        internal const val RANGE_REFRESH_INTERVAL_MS = 900_000L
+        private const val MIN_THRESHOLD = 20
+        private const val MAX_THRESHOLD = 500
     }
 }
