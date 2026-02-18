@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.entity.RawHistoryLogEntity
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
@@ -36,6 +37,7 @@ class PumpPollingOrchestrator @Inject constructor(
     private val syncEnqueuer: SyncQueueEnqueuer,
     private val rawHistoryLogDao: RawHistoryLogDao,
     private val wearDataSender: WearDataSender,
+    private val glucoseRangeStore: GlucoseRangeStore,
 ) {
 
     /** Set by PumpConnectionService to trigger immediate sync after enqueue. */
@@ -222,17 +224,17 @@ class PumpPollingOrchestrator @Inject constructor(
                             mgDl = it.glucoseMgDl,
                             trend = it.trendArrow.name,
                             timestampMs = it.timestamp.toEpochMilli(),
-                            low = 70,
-                            high = 180,
-                            urgentLow = 55,
-                            urgentHigh = 250,
+                            low = glucoseRangeStore.low,
+                            high = glucoseRangeStore.high,
+                            urgentLow = glucoseRangeStore.urgentLow,
+                            urgentHigh = glucoseRangeStore.urgentHigh,
                         )
                     } catch (e: Exception) {
                         Timber.w(e, "Failed to send CGM to watch")
                     }
 
-                    // Alert threshold detection for watch
-                    val alertType = detectAlertType(it.glucoseMgDl)
+                    // Alert threshold detection for watch (uses dynamic thresholds)
+                    val alertType = detectAlertForCgm(it.glucoseMgDl)
                     try {
                         if (alertType != null && alertType != previousAlertType) {
                             wearDataSender.sendAlert(
@@ -283,20 +285,6 @@ class PumpPollingOrchestrator @Inject constructor(
         // When phone battery is low, slow everything down by this factor
         const val LOW_BATTERY_MULTIPLIER = 3
 
-        // Alert thresholds (match CGM threshold defaults)
-        private const val URGENT_LOW = 55
-        private const val LOW = 70
-        private const val HIGH = 180
-        private const val URGENT_HIGH = 250
-
-        fun detectAlertType(mgDl: Int): String? = when {
-            mgDl <= URGENT_LOW -> "urgent_low"
-            mgDl >= URGENT_HIGH -> "urgent_high"
-            mgDl <= LOW -> "low"
-            mgDl >= HIGH -> "high"
-            else -> null
-        }
-
         fun alertLabel(type: String): String = when (type) {
             "urgent_low" -> "URGENT LOW"
             "urgent_high" -> "URGENT HIGH"
@@ -304,6 +292,15 @@ class PumpPollingOrchestrator @Inject constructor(
             "high" -> "HIGH"
             else -> ""
         }
+    }
+
+    /** Detect alert type using dynamically configured glucose thresholds. */
+    private fun detectAlertForCgm(mgDl: Int): String? = when {
+        mgDl <= glucoseRangeStore.urgentLow -> "urgent_low"
+        mgDl >= glucoseRangeStore.urgentHigh -> "urgent_high"
+        mgDl <= glucoseRangeStore.low -> "low"
+        mgDl >= glucoseRangeStore.high -> "high"
+        else -> null
     }
 
     private suspend fun pollBattery() {

@@ -1,4 +1,4 @@
-"""Story 9.1: Tests for target glucose range service and settings router."""
+"""Tests for target glucose range service and settings router."""
 
 import uuid
 from unittest.mock import AsyncMock, MagicMock
@@ -37,7 +37,7 @@ async def register_and_login(client) -> str:
     return login_response.cookies.get(settings.jwt_cookie_name)
 
 
-# ── Schema validation tests ──
+# -- Schema validation tests --
 
 
 class TestTargetGlucoseRangeUpdate:
@@ -45,8 +45,10 @@ class TestTargetGlucoseRangeUpdate:
 
     def test_all_none_is_valid(self):
         update = TargetGlucoseRangeUpdate()
+        assert update.urgent_low is None
         assert update.low_target is None
         assert update.high_target is None
+        assert update.urgent_high is None
 
     def test_partial_update_low(self):
         update = TargetGlucoseRangeUpdate(low_target=80.0)
@@ -58,11 +60,18 @@ class TestTargetGlucoseRangeUpdate:
         assert update.high_target == 200.0
         assert update.low_target is None
 
+    def test_partial_update_urgent_low(self):
+        update = TargetGlucoseRangeUpdate(urgent_low=50.0)
+        assert update.urgent_low == 50.0
+
+    def test_partial_update_urgent_high(self):
+        update = TargetGlucoseRangeUpdate(urgent_high=300.0)
+        assert update.urgent_high == 300.0
+
     def test_low_ge_high_fails(self):
         with pytest.raises(
             ValidationError, match="low_target must be less than high_target"
         ):
-            # Both values within field ranges (40-200, 80-400) but low >= high
             TargetGlucoseRangeUpdate(low_target=150.0, high_target=100.0)
 
     def test_low_equal_high_fails(self):
@@ -71,10 +80,31 @@ class TestTargetGlucoseRangeUpdate:
         ):
             TargetGlucoseRangeUpdate(low_target=100.0, high_target=100.0)
 
+    def test_urgent_low_ge_low_target_fails(self):
+        with pytest.raises(
+            ValidationError, match="urgent_low must be less than low_target"
+        ):
+            TargetGlucoseRangeUpdate(urgent_low=60.0, low_target=50.0)
+
+    def test_high_target_ge_urgent_high_fails(self):
+        with pytest.raises(
+            ValidationError, match="high_target must be less than urgent_high"
+        ):
+            TargetGlucoseRangeUpdate(high_target=300.0, urgent_high=250.0)
+
     def test_valid_ordering_passes(self):
         update = TargetGlucoseRangeUpdate(low_target=65.0, high_target=200.0)
         assert update.low_target == 65.0
         assert update.high_target == 200.0
+
+    def test_valid_all_four_passes(self):
+        update = TargetGlucoseRangeUpdate(
+            urgent_low=50.0, low_target=65.0, high_target=200.0, urgent_high=280.0
+        )
+        assert update.urgent_low == 50.0
+        assert update.low_target == 65.0
+        assert update.high_target == 200.0
+        assert update.urgent_high == 280.0
 
     def test_low_below_range_fails(self):
         with pytest.raises(ValidationError):
@@ -92,17 +122,35 @@ class TestTargetGlucoseRangeUpdate:
         with pytest.raises(ValidationError):
             TargetGlucoseRangeUpdate(high_target=410.0)
 
+    def test_urgent_low_below_range_fails(self):
+        with pytest.raises(ValidationError):
+            TargetGlucoseRangeUpdate(urgent_low=20.0)
+
+    def test_urgent_low_above_range_fails(self):
+        with pytest.raises(ValidationError):
+            TargetGlucoseRangeUpdate(urgent_low=80.0)
+
+    def test_urgent_high_below_range_fails(self):
+        with pytest.raises(ValidationError):
+            TargetGlucoseRangeUpdate(urgent_high=150.0)
+
+    def test_urgent_high_above_range_fails(self):
+        with pytest.raises(ValidationError):
+            TargetGlucoseRangeUpdate(urgent_high=510.0)
+
 
 class TestTargetGlucoseRangeDefaults:
     """Tests for TargetGlucoseRangeDefaults schema."""
 
     def test_default_values(self):
         defaults = TargetGlucoseRangeDefaults()
+        assert defaults.urgent_low == 55.0
         assert defaults.low_target == 70.0
         assert defaults.high_target == 180.0
+        assert defaults.urgent_high == 250.0
 
 
-# ── Service tests ──
+# -- Service tests --
 
 
 class TestGetOrCreateRange:
@@ -157,8 +205,10 @@ class TestUpdateRange:
         user_id = uuid.uuid4()
         existing = MagicMock()
         existing.user_id = user_id
+        existing.urgent_low = 55.0
         existing.low_target = 70.0
         existing.high_target = 180.0
+        existing.urgent_high = 250.0
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing
@@ -178,8 +228,10 @@ class TestUpdateRange:
         user_id = uuid.uuid4()
         existing = MagicMock()
         existing.user_id = user_id
+        existing.urgent_low = 55.0
         existing.low_target = 70.0
         existing.high_target = 180.0
+        existing.urgent_high = 250.0
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing
@@ -187,11 +239,59 @@ class TestUpdateRange:
         mock_db = AsyncMock()
         mock_db.execute.return_value = mock_result
 
-        # Set low_target above existing high_target
         updates = TargetGlucoseRangeUpdate(low_target=190.0)
 
         with pytest.raises(
             ValueError, match="low_target.*must be less than.*high_target"
+        ):
+            await update_range(user_id, updates, mock_db)
+
+    @pytest.mark.asyncio
+    async def test_ordering_violation_urgent_low_ge_low(self):
+        """Should raise ValueError when urgent_low >= low_target after merge."""
+        user_id = uuid.uuid4()
+        existing = MagicMock()
+        existing.user_id = user_id
+        existing.urgent_low = 55.0
+        existing.low_target = 70.0
+        existing.high_target = 180.0
+        existing.urgent_high = 250.0
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing
+
+        mock_db = AsyncMock()
+        mock_db.execute.return_value = mock_result
+
+        updates = TargetGlucoseRangeUpdate(urgent_low=70.0)
+
+        with pytest.raises(
+            ValueError, match="urgent_low.*must be less than.*low_target"
+        ):
+            await update_range(user_id, updates, mock_db)
+
+    @pytest.mark.asyncio
+    async def test_ordering_violation_high_ge_urgent_high(self):
+        """Should raise ValueError when high_target >= urgent_high after merge."""
+        user_id = uuid.uuid4()
+        existing = MagicMock()
+        existing.user_id = user_id
+        existing.urgent_low = 55.0
+        existing.low_target = 70.0
+        existing.high_target = 280.0
+        existing.urgent_high = 300.0
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing
+
+        mock_db = AsyncMock()
+        mock_db.execute.return_value = mock_result
+
+        # Set urgent_high below existing high_target (280)
+        updates = TargetGlucoseRangeUpdate(urgent_high=250.0)
+
+        with pytest.raises(
+            ValueError, match="high_target.*must be less than.*urgent_high"
         ):
             await update_range(user_id, updates, mock_db)
 
@@ -201,8 +301,10 @@ class TestUpdateRange:
         user_id = uuid.uuid4()
         existing = MagicMock()
         existing.user_id = user_id
+        existing.urgent_low = 55.0
         existing.low_target = 70.0
         existing.high_target = 180.0
+        existing.urgent_high = 250.0
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = existing
@@ -210,10 +312,6 @@ class TestUpdateRange:
         mock_db = AsyncMock()
         mock_db.execute.return_value = mock_result
 
-        updates = TargetGlucoseRangeUpdate(high_target=80.0)
-
-        # After merge: low=70 >= high=80? No. Actually low=70 < high=80 so this passes.
-        # Let's set low to same as new high instead
         updates = TargetGlucoseRangeUpdate(low_target=180.0)
 
         with pytest.raises(
@@ -222,7 +320,7 @@ class TestUpdateRange:
             await update_range(user_id, updates, mock_db)
 
 
-# ── Endpoint tests ──
+# -- Endpoint tests --
 
 
 class TestGetTargetGlucoseRangeEndpoint:
@@ -242,8 +340,10 @@ class TestGetTargetGlucoseRangeEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
+        assert data["urgent_low"] == 55.0
         assert data["low_target"] == 70.0
         assert data["high_target"] == 180.0
+        assert data["urgent_high"] == 250.0
         assert "id" in data
         assert "updated_at" in data
 
@@ -286,7 +386,6 @@ class TestPatchTargetGlucoseRangeEndpoint:
         cookie = await register_and_login(client)
         cookies = {settings.jwt_cookie_name: cookie}
 
-        # Ensure range exists
         await client.get("/api/settings/target-glucose-range", cookies=cookies)
 
         response = await client.patch(
@@ -296,6 +395,22 @@ class TestPatchTargetGlucoseRangeEndpoint:
         )
         assert response.status_code == 422
         assert "low_target" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_urgent_low_ordering_violation_returns_422(self, client):
+        """Setting urgent_low above low_target should fail."""
+        cookie = await register_and_login(client)
+        cookies = {settings.jwt_cookie_name: cookie}
+
+        await client.get("/api/settings/target-glucose-range", cookies=cookies)
+
+        response = await client.patch(
+            "/api/settings/target-glucose-range",
+            json={"urgent_low": 70.0},
+            cookies=cookies,
+        )
+        assert response.status_code == 422
+        assert "urgent_low" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_valid_partial_update(self, client):
@@ -309,8 +424,32 @@ class TestPatchTargetGlucoseRangeEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
+        assert data["urgent_low"] == 55.0
         assert data["low_target"] == 80.0
         assert data["high_target"] == 180.0
+        assert data["urgent_high"] == 250.0
+
+    @pytest.mark.asyncio
+    async def test_update_all_four_fields(self, client):
+        cookie = await register_and_login(client)
+        cookies = {settings.jwt_cookie_name: cookie}
+
+        response = await client.patch(
+            "/api/settings/target-glucose-range",
+            json={
+                "urgent_low": 50.0,
+                "low_target": 65.0,
+                "high_target": 200.0,
+                "urgent_high": 280.0,
+            },
+            cookies=cookies,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["urgent_low"] == 50.0
+        assert data["low_target"] == 65.0
+        assert data["high_target"] == 200.0
+        assert data["urgent_high"] == 280.0
 
     @pytest.mark.asyncio
     async def test_update_both_fields(self, client):
@@ -335,7 +474,7 @@ class TestPatchTargetGlucoseRangeEndpoint:
 
         await client.patch(
             "/api/settings/target-glucose-range",
-            json={"high_target": 200.0},
+            json={"urgent_low": 45.0, "high_target": 200.0},
             cookies=cookies,
         )
 
@@ -343,6 +482,7 @@ class TestPatchTargetGlucoseRangeEndpoint:
             "/api/settings/target-glucose-range",
             cookies=cookies,
         )
+        assert response.json()["urgent_low"] == 45.0
         assert response.json()["high_target"] == 200.0
 
     @pytest.mark.asyncio
@@ -358,8 +498,10 @@ class TestPatchTargetGlucoseRangeEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
+        assert data["urgent_low"] == 55.0
         assert data["low_target"] == 70.0
         assert data["high_target"] == 180.0
+        assert data["urgent_high"] == 250.0
 
 
 class TestGetTargetGlucoseRangeDefaultsEndpoint:
@@ -370,5 +512,7 @@ class TestGetTargetGlucoseRangeDefaultsEndpoint:
         response = await client.get("/api/settings/target-glucose-range/defaults")
         assert response.status_code == 200
         data = response.json()
+        assert data["urgent_low"] == 55.0
         assert data["low_target"] == 70.0
         assert data["high_target"] == 180.0
+        assert data["urgent_high"] == 250.0

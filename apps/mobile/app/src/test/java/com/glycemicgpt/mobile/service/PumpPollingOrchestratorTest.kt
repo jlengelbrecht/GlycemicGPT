@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
@@ -64,6 +65,12 @@ class PumpPollingOrchestratorTest {
     private val syncEnqueuer = mockk<SyncQueueEnqueuer>(relaxed = true)
     private val rawHistoryLogDao = mockk<RawHistoryLogDao>(relaxed = true)
     private val wearDataSender = mockk<WearDataSender>(relaxed = true)
+    private val glucoseRangeStore = mockk<GlucoseRangeStore>(relaxed = true) {
+        every { urgentLow } returns GlucoseRangeStore.DEFAULT_URGENT_LOW
+        every { low } returns GlucoseRangeStore.DEFAULT_LOW
+        every { high } returns GlucoseRangeStore.DEFAULT_HIGH
+        every { urgentHigh } returns GlucoseRangeStore.DEFAULT_URGENT_HIGH
+    }
 
     /**
      * Time to advance past the fast loop's initial delay + stagger + margin.
@@ -87,7 +94,7 @@ class PumpPollingOrchestratorTest {
     /** Alias for tests that only need fast loop data. */
     private val SETTLE_TIME_MS = FAST_SETTLE_MS
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender, glucoseRangeStore)
 
     @Test
     fun `does not poll when disconnected`() = runTest {
@@ -292,38 +299,8 @@ class PumpPollingOrchestratorTest {
         orchestrator.stop()
     }
 
-    // Alert threshold detection (pure function tests)
-
-    @Test
-    fun `detectAlertType returns urgent_low for 55 or below`() {
-        assertEquals("urgent_low", PumpPollingOrchestrator.detectAlertType(55))
-        assertEquals("urgent_low", PumpPollingOrchestrator.detectAlertType(40))
-    }
-
-    @Test
-    fun `detectAlertType returns low for 56 to 70`() {
-        assertEquals("low", PumpPollingOrchestrator.detectAlertType(70))
-        assertEquals("low", PumpPollingOrchestrator.detectAlertType(56))
-    }
-
-    @Test
-    fun `detectAlertType returns null for in-range values`() {
-        assertNull(PumpPollingOrchestrator.detectAlertType(71))
-        assertNull(PumpPollingOrchestrator.detectAlertType(120))
-        assertNull(PumpPollingOrchestrator.detectAlertType(179))
-    }
-
-    @Test
-    fun `detectAlertType returns high for 180 to 249`() {
-        assertEquals("high", PumpPollingOrchestrator.detectAlertType(180))
-        assertEquals("high", PumpPollingOrchestrator.detectAlertType(249))
-    }
-
-    @Test
-    fun `detectAlertType returns urgent_high for 250 or above`() {
-        assertEquals("urgent_high", PumpPollingOrchestrator.detectAlertType(250))
-        assertEquals("urgent_high", PumpPollingOrchestrator.detectAlertType(400))
-    }
+    // Alert threshold detection is now an instance method using GlucoseRangeStore.
+    // We test it indirectly through watch alert sends (see below).
 
     @Test
     fun `alertLabel returns correct labels`() {

@@ -2,6 +2,8 @@ package com.glycemicgpt.mobile.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
+import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
@@ -35,6 +37,8 @@ class HomeViewModel @Inject constructor(
     private val pumpDriver: PumpDriver,
     private val repository: PumpDataRepository,
     private val backendSyncManager: BackendSyncManager,
+    private val glucoseRangeStore: GlucoseRangeStore,
+    private val api: GlycemicGptApi,
 ) : ViewModel() {
 
     val connectionState: StateFlow<ConnectionState> = pumpDriver.observeConnectionState()
@@ -56,6 +60,17 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val syncStatus: StateFlow<SyncStatus> = backendSyncManager.syncStatus
+
+    /** Dynamic glucose thresholds from backend settings (reactive). */
+    private val _glucoseThresholds = MutableStateFlow(thresholdsFromStore())
+    val glucoseThresholds: StateFlow<GlucoseThresholds> = _glucoseThresholds.asStateFlow()
+
+    init {
+        // Refresh glucose range from backend on screen load if stale (15 min)
+        if (glucoseRangeStore.isStale(maxAgeMs = RANGE_REFRESH_INTERVAL_MS)) {
+            viewModelScope.launch { refreshGlucoseRange() }
+        }
+    }
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -129,10 +144,12 @@ class HomeViewModel @Inject constructor(
      * discipline as PumpPollingOrchestrator).
      */
     fun refreshData() {
-        if (_isRefreshing.value) return
+        if (!_isRefreshing.compareAndSet(expect = false, update = true)) return
         viewModelScope.launch {
-            _isRefreshing.value = true
             try {
+                // Refresh glucose range concurrently -- don't block BLE reads
+                launch { refreshGlucoseRange() }
+
                 pumpDriver.getIoB().onSuccess { repository.saveIoB(it) }
                 delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
                 pumpDriver.getBasalRate().onSuccess { repository.saveBasal(it) }
@@ -148,5 +165,44 @@ class HomeViewModel @Inject constructor(
                 _isRefreshing.value = false
             }
         }
+    }
+
+    private fun thresholdsFromStore(): GlucoseThresholds = GlucoseThresholds(
+        urgentLow = glucoseRangeStore.urgentLow,
+        low = glucoseRangeStore.low,
+        high = glucoseRangeStore.high,
+        urgentHigh = glucoseRangeStore.urgentHigh,
+    )
+
+    private suspend fun refreshGlucoseRange() {
+        try {
+            val response = api.getGlucoseRange()
+            if (response.isSuccessful) {
+                response.body()?.let { range ->
+                    val urgentLow = range.urgentLow.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val low = range.lowTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val high = range.highTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    val urgentHigh = range.urgentHigh.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    glucoseRangeStore.updateAll(
+                        urgentLow = urgentLow,
+                        low = low,
+                        high = high,
+                        urgentHigh = urgentHigh,
+                    )
+                    _glucoseThresholds.value = thresholdsFromStore()
+                    Timber.d("Glucose range refreshed: %s", _glucoseThresholds.value)
+                }
+            } else {
+                Timber.w("Glucose range refresh failed: HTTP %d", response.code())
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to refresh glucose range")
+        }
+    }
+
+    companion object {
+        internal const val RANGE_REFRESH_INTERVAL_MS = 900_000L
+        private const val MIN_THRESHOLD = 20
+        private const val MAX_THRESHOLD = 500
     }
 }

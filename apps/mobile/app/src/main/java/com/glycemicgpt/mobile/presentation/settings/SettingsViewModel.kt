@@ -12,6 +12,7 @@ import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
@@ -89,6 +90,7 @@ class SettingsViewModel @Inject constructor(
     private val authTokenStore: AuthTokenStore,
     private val pumpCredentialStore: PumpCredentialStore,
     private val appSettingsStore: AppSettingsStore,
+    private val glucoseRangeStore: GlucoseRangeStore,
     private val api: GlycemicGptApi,
     private val deviceRepository: DeviceRepository,
     private val appUpdateChecker: AppUpdateChecker,
@@ -127,6 +129,9 @@ class SettingsViewModel @Inject constructor(
             viewModelScope.launch {
                 deviceRepository.registerDevice()
                     .onFailure { e -> Timber.w(e, "Device re-registration failed") }
+            }
+            if (glucoseRangeStore.isStale()) {
+                viewModelScope.launch { fetchGlucoseRange() }
             }
         }
         if (pumpCredentialStore.isPaired()) {
@@ -222,11 +227,12 @@ class SettingsViewModel @Inject constructor(
                         isLoggedIn = true,
                         userEmail = body.user.email,
                     )
-                    // Register device and start alert stream
+                    // Register device, fetch settings, and start alert stream
                     launch {
                         deviceRepository.registerDevice()
                             .onFailure { e -> Timber.w(e, "Device registration failed") }
                     }
+                    launch { fetchGlucoseRange() }
                     AlertStreamService.start(appContext)
                 } else {
                     _uiState.value = _uiState.value.copy(
@@ -400,6 +406,24 @@ class SettingsViewModel @Inject constructor(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:${appContext.packageName}"),
         )
+    }
+
+    private suspend fun fetchGlucoseRange() {
+        try {
+            val response = api.getGlucoseRange()
+            if (response.isSuccessful) {
+                response.body()?.let { range ->
+                    val ul = range.urgentLow.toInt()
+                    val lo = range.lowTarget.toInt()
+                    val hi = range.highTarget.toInt()
+                    val uh = range.urgentHigh.toInt()
+                    glucoseRangeStore.updateAll(ul, lo, hi, uh)
+                    Timber.d("Glucose range fetched: %d/%d/%d/%d", ul, lo, hi, uh)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to fetch glucose range settings")
+        }
     }
 
     private fun isValidUrl(url: String): Boolean {
