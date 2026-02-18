@@ -95,6 +95,30 @@ class TimeInRangeBarTest {
         assertEquals("100%", formatTirPercent(100f))
     }
 
+    // -- Dynamic target range label -------------------------------------------
+
+    @Test
+    fun `target range label uses default thresholds`() {
+        val thresholds = GlucoseThresholds()
+        val label = "Target: ${thresholds.low}-${thresholds.high} mg/dL"
+        assertEquals("Target: 70-180 mg/dL", label)
+    }
+
+    @Test
+    fun `target range label uses custom thresholds`() {
+        val thresholds = GlucoseThresholds(urgentLow = 60, low = 90, high = 230, urgentHigh = 330)
+        val label = "Target: ${thresholds.low}-${thresholds.high} mg/dL"
+        assertEquals("Target: 90-230 mg/dL", label)
+    }
+
+    @Test
+    fun `legend labels reflect custom thresholds`() {
+        val thresholds = GlucoseThresholds(urgentLow = 60, low = 90, high = 230, urgentHigh = 330)
+        assertEquals("<90", "<${thresholds.low}")
+        assertEquals("90-230", "${thresholds.low}-${thresholds.high}")
+        assertEquals(">230", ">${thresholds.high}")
+    }
+
     // -- Helper: mirrors repository logic for percentage math tests -----------
 
     private fun TimeInRangeCounts.toTimeInRange(): TimeInRangeData {

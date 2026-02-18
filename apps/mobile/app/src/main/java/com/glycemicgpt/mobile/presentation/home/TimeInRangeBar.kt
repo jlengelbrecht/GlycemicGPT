@@ -52,14 +52,18 @@ fun TimeInRangeBar(
     data: TimeInRangeData?,
     selectedPeriod: TirPeriod,
     onPeriodSelected: (TirPeriod) -> Unit,
+    thresholds: GlucoseThresholds = GlucoseThresholds(),
     modifier: Modifier = Modifier,
 ) {
     val a11yDescription = if (data != null && data.totalReadings > 0) {
         ("Time in range: %.0f%% low, %.0f%% in range, %.0f%% high, " +
+            "target %d to %d mg/dL, " +
             "based on %d readings over %s").format(
                 data.lowPercent,
                 data.inRangePercent,
                 data.highPercent,
+                thresholds.low,
+                thresholds.high,
                 data.totalReadings,
                 selectedPeriod.label,
             )
@@ -156,20 +160,22 @@ fun TimeInRangeBar(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    LegendEntry(color = TirLow, label = "Low", percent = data.lowPercent)
-                    LegendEntry(color = TirInRange, label = "In Range", percent = data.inRangePercent)
-                    LegendEntry(color = TirHigh, label = "High", percent = data.highPercent)
+                    LegendEntry(color = TirLow, label = "<${thresholds.low}", percent = data.lowPercent)
+                    LegendEntry(color = TirInRange, label = "${thresholds.low}-${thresholds.high}", percent = data.inRangePercent)
+                    LegendEntry(color = TirHigh, label = ">${thresholds.high}", percent = data.highPercent)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Target range
                 Text(
-                    text = "Target: 70-180 mg/dL",
+                    text = "Target: ${thresholds.low}-${thresholds.high} mg/dL",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("tir_target_range"),
                 )
             }
         }

@@ -158,8 +158,8 @@ class PumpDataRepository @Inject constructor(
 
     // -- Time in Range --------------------------------------------------------
 
-    fun observeTimeInRange(since: Instant): Flow<TimeInRangeData> =
-        pumpDao.observeTimeInRangeCounts(since.toEpochMilli()).map { it.toTimeInRange() }
+    fun observeTimeInRange(since: Instant, low: Int, high: Int): Flow<TimeInRangeData> =
+        pumpDao.observeTimeInRangeCounts(since.toEpochMilli(), low, high).map { it.toTimeInRange() }
 
     // -- Cleanup --------------------------------------------------------------
 

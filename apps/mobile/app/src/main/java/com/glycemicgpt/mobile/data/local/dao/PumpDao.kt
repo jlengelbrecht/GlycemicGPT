@@ -109,14 +109,14 @@ interface PumpDao {
         """
         SELECT
             COUNT(*) AS total,
-            SUM(CASE WHEN glucoseMgDl < 70 THEN 1 ELSE 0 END) AS lowCount,
-            SUM(CASE WHEN glucoseMgDl >= 70 AND glucoseMgDl <= 180 THEN 1 ELSE 0 END) AS inRangeCount,
-            SUM(CASE WHEN glucoseMgDl > 180 THEN 1 ELSE 0 END) AS highCount
+            SUM(CASE WHEN glucoseMgDl < :low THEN 1 ELSE 0 END) AS lowCount,
+            SUM(CASE WHEN glucoseMgDl >= :low AND glucoseMgDl <= :high THEN 1 ELSE 0 END) AS inRangeCount,
+            SUM(CASE WHEN glucoseMgDl > :high THEN 1 ELSE 0 END) AS highCount
         FROM cgm_readings
         WHERE timestampMs >= :sinceMs
         """,
     )
-    fun observeTimeInRangeCounts(sinceMs: Long): Flow<TimeInRangeCounts>
+    fun observeTimeInRangeCounts(sinceMs: Long, low: Int, high: Int): Flow<TimeInRangeCounts>
 
     // -- Transactional cleanup ------------------------------------------------
 
