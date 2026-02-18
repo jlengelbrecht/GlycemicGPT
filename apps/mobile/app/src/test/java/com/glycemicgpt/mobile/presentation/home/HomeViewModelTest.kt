@@ -250,7 +250,7 @@ class HomeViewModelTest {
             highPercent = 15f,
             totalReadings = 200,
         )
-        every { repository.observeTimeInRange(any()) } returns flowOf(tirData)
+        every { repository.observeTimeInRange(any(), any(), any()) } returns flowOf(tirData)
 
         val vm = createViewModel()
 
@@ -264,6 +264,49 @@ class HomeViewModelTest {
         assertNotNull(result)
         assertEquals(80f, result!!.inRangePercent, 0.001f)
         assertEquals(200, result.totalReadings)
+
+        job.cancel()
+    }
+
+    @Test
+    fun `timeInRange recomputes when glucose thresholds change`() = runTest {
+        val tirData = TimeInRangeData(
+            lowPercent = 10f,
+            inRangePercent = 60f,
+            highPercent = 30f,
+            totalReadings = 100,
+        )
+        every { repository.observeTimeInRange(any(), any(), any()) } returns flowOf(tirData)
+
+        // Start with defaults (low=70, high=180)
+        val vm = createViewModel()
+
+        val job = backgroundScope.launch(testDispatcher) {
+            vm.timeInRange.collect {}
+        }
+        advanceUntilIdle()
+
+        // Verify initial subscription uses default thresholds
+        verify { repository.observeTimeInRange(any(), eq(GlucoseRangeStore.DEFAULT_LOW), eq(GlucoseRangeStore.DEFAULT_HIGH)) }
+
+        // Now simulate backend returning new thresholds via refreshData
+        val rangeResponse = GlucoseRangeResponse(
+            urgentLow = 60f,
+            lowTarget = 90f,
+            highTarget = 230f,
+            urgentHigh = 330f,
+        )
+        coEvery { api.getGlucoseRange() } returns Response.success(rangeResponse)
+        every { glucoseRangeStore.urgentLow } returns 60
+        every { glucoseRangeStore.low } returns 90
+        every { glucoseRangeStore.high } returns 230
+        every { glucoseRangeStore.urgentHigh } returns 330
+
+        vm.refreshData()
+        advanceUntilIdle()
+
+        // After threshold update, observeTimeInRange should be re-called with new low/high
+        verify { repository.observeTimeInRange(any(), eq(90), eq(230)) }
 
         job.cancel()
     }
@@ -310,6 +353,28 @@ class HomeViewModelTest {
         assertEquals(GlucoseRangeStore.DEFAULT_HIGH, t.high)
         assertEquals(GlucoseRangeStore.DEFAULT_URGENT_HIGH, t.urgentHigh)
         assertFalse(vm.isRefreshing.value)
+    }
+
+    @Test
+    fun `refreshGlucoseRange rejects inverted thresholds`() = runTest {
+        val rangeResponse = GlucoseRangeResponse(
+            urgentLow = 55f,
+            lowTarget = 200f,
+            highTarget = 80f,
+            urgentHigh = 300f,
+        )
+        coEvery { api.getGlucoseRange() } returns Response.success(rangeResponse)
+
+        val vm = createViewModel()
+        vm.refreshData()
+        advanceUntilIdle()
+
+        // Store should NOT be updated because low >= high
+        verify(exactly = 0) { glucoseRangeStore.updateAll(any(), any(), any(), any()) }
+        // Thresholds should remain at defaults
+        val t = vm.glucoseThresholds.value
+        assertEquals(GlucoseRangeStore.DEFAULT_LOW, t.low)
+        assertEquals(GlucoseRangeStore.DEFAULT_HIGH, t.high)
     }
 
     @Test

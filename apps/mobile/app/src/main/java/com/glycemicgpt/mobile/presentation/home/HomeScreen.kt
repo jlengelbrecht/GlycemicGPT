@@ -112,6 +112,7 @@ fun HomeScreen(
                 data = timeInRange,
                 selectedPeriod = selectedTirPeriod,
                 onPeriodSelected = { viewModel.onTirPeriodSelected(it) },
+                thresholds = thresholds,
             )
 
             Spacer(modifier = Modifier.height(24.dp))

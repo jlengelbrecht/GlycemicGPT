@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -125,12 +126,15 @@ class HomeViewModel @Inject constructor(
     private val _selectedTirPeriod = MutableStateFlow(TirPeriod.TWENTY_FOUR_HOURS)
     val selectedTirPeriod: StateFlow<TirPeriod> = _selectedTirPeriod.asStateFlow()
 
-    val timeInRange: StateFlow<TimeInRangeData?> = _selectedTirPeriod
-        .flatMapLatest { period ->
+    val timeInRange: StateFlow<TimeInRangeData?> = combine(
+        _selectedTirPeriod,
+        _glucoseThresholds,
+    ) { period, thresholds -> Pair(period, thresholds) }
+        .flatMapLatest { (period, thresholds) ->
             val since = Instant.ofEpochMilli(
                 System.currentTimeMillis() - period.hours * 3600_000L,
             )
-            repository.observeTimeInRange(since)
+            repository.observeTimeInRange(since, thresholds.low, thresholds.high)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -183,14 +187,21 @@ class HomeViewModel @Inject constructor(
                     val low = range.lowTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
                     val high = range.highTarget.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
                     val urgentHigh = range.urgentHigh.toInt().coerceIn(MIN_THRESHOLD, MAX_THRESHOLD)
+                    if (low >= high) {
+                        Timber.w("Invalid glucose range: low=%d >= high=%d, skipping update", low, high)
+                        return
+                    }
                     glucoseRangeStore.updateAll(
                         urgentLow = urgentLow,
                         low = low,
                         high = high,
                         urgentHigh = urgentHigh,
                     )
-                    _glucoseThresholds.value = thresholdsFromStore()
-                    Timber.d("Glucose range refreshed: %s", _glucoseThresholds.value)
+                    val newThresholds = thresholdsFromStore()
+                    if (newThresholds != _glucoseThresholds.value) {
+                        _glucoseThresholds.value = newThresholds
+                        Timber.d("Glucose range updated: %s", newThresholds)
+                    }
                 }
             } else {
                 Timber.w("Glucose range refresh failed: HTTP %d", response.code())

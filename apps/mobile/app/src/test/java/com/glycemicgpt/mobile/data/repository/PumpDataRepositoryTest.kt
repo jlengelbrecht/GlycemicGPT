@@ -235,9 +235,9 @@ class PumpDataRepositoryTest {
     @Test
     fun `observeTimeInRange maps counts to percentages`() = runTest {
         val counts = TimeInRangeCounts(total = 100, lowCount = 10, inRangeCount = 70, highCount = 20)
-        coEvery { pumpDao.observeTimeInRangeCounts(any()) } returns flowOf(counts)
+        coEvery { pumpDao.observeTimeInRangeCounts(any(), any(), any()) } returns flowOf(counts)
 
-        val result = repository.observeTimeInRange(Instant.now()).first()
+        val result = repository.observeTimeInRange(Instant.now(), 70, 180).first()
         assertEquals(10f, result.lowPercent, 0.001f)
         assertEquals(70f, result.inRangePercent, 0.001f)
         assertEquals(20f, result.highPercent, 0.001f)
@@ -247,13 +247,26 @@ class PumpDataRepositoryTest {
     @Test
     fun `observeTimeInRange returns zeros when no readings`() = runTest {
         val counts = TimeInRangeCounts(total = 0, lowCount = 0, inRangeCount = 0, highCount = 0)
-        coEvery { pumpDao.observeTimeInRangeCounts(any()) } returns flowOf(counts)
+        coEvery { pumpDao.observeTimeInRangeCounts(any(), any(), any()) } returns flowOf(counts)
 
-        val result = repository.observeTimeInRange(Instant.now()).first()
+        val result = repository.observeTimeInRange(Instant.now(), 70, 180).first()
         assertEquals(0f, result.lowPercent, 0.001f)
         assertEquals(0f, result.inRangePercent, 0.001f)
         assertEquals(0f, result.highPercent, 0.001f)
         assertEquals(0, result.totalReadings)
+    }
+
+    @Test
+    fun `observeTimeInRange forwards threshold params to DAO`() = runTest {
+        val counts = TimeInRangeCounts(total = 50, lowCount = 5, inRangeCount = 40, highCount = 5)
+        val lowSlot = slot<Int>()
+        val highSlot = slot<Int>()
+        coEvery { pumpDao.observeTimeInRangeCounts(any(), capture(lowSlot), capture(highSlot)) } returns flowOf(counts)
+
+        repository.observeTimeInRange(Instant.now(), 90, 230).first()
+
+        assertEquals(90, lowSlot.captured)
+        assertEquals(230, highSlot.captured)
     }
 
     // -- Cleanup --------------------------------------------------------------
