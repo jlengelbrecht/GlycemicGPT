@@ -27,6 +27,9 @@ interface PumpDao {
     @Query("SELECT * FROM iob_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC")
     suspend fun getIoBSince(sinceMs: Long): List<IoBReadingEntity>
 
+    @Query("SELECT * FROM iob_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeIoBHistory(sinceMs: Long, limit: Int = 2000): Flow<List<IoBReadingEntity>>
+
     @Query("DELETE FROM iob_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteIoBBefore(beforeMs: Long): Int
 
@@ -87,6 +90,9 @@ interface PumpDao {
 
     @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestCgm(): Flow<CgmReadingEntity?>
+
+    @Query("SELECT * FROM cgm_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeCgmHistory(sinceMs: Long, limit: Int = 2000): Flow<List<CgmReadingEntity>>
 
     @Query("DELETE FROM cgm_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteCgmBefore(beforeMs: Long): Int
