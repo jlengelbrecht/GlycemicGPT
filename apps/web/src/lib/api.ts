@@ -1307,19 +1307,25 @@ export async function getCaregiverGlucoseHistory(
  */
 export interface TargetGlucoseRangeResponse {
   id: string;
+  urgent_low: number;
   low_target: number;
   high_target: number;
+  urgent_high: number;
   updated_at: string;
 }
 
 export interface TargetGlucoseRangeUpdate {
+  urgent_low?: number;
   low_target?: number;
   high_target?: number;
+  urgent_high?: number;
 }
 
 export interface TargetGlucoseRangeDefaults {
+  urgent_low: number;
   low_target: number;
   high_target: number;
+  urgent_high: number;
 }
 
 /**

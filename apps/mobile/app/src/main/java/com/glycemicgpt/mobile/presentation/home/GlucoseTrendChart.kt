@@ -73,6 +73,7 @@ fun GlucoseTrendChart(
     bolusEvents: List<BolusEvent>,
     selectedPeriod: ChartPeriod,
     onPeriodSelected: (ChartPeriod) -> Unit,
+    thresholds: GlucoseThresholds = GlucoseThresholds(),
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -159,6 +160,7 @@ fun GlucoseTrendChart(
                         axisLabelColor = axisLabelColor,
                         gridColor = gridColor,
                         iobColor = iobColor,
+                        thresholds = thresholds,
                     )
                 }
 
@@ -238,6 +240,7 @@ private fun DrawScope.drawGlucoseChart(
     axisLabelColor: Color,
     gridColor: Color,
     iobColor: Color,
+    thresholds: GlucoseThresholds = GlucoseThresholds(),
 ) {
     val leftPadding = 36.dp.toPx()
     val bottomPadding = 24.dp.toPx()
@@ -257,17 +260,17 @@ private fun DrawScope.drawGlucoseChart(
     val xMin = nowMs - periodMs
     val xMax = nowMs
 
-    // Target range band (70-180 mg/dL)
-    val bandTopY = topPadding + chartHeight * (1f - (GlucoseThresholds.HIGH - yMin) / yRange)
-    val bandBottomY = topPadding + chartHeight * (1f - (GlucoseThresholds.LOW - yMin) / yRange)
+    // Target range band (dynamic thresholds)
+    val bandTopY = topPadding + chartHeight * (1f - (thresholds.high - yMin) / yRange)
+    val bandBottomY = topPadding + chartHeight * (1f - (thresholds.low - yMin) / yRange)
     drawRect(
         color = GlucoseColors.InRange.copy(alpha = 0.08f),
         topLeft = Offset(leftPadding, bandTopY),
         size = Size(chartWidth, bandBottomY - bandTopY),
     )
 
-    // Grid lines
-    val gridValues = listOf(70f, 180f, 250f)
+    // Grid lines at threshold boundaries
+    val gridValues = listOf(thresholds.low.toFloat(), thresholds.high.toFloat(), thresholds.urgentHigh.toFloat())
     val dashedEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
     for (value in gridValues) {
         val y = topPadding + chartHeight * (1f - (value - yMin) / yRange)
@@ -281,7 +284,7 @@ private fun DrawScope.drawGlucoseChart(
     }
 
     // Y-axis labels (left: glucose)
-    val yLabelValues = listOf(70, 180, 250)
+    val yLabelValues = listOf(thresholds.low, thresholds.high, thresholds.urgentHigh)
     val labelStyle = TextStyle(fontSize = 10.sp, color = axisLabelColor)
     for (value in yLabelValues) {
         val y = topPadding + chartHeight * (1f - (value - yMin) / yRange)
@@ -366,7 +369,7 @@ private fun DrawScope.drawGlucoseChart(
         val x = leftPadding + chartWidth * (ts - xMin).toFloat() / (xMax - xMin).toFloat()
         val clampedValue = reading.glucoseMgDl.coerceIn(yMin.toInt(), yMax.toInt())
         val y = topPadding + chartHeight * (1f - (clampedValue - yMin) / yRange)
-        val color = glucoseColor(reading.glucoseMgDl)
+        val color = glucoseColor(reading.glucoseMgDl, thresholds)
 
         drawCircle(
             color = color,

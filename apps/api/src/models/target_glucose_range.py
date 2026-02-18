@@ -35,6 +35,12 @@ class TargetGlucoseRange(Base, TimestampMixin):
         index=True,
     )
 
+    urgent_low: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=55.0,
+    )
+
     low_target: Mapped[float] = mapped_column(
         Float,
         nullable=False,
@@ -47,10 +53,18 @@ class TargetGlucoseRange(Base, TimestampMixin):
         default=180.0,
     )
 
+    urgent_high: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=250.0,
+    )
+
     user = relationship("User", back_populates="target_glucose_range")
 
     def __repr__(self) -> str:
         return (
             f"<TargetGlucoseRange(user_id={self.user_id}, "
-            f"range={self.low_target}-{self.high_target})>"
+            f"urgent_low={self.urgent_low}, "
+            f"range={self.low_target}-{self.high_target}, "
+            f"urgent_high={self.urgent_high})>"
         )

@@ -69,6 +69,7 @@ fun HomeScreen(
     val iobHistory by viewModel.iobHistory.collectAsState()
     val basalHistory by viewModel.basalHistory.collectAsState()
     val bolusHistory by viewModel.bolusHistory.collectAsState()
+    val thresholds = viewModel.glucoseThresholds
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -94,6 +95,7 @@ fun HomeScreen(
                 cgm = cgm,
                 iob = iob,
                 basalRate = basalRate,
+                thresholds = thresholds,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -106,6 +108,7 @@ fun HomeScreen(
                 bolusEvents = bolusHistory,
                 selectedPeriod = selectedPeriod,
                 onPeriodSelected = { viewModel.onPeriodSelected(it) },
+                thresholds = thresholds,
             )
 
             Spacer(modifier = Modifier.height(12.dp))

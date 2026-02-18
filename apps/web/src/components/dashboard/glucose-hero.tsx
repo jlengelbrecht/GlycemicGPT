@@ -31,7 +31,7 @@ export type GlucoseRange =
   | "high"
   | "urgentHigh";
 
-/** Glucose range thresholds in mg/dL */
+/** Default glucose range thresholds in mg/dL */
 export const GLUCOSE_THRESHOLDS = {
   URGENT_LOW: 55,
   LOW: 70,
@@ -56,18 +56,35 @@ export interface GlucoseHeroProps {
   isStale?: boolean;
   /** Whether data is currently loading */
   isLoading?: boolean;
+  /** Dynamic glucose thresholds from user settings */
+  thresholds?: {
+    urgentLow: number;
+    low: number;
+    high: number;
+    urgentHigh: number;
+  };
 }
 
 
 /**
  * Classify glucose value into range category.
+ * Accepts optional dynamic thresholds; falls back to GLUCOSE_THRESHOLDS.
  */
-export function classifyGlucose(value: number | null): GlucoseRange {
+export function classifyGlucose(
+  value: number | null,
+  thresholds?: { urgentLow: number; low: number; high: number; urgentHigh: number }
+): GlucoseRange {
   if (value === null) return "inRange";
-  if (value < GLUCOSE_THRESHOLDS.URGENT_LOW) return "urgentLow";
-  if (value < GLUCOSE_THRESHOLDS.LOW) return "low";
-  if (value <= GLUCOSE_THRESHOLDS.HIGH) return "inRange";
-  if (value <= GLUCOSE_THRESHOLDS.URGENT_HIGH) return "high";
+  const t = thresholds ?? {
+    urgentLow: GLUCOSE_THRESHOLDS.URGENT_LOW,
+    low: GLUCOSE_THRESHOLDS.LOW,
+    high: GLUCOSE_THRESHOLDS.HIGH,
+    urgentHigh: GLUCOSE_THRESHOLDS.URGENT_HIGH,
+  };
+  if (value < t.urgentLow) return "urgentLow";
+  if (value < t.low) return "low";
+  if (value <= t.high) return "inRange";
+  if (value <= t.urgentHigh) return "high";
   return "urgentHigh";
 }
 
@@ -181,6 +198,7 @@ export function GlucoseHero({
   minutesAgo,
   isStale = false,
   isLoading = false,
+  thresholds,
 }: GlucoseHeroProps) {
   // Use Framer Motion's hook for SSR-safe reduced motion detection
   const prefersReducedMotion = useReducedMotion();
@@ -211,7 +229,7 @@ export function GlucoseHero({
   const safeIob = sanitizeValue(iob, true); // IoB can be negative (rare but possible)
   const safeCob = sanitizeValue(cob);
 
-  const range = classifyGlucose(safeValue);
+  const range = classifyGlucose(safeValue, thresholds);
   const colors = rangeColors[range];
   const pulseType = shouldPulse(range);
   const arrow = TREND_ARROWS[trend];

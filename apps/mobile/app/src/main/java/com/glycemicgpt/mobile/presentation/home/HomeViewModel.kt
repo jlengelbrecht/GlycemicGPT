@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.presentation.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
@@ -34,6 +35,7 @@ class HomeViewModel @Inject constructor(
     private val pumpDriver: PumpDriver,
     private val repository: PumpDataRepository,
     private val backendSyncManager: BackendSyncManager,
+    private val glucoseRangeStore: GlucoseRangeStore,
 ) : ViewModel() {
 
     val connectionState: StateFlow<ConnectionState> = pumpDriver.observeConnectionState()
@@ -55,6 +57,15 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val syncStatus: StateFlow<SyncStatus> = backendSyncManager.syncStatus
+
+    /** Dynamic glucose thresholds from backend settings (cached locally). */
+    val glucoseThresholds: GlucoseThresholds
+        get() = GlucoseThresholds(
+            urgentLow = glucoseRangeStore.urgentLow,
+            low = glucoseRangeStore.low,
+            high = glucoseRangeStore.high,
+            urgentHigh = glucoseRangeStore.urgentHigh,
+        )
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
