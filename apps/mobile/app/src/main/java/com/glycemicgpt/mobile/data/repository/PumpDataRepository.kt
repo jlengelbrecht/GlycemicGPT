@@ -74,6 +74,11 @@ class PumpDataRepository @Inject constructor(
     fun observeLatestBasal(): Flow<BasalReading?> =
         pumpDao.observeLatestBasal().map { it?.toDomain() }
 
+    fun observeBasalHistory(since: Instant): Flow<List<BasalReading>> =
+        pumpDao.observeBasalHistory(since.toEpochMilli()).map { entities ->
+            entities.map { it.toDomain() }
+        }
+
     // -- Bolus ----------------------------------------------------------------
 
     suspend fun saveBoluses(events: List<BolusEvent>) {
@@ -89,6 +94,11 @@ class PumpDataRepository @Inject constructor(
             },
         )
     }
+
+    fun observeBolusHistory(since: Instant): Flow<List<BolusEvent>> =
+        pumpDao.observeBolusHistory(since.toEpochMilli()).map { entities ->
+            entities.map { it.toDomain() }
+        }
 
     suspend fun getLatestBolusTimestamp(): Instant? {
         val ms = pumpDao.getLatestBolusTimestamp() ?: return null
@@ -186,6 +196,13 @@ private fun BatteryReadingEntity.toDomain() = BatteryStatus(
 
 private fun ReservoirReadingEntity.toDomain() = ReservoirReading(
     unitsRemaining = unitsRemaining,
+    timestamp = Instant.ofEpochMilli(timestampMs),
+)
+
+private fun BolusEventEntity.toDomain() = BolusEvent(
+    units = units,
+    isAutomated = isAutomated,
+    isCorrection = isCorrection,
     timestamp = Instant.ofEpochMilli(timestampMs),
 )
 

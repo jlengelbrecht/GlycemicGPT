@@ -67,6 +67,8 @@ fun HomeScreen(
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
     val cgmHistory by viewModel.cgmHistory.collectAsState()
     val iobHistory by viewModel.iobHistory.collectAsState()
+    val basalHistory by viewModel.basalHistory.collectAsState()
+    val bolusHistory by viewModel.bolusHistory.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -96,10 +98,12 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Glucose trend chart with IoB overlay
+            // Glucose trend chart with IoB, basal, and bolus overlays
             GlucoseTrendChart(
                 readings = cgmHistory,
                 iobReadings = iobHistory,
+                basalReadings = basalHistory,
+                bolusEvents = bolusHistory,
                 selectedPeriod = selectedPeriod,
                 onPeriodSelected = { viewModel.onPeriodSelected(it) },
             )

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
+import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -78,6 +79,24 @@ class HomeViewModel @Inject constructor(
                 System.currentTimeMillis() - period.hours * 3600_000L,
             )
             repository.observeIoBHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val basalHistory: StateFlow<List<BasalReading>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeBasalHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val bolusHistory: StateFlow<List<BolusEvent>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeBolusHistory(since)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
