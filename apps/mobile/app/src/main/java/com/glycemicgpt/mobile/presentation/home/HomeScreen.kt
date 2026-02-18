@@ -69,7 +69,7 @@ fun HomeScreen(
     val iobHistory by viewModel.iobHistory.collectAsState()
     val basalHistory by viewModel.basalHistory.collectAsState()
     val bolusHistory by viewModel.bolusHistory.collectAsState()
-    val thresholds = viewModel.glucoseThresholds
+    val thresholds by viewModel.glucoseThresholds.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,

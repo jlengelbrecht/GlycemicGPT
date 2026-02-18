@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.presentation.home
 
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
+import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
@@ -89,7 +90,10 @@ class HomeViewModelTest {
         every { low } returns GlucoseRangeStore.DEFAULT_LOW
         every { high } returns GlucoseRangeStore.DEFAULT_HIGH
         every { urgentHigh } returns GlucoseRangeStore.DEFAULT_URGENT_HIGH
+        every { isStale(any()) } returns false
     }
+
+    private val api = mockk<GlycemicGptApi>(relaxed = true)
 
     @Before
     fun setUp() {
@@ -101,7 +105,7 @@ class HomeViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel() = HomeViewModel(pumpDriver, repository, backendSyncManager, glucoseRangeStore)
+    private fun createViewModel() = HomeViewModel(pumpDriver, repository, backendSyncManager, glucoseRangeStore, api)
 
     @Test
     fun `initial state has null readings and not refreshing`() = runTest {
@@ -190,7 +194,7 @@ class HomeViewModelTest {
         every { glucoseRangeStore.high } returns 200
         every { glucoseRangeStore.urgentHigh } returns 280
         val vm = createViewModel()
-        val t = vm.glucoseThresholds
+        val t = vm.glucoseThresholds.value
         assertEquals(50, t.urgentLow)
         assertEquals(65, t.low)
         assertEquals(200, t.high)

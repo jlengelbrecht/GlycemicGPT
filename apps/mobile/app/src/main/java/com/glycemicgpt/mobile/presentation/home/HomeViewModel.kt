@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.presentation.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
+import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
@@ -36,6 +37,7 @@ class HomeViewModel @Inject constructor(
     private val repository: PumpDataRepository,
     private val backendSyncManager: BackendSyncManager,
     private val glucoseRangeStore: GlucoseRangeStore,
+    private val api: GlycemicGptApi,
 ) : ViewModel() {
 
     val connectionState: StateFlow<ConnectionState> = pumpDriver.observeConnectionState()
@@ -58,14 +60,16 @@ class HomeViewModel @Inject constructor(
 
     val syncStatus: StateFlow<SyncStatus> = backendSyncManager.syncStatus
 
-    /** Dynamic glucose thresholds from backend settings (cached locally). */
-    val glucoseThresholds: GlucoseThresholds
-        get() = GlucoseThresholds(
-            urgentLow = glucoseRangeStore.urgentLow,
-            low = glucoseRangeStore.low,
-            high = glucoseRangeStore.high,
-            urgentHigh = glucoseRangeStore.urgentHigh,
-        )
+    /** Dynamic glucose thresholds from backend settings (reactive). */
+    private val _glucoseThresholds = MutableStateFlow(thresholdsFromStore())
+    val glucoseThresholds: StateFlow<GlucoseThresholds> = _glucoseThresholds.asStateFlow()
+
+    init {
+        // Refresh glucose range from backend on screen load if stale (15 min)
+        if (glucoseRangeStore.isStale(maxAgeMs = RANGE_REFRESH_INTERVAL_MS)) {
+            viewModelScope.launch { refreshGlucoseRange() }
+        }
+    }
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
@@ -125,6 +129,9 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
+                // Refresh glucose range from backend on every pull-to-refresh
+                refreshGlucoseRange()
+
                 pumpDriver.getIoB().onSuccess { repository.saveIoB(it) }
                 delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
                 pumpDriver.getBasalRate().onSuccess { repository.saveBasal(it) }
@@ -140,5 +147,37 @@ class HomeViewModel @Inject constructor(
                 _isRefreshing.value = false
             }
         }
+    }
+
+    private fun thresholdsFromStore(): GlucoseThresholds = GlucoseThresholds(
+        urgentLow = glucoseRangeStore.urgentLow,
+        low = glucoseRangeStore.low,
+        high = glucoseRangeStore.high,
+        urgentHigh = glucoseRangeStore.urgentHigh,
+    )
+
+    private suspend fun refreshGlucoseRange() {
+        try {
+            val response = api.getGlucoseRange()
+            if (response.isSuccessful) {
+                response.body()?.let { range ->
+                    glucoseRangeStore.updateAll(
+                        urgentLow = range.urgentLow.toInt(),
+                        low = range.lowTarget.toInt(),
+                        high = range.highTarget.toInt(),
+                        urgentHigh = range.urgentHigh.toInt(),
+                    )
+                    _glucoseThresholds.value = thresholdsFromStore()
+                    Timber.d("Glucose range refreshed: %s", _glucoseThresholds.value)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to refresh glucose range")
+        }
+    }
+
+    companion object {
+        /** Refresh glucose range from backend every 15 minutes. */
+        const val RANGE_REFRESH_INTERVAL_MS = 900_000L
     }
 }
