@@ -387,7 +387,7 @@ private fun DrawScope.drawBasalOverlay(
 ) {
     if (basalReadings.isEmpty()) return
 
-    val maxRate = basalReadings.maxOf { it.rate }.coerceIn(0.1f, 5.0f)
+    val maxRate = basalReadings.maxOf { it.rate }.coerceIn(0.1f, 15.0f)
     // Basal uses the bottom 25% of chart height
     val basalHeight = chartHeight * 0.25f
     val basalBottom = topPadding + chartHeight
