@@ -63,6 +63,7 @@ fun HomeScreen(
     val bolusHistory by viewModel.bolusHistory.collectAsState()
     val selectedTirPeriod by viewModel.selectedTirPeriod.collectAsState()
     val timeInRange by viewModel.timeInRange.collectAsState()
+    val thresholds by viewModel.glucoseThresholds.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -88,6 +89,7 @@ fun HomeScreen(
                 basalRate = basalRate,
                 battery = battery,
                 reservoir = reservoir,
+                thresholds = thresholds,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -100,6 +102,7 @@ fun HomeScreen(
                 bolusEvents = bolusHistory,
                 selectedPeriod = selectedPeriod,
                 onPeriodSelected = { viewModel.onPeriodSelected(it) },
+                thresholds = thresholds,
             )
 
             Spacer(modifier = Modifier.height(12.dp))

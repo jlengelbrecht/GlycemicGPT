@@ -1,4 +1,4 @@
-"""Story 9.1: Target glucose range service.
+"""Target glucose range service.
 
 Manages user target glucose range configuration with get-or-create pattern.
 """
@@ -64,7 +64,8 @@ async def update_range(
     """Update the user's target glucose range.
 
     Only fields provided in the request are updated. Validates
-    that low_target < high_target against both new and existing values.
+    ordering: urgent_low < low_target < high_target < urgent_high
+    against both new and existing values.
 
     Args:
         user_id: User's UUID.
@@ -79,6 +80,11 @@ async def update_range(
     """
     target_range = await get_or_create_range(user_id, db)
 
+    new_urgent_low = (
+        updates.urgent_low
+        if updates.urgent_low is not None
+        else target_range.urgent_low
+    )
     new_low = (
         updates.low_target
         if updates.low_target is not None
@@ -89,16 +95,29 @@ async def update_range(
         if updates.high_target is not None
         else target_range.high_target
     )
+    new_urgent_high = (
+        updates.urgent_high
+        if updates.urgent_high is not None
+        else target_range.urgent_high
+    )
 
-    if new_low >= new_high:
-        msg = f"low_target ({new_low}) must be less than high_target ({new_high})"
-        logger.warning(
-            "Target glucose range validation failed",
-            user_id=str(user_id),
-            low_target=new_low,
-            high_target=new_high,
-        )
-        raise ValueError(msg)
+    thresholds = [
+        (new_urgent_low, new_low, "urgent_low", "low_target"),
+        (new_low, new_high, "low_target", "high_target"),
+        (new_high, new_urgent_high, "high_target", "urgent_high"),
+    ]
+    for lower_val, upper_val, lower_name, upper_name in thresholds:
+        if lower_val >= upper_val:
+            msg = (
+                f"{lower_name} ({lower_val}) must be less than "
+                f"{upper_name} ({upper_val})"
+            )
+            logger.warning(
+                "Target glucose range validation failed",
+                user_id=str(user_id),
+                **{lower_name: lower_val, upper_name: upper_val},
+            )
+            raise ValueError(msg)
 
     update_data = updates.model_dump(exclude_none=True)
     for field, value in update_data.items():

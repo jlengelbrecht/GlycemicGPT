@@ -7,6 +7,7 @@ import com.glycemicgpt.mobile.data.remote.dto.ChatRequest
 import com.glycemicgpt.mobile.data.remote.dto.ChatResponse
 import com.glycemicgpt.mobile.data.remote.dto.DeviceRegistrationRequest
 import com.glycemicgpt.mobile.data.remote.dto.DeviceRegistrationResponse
+import com.glycemicgpt.mobile.data.remote.dto.GlucoseRangeResponse
 import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
@@ -56,4 +57,8 @@ interface GlycemicGptApi {
 
     @POST("/api/v1/alerts/{alertId}/acknowledge")
     suspend fun acknowledgeAlert(@Path("alertId") alertId: String): Response<AcknowledgeResponse>
+
+    // Glucose range settings
+    @GET("/api/settings/target-glucose-range")
+    suspend fun getGlucoseRange(): Response<GlucoseRangeResponse>
 }

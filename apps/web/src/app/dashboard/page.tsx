@@ -17,7 +17,7 @@
  * - Logical tab order
  */
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Activity, Clock } from "lucide-react";
 
@@ -29,8 +29,8 @@ import {
 } from "@/components/dashboard";
 import { PERIOD_LABELS } from "@/components/dashboard/time-in-range-bar";
 import { useGlucoseStreamContext, useUserContext } from "@/providers";
-import { getTargetGlucoseRange } from "@/lib/api";
 import { useTimeInRangeStats } from "@/hooks/use-time-in-range-stats";
+import { useGlucoseRange } from "@/hooks/use-glucose-range";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -59,23 +59,9 @@ export default function DashboardPage() {
     }
   }, [glucose?.reading_timestamp]);
 
-  // Story 9.1: Fetch user's target glucose range
-  const [targetRange, setTargetRange] = useState("70-180 mg/dL");
-
-  const fetchTargetRange = useCallback(async () => {
-    try {
-      const data = await getTargetGlucoseRange();
-      setTargetRange(`${data.low_target}-${data.high_target} mg/dL`);
-    } catch {
-      // Keep default on error
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user && user.role !== "caregiver") {
-      fetchTargetRange();
-    }
-  }, [user, fetchTargetRange]);
+  // Fetch user's configured glucose range thresholds
+  const glucoseThresholds = useGlucoseRange();
+  const targetRange = `${glucoseThresholds.low}-${glucoseThresholds.high} mg/dL`;
 
   // Redirect caregivers to the caregiver-specific dashboard (Story 8.3)
   useEffect(() => {
@@ -144,10 +130,11 @@ export default function DashboardPage() {
         iob={iob}
         cob={cob}
         isLoading={!isLive && !glucose}
+        thresholds={glucoseThresholds}
       />
 
       {/* Glucose trend chart */}
-      <GlucoseTrendChart refreshKey={chartRefreshKey} />
+      <GlucoseTrendChart refreshKey={chartRefreshKey} thresholds={glucoseThresholds} />
 
       {/* Metrics grid with proper heading hierarchy */}
       <section aria-labelledby="metrics-heading">

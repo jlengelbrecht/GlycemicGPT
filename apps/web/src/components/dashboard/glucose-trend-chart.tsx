@@ -29,11 +29,20 @@ import {
 
 // --- Color mapping by glucose classification ---
 
-export function getPointColor(value: number): string {
-  if (value < GLUCOSE_THRESHOLDS.URGENT_LOW) return "#dc2626"; // red-600
-  if (value < GLUCOSE_THRESHOLDS.LOW) return "#f59e0b"; // amber-500
-  if (value <= GLUCOSE_THRESHOLDS.HIGH) return "#22c55e"; // green-500
-  if (value <= GLUCOSE_THRESHOLDS.URGENT_HIGH) return "#f59e0b"; // amber-500
+export function getPointColor(
+  value: number,
+  thresholds?: { urgentLow: number; low: number; high: number; urgentHigh: number }
+): string {
+  const t = thresholds ?? {
+    urgentLow: GLUCOSE_THRESHOLDS.URGENT_LOW,
+    low: GLUCOSE_THRESHOLDS.LOW,
+    high: GLUCOSE_THRESHOLDS.HIGH,
+    urgentHigh: GLUCOSE_THRESHOLDS.URGENT_HIGH,
+  };
+  if (value < t.urgentLow) return "#dc2626"; // red-600
+  if (value < t.low) return "#f59e0b"; // amber-500
+  if (value <= t.high) return "#22c55e"; // green-500
+  if (value <= t.urgentHigh) return "#f59e0b"; // amber-500
   return "#dc2626"; // red-600
 }
 
@@ -62,12 +71,15 @@ interface ChartPoint {
   iso: string;
 }
 
-function transformReadings(readings: GlucoseHistoryReading[]): ChartPoint[] {
+function transformReadings(
+  readings: GlucoseHistoryReading[],
+  thresholds?: { urgentLow: number; low: number; high: number; urgentHigh: number }
+): ChartPoint[] {
   return readings
     .map((r) => ({
       timestamp: new Date(r.reading_timestamp).getTime(),
       value: r.value,
-      color: getPointColor(r.value),
+      color: getPointColor(r.value, thresholds),
       iso: r.reading_timestamp,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -148,11 +160,19 @@ export interface GlucoseTrendChartProps {
   /** Signal to trigger a refetch (e.g., from SSE glucose update) */
   refreshKey?: number;
   className?: string;
+  /** Dynamic glucose thresholds from user settings */
+  thresholds?: {
+    urgentLow: number;
+    low: number;
+    high: number;
+    urgentHigh: number;
+  };
 }
 
 export function GlucoseTrendChart({
   refreshKey,
   className,
+  thresholds,
 }: GlucoseTrendChartProps) {
   const { readings, isLoading, error, period, setPeriod, refetch } =
     useGlucoseHistory("3h");
@@ -170,7 +190,7 @@ export function GlucoseTrendChart({
     }
   }, [refreshKey, refetch]);
 
-  const data = useMemo(() => transformReadings(readings), [readings]);
+  const data = useMemo(() => transformReadings(readings, thresholds), [readings, thresholds]);
 
   // X-axis domain: always show the full selected time window.
   // Depends on `data` so it recomputes with fresh Date.now() on refetch.
@@ -271,7 +291,9 @@ export function GlucoseTrendChart({
     );
   }
 
-  const targetLabel = `${GLUCOSE_THRESHOLDS.LOW}-${GLUCOSE_THRESHOLDS.HIGH} Target`;
+  const lowThreshold = thresholds?.low ?? GLUCOSE_THRESHOLDS.LOW;
+  const highThreshold = thresholds?.high ?? GLUCOSE_THRESHOLDS.HIGH;
+  const targetLabel = `${lowThreshold}-${highThreshold} Target`;
 
   return (
     <div
@@ -303,8 +325,8 @@ export function GlucoseTrendChart({
 
             {/* Target range band */}
             <ReferenceArea
-              y1={GLUCOSE_THRESHOLDS.LOW}
-              y2={GLUCOSE_THRESHOLDS.HIGH}
+              y1={lowThreshold}
+              y2={highThreshold}
               fill="#22c55e"
               fillOpacity={0.08}
               stroke="none"
