@@ -27,6 +27,9 @@ interface PumpDao {
     @Query("SELECT * FROM iob_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC")
     suspend fun getIoBSince(sinceMs: Long): List<IoBReadingEntity>
 
+    @Query("SELECT * FROM iob_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeIoBHistory(sinceMs: Long, limit: Int = 2000): Flow<List<IoBReadingEntity>>
+
     @Query("DELETE FROM iob_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteIoBBefore(beforeMs: Long): Int
 
@@ -37,6 +40,9 @@ interface PumpDao {
 
     @Query("SELECT * FROM basal_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestBasal(): Flow<BasalReadingEntity?>
+
+    @Query("SELECT * FROM basal_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeBasalHistory(sinceMs: Long, limit: Int = 2000): Flow<List<BasalReadingEntity>>
 
     @Query("DELETE FROM basal_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteBasalBefore(beforeMs: Long): Int
@@ -51,6 +57,9 @@ interface PumpDao {
 
     @Query("SELECT * FROM bolus_events WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC")
     suspend fun getBolusesSince(sinceMs: Long): List<BolusEventEntity>
+
+    @Query("SELECT * FROM bolus_events WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeBolusHistory(sinceMs: Long, limit: Int = 500): Flow<List<BolusEventEntity>>
 
     @Query("SELECT MAX(timestampMs) FROM bolus_events")
     suspend fun getLatestBolusTimestamp(): Long?
@@ -87,6 +96,9 @@ interface PumpDao {
 
     @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestCgm(): Flow<CgmReadingEntity?>
+
+    @Query("SELECT * FROM cgm_readings WHERE timestampMs >= :sinceMs ORDER BY timestampMs ASC LIMIT :limit")
+    fun observeCgmHistory(sinceMs: Long, limit: Int = 2000): Flow<List<CgmReadingEntity>>
 
     @Query("DELETE FROM cgm_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteCgmBefore(beforeMs: Long): Int

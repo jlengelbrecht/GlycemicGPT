@@ -1,6 +1,5 @@
 package com.glycemicgpt.mobile.presentation.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,18 +11,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Battery0Bar
+import androidx.compose.material.icons.filled.Battery1Bar
+import androidx.compose.material.icons.filled.Battery3Bar
+import androidx.compose.material.icons.filled.Battery5Bar
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,15 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.glycemicgpt.mobile.domain.model.CgmTrend
+import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.ConnectionState
-import com.glycemicgpt.mobile.domain.model.ControlIqMode
+import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 import com.glycemicgpt.mobile.service.SyncStatus
 import kotlinx.coroutines.delay
@@ -58,17 +57,18 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
+    val cgm by viewModel.cgm.collectAsState()
     val iob by viewModel.iob.collectAsState()
     val basalRate by viewModel.basalRate.collectAsState()
     val battery by viewModel.battery.collectAsState()
     val reservoir by viewModel.reservoir.collectAsState()
-    val cgm by viewModel.cgm.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
-
-    // Data refresh is handled by PumpPollingOrchestrator (staggered reads
-    // with initial delay). Manual refresh is available via pull-to-refresh.
-    // HomeViewModel observes Room, so data appears as the orchestrator writes it.
+    val selectedPeriod by viewModel.selectedPeriod.collectAsState()
+    val cgmHistory by viewModel.cgmHistory.collectAsState()
+    val iobHistory by viewModel.iobHistory.collectAsState()
+    val basalHistory by viewModel.basalHistory.collectAsState()
+    val bolusHistory by viewModel.bolusHistory.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -82,110 +82,39 @@ fun HomeScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Connection status banner
+            // Connection + sync status
             ConnectionStatusBanner(connectionState)
-
             Spacer(modifier = Modifier.height(4.dp))
-
-            // Sync status banner
             SyncStatusBanner(syncStatus)
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // IoB card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        text = "Insulin on Board",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = iob?.let { "%.2f".format(it.iob) } ?: "--",
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.testTag("iob_value"),
-                    )
-                    Text(
-                        text = "units",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    iob?.let {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        FreshnessLabel(it.timestamp)
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Status cards row 1
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                StatusCard(
-                    title = "Basal Rate",
-                    value = basalRate?.let { "%.2f".format(it.rate) } ?: "--",
-                    unit = "u/hr",
-                    modifier = Modifier.weight(1f).testTag("basal_card"),
-                    timestamp = basalRate?.timestamp,
-                    badge = basalRate?.let {
-                        when (it.controlIqMode) {
-                            ControlIqMode.SLEEP -> "Sleep"
-                            ControlIqMode.EXERCISE -> "Exercise"
-                            ControlIqMode.STANDARD -> if (it.isAutomated) "Auto" else null
-                        }
-                    },
-                    badgeColor = when (basalRate?.controlIqMode) {
-                        ControlIqMode.SLEEP -> MaterialTheme.colorScheme.secondary
-                        ControlIqMode.EXERCISE -> GlucoseColors.High
-                        else -> MaterialTheme.colorScheme.primary
-                    },
-                )
-                StatusCard(
-                    title = "Reservoir",
-                    value = reservoir?.let { "%.0f".format(it.unitsRemaining) } ?: "--",
-                    unit = "units",
-                    modifier = Modifier.weight(1f).testTag("reservoir_card"),
-                    timestamp = reservoir?.timestamp,
-                )
-            }
+            // Glucose hero: large current BG + trend + IoB + Basal
+            GlucoseHero(
+                cgm = cgm,
+                iob = iob,
+                basalRate = basalRate,
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Status cards row 2
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                StatusCard(
-                    title = "Battery",
-                    value = battery?.let { "${it.percentage}" } ?: "--",
-                    unit = "%",
-                    modifier = Modifier.weight(1f).testTag("battery_card"),
-                    timestamp = battery?.timestamp,
-                )
-                StatusCard(
-                    title = "Last BG",
-                    value = cgm?.let { "${it.glucoseMgDl}" } ?: "--",
-                    unit = "mg/dL",
-                    modifier = Modifier.weight(1f).testTag("cgm_card"),
-                    timestamp = cgm?.timestamp,
-                    badge = cgm?.let { trendArrowSymbol(it.trendArrow) },
-                )
-            }
+            // Glucose trend chart with IoB, basal, and bolus overlays
+            GlucoseTrendChart(
+                readings = cgmHistory,
+                iobReadings = iobHistory,
+                basalReadings = basalHistory,
+                bolusEvents = bolusHistory,
+                selectedPeriod = selectedPeriod,
+                onPeriodSelected = { viewModel.onPeriodSelected(it) },
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Compact pump status row
+            PumpStatusRow(
+                battery = battery,
+                reservoir = reservoir,
+            )
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -195,7 +124,7 @@ fun HomeScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else if (connectionState == ConnectionState.CONNECTED && iob == null) {
+            } else if (connectionState == ConnectionState.CONNECTED && cgm == null) {
                 Text(
                     text = "Loading pump data...",
                     style = MaterialTheme.typography.bodyMedium,
@@ -203,6 +132,59 @@ fun HomeScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PumpStatusRow(
+    battery: BatteryStatus?,
+    reservoir: ReservoirReading?,
+) {
+    val batteryIcon = when {
+        battery == null -> Icons.Default.Battery0Bar
+        battery.percentage >= 95 -> Icons.Default.BatteryFull
+        battery.percentage >= 70 -> Icons.Default.Battery5Bar
+        battery.percentage >= 40 -> Icons.Default.Battery3Bar
+        battery.percentage >= 15 -> Icons.Default.Battery1Bar
+        else -> Icons.Default.Battery0Bar
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Battery indicator
+        Icon(
+            imageVector = batteryIcon,
+            contentDescription = "Battery",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = battery?.let { "${it.percentage}%" } ?: "--%",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("battery_card"),
+        )
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        // Reservoir indicator
+        Icon(
+            imageVector = Icons.Default.Opacity,
+            contentDescription = "Reservoir",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = reservoir?.let { "%.0fu".format(it.unitsRemaining) } ?: "--u",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("reservoir_card"),
+        )
     }
 }
 
@@ -265,6 +247,14 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
 
 @Composable
 private fun SyncStatusBanner(status: SyncStatus) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
+
     val (icon, text, color) = when {
         status.lastError != null -> Triple(
             Icons.Default.CloudOff,
@@ -277,7 +267,7 @@ private fun SyncStatusBanner(status: SyncStatus) {
             MaterialTheme.colorScheme.tertiary,
         )
         status.lastSyncAtMs > 0 -> {
-            val ago = (System.currentTimeMillis() - status.lastSyncAtMs) / 1000
+            val ago = (now - status.lastSyncAtMs) / 1000
             val label = when {
                 ago < 60 -> "just now"
                 ago < 3600 -> "${ago / 60}m ago"
@@ -317,92 +307,7 @@ private fun SyncStatusBanner(status: SyncStatus) {
 }
 
 @Composable
-private fun StatusCard(
-    title: String,
-    value: String,
-    unit: String,
-    modifier: Modifier = Modifier,
-    timestamp: Instant? = null,
-    badge: String? = null,
-    badgeColor: Color = MaterialTheme.colorScheme.primary,
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            // Title row with optional Control-IQ mode badge
-            if (badge != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = badge,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = badgeColor,
-                        modifier = Modifier
-                            .background(
-                                badgeColor.copy(alpha = 0.15f),
-                                RoundedCornerShape(4.dp),
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
-            } else {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = unit,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            // Data freshness indicator
-            if (timestamp != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                FreshnessLabel(timestamp)
-            }
-        }
-    }
-}
-
-private fun trendArrowSymbol(trend: CgmTrend): String = when (trend) {
-    CgmTrend.DOUBLE_UP -> "\u21C8"
-    CgmTrend.SINGLE_UP -> "\u2191"
-    CgmTrend.FORTY_FIVE_UP -> "\u2197"
-    CgmTrend.FLAT -> "\u2192"
-    CgmTrend.FORTY_FIVE_DOWN -> "\u2198"
-    CgmTrend.SINGLE_DOWN -> "\u2193"
-    CgmTrend.DOUBLE_DOWN -> "\u21CA"
-    CgmTrend.UNKNOWN -> "?"
-}
-
-@Composable
-private fun FreshnessLabel(timestamp: Instant) {
-    // Re-compose every 30 seconds to keep "Xm ago" text up to date
+internal fun FreshnessLabel(timestamp: Instant) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {

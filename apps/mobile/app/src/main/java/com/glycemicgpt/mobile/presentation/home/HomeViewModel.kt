@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
+import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -13,23 +14,21 @@ import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.service.BackendSyncManager
 import com.glycemicgpt.mobile.service.PumpPollingOrchestrator
 import com.glycemicgpt.mobile.service.SyncStatus
-import kotlinx.coroutines.delay
-import timber.log.Timber
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import timber.log.Timber
+import java.time.Instant
 import javax.inject.Inject
 
-/**
- * ViewModel for the Home screen.
- *
- * Observes the latest readings from the local Room database (populated by
- * PumpPollingOrchestrator). Also supports manual refresh via [refreshData].
- */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val pumpDriver: PumpDriver,
@@ -39,6 +38,9 @@ class HomeViewModel @Inject constructor(
 
     val connectionState: StateFlow<ConnectionState> = pumpDriver.observeConnectionState()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionState.DISCONNECTED)
+
+    val cgm: StateFlow<CgmReading?> = repository.observeLatestCgm()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val iob: StateFlow<IoBReading?> = repository.observeLatestIoB()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -52,13 +54,55 @@ class HomeViewModel @Inject constructor(
     val reservoir: StateFlow<ReservoirReading?> = repository.observeLatestReservoir()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val cgm: StateFlow<CgmReading?> = repository.observeLatestCgm()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
     val syncStatus: StateFlow<SyncStatus> = backendSyncManager.syncStatus
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    // -- Glucose trend chart state --------------------------------------------
+
+    private val _selectedPeriod = MutableStateFlow(ChartPeriod.THREE_HOURS)
+    val selectedPeriod: StateFlow<ChartPeriod> = _selectedPeriod.asStateFlow()
+
+    val cgmHistory: StateFlow<List<CgmReading>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeCgmHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val iobHistory: StateFlow<List<IoBReading>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeIoBHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val basalHistory: StateFlow<List<BasalReading>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeBasalHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val bolusHistory: StateFlow<List<BolusEvent>> = _selectedPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeBolusHistory(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun onPeriodSelected(period: ChartPeriod) {
+        _selectedPeriod.value = period
+    }
 
     /**
      * Manually trigger a pump data refresh. Reads are staggered sequentially
