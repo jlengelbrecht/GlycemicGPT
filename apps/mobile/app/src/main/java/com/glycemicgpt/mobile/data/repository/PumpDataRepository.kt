@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.data.repository
 
 import com.glycemicgpt.mobile.data.local.dao.PumpDao
+import com.glycemicgpt.mobile.data.local.dao.TimeInRangeCounts
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BolusEventEntity
@@ -15,6 +16,7 @@ import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
+import com.glycemicgpt.mobile.domain.model.TimeInRangeData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
@@ -154,6 +156,11 @@ class PumpDataRepository @Inject constructor(
             entities.map { it.toDomain() }
         }
 
+    // -- Time in Range --------------------------------------------------------
+
+    fun observeTimeInRange(since: Instant): Flow<TimeInRangeData> =
+        pumpDao.observeTimeInRangeCounts(since.toEpochMilli()).map { it.toTimeInRange() }
+
     // -- Cleanup --------------------------------------------------------------
 
     /**
@@ -215,3 +222,13 @@ private fun CgmReadingEntity.toDomain() = CgmReading(
     },
     timestamp = Instant.ofEpochMilli(timestampMs),
 )
+
+private fun TimeInRangeCounts.toTimeInRange(): TimeInRangeData {
+    if (total == 0) return TimeInRangeData(0f, 0f, 0f, 0)
+    return TimeInRangeData(
+        lowPercent = lowCount * 100f / total,
+        inRangePercent = inRangeCount * 100f / total,
+        highPercent = highCount * 100f / total,
+        totalReadings = total,
+    )
+}

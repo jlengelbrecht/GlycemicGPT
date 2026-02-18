@@ -23,10 +23,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glycemicgpt.mobile.domain.model.BasalReading
+import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 
 object GlucoseThresholds {
@@ -60,11 +62,19 @@ fun GlucoseHero(
     cgm: CgmReading?,
     iob: IoBReading?,
     basalRate: BasalReading?,
+    battery: BatteryStatus?,
+    reservoir: ReservoirReading?,
     modifier: Modifier = Modifier,
 ) {
     val a11yDescription = if (cgm != null) {
-        "Glucose ${cgm.glucoseMgDl} milligrams per deciliter, " +
-            "${cgm.trendArrow.name.lowercase().replace('_', ' ')}"
+        buildString {
+            append("Glucose ${cgm.glucoseMgDl} milligrams per deciliter, ")
+            append(cgm.trendArrow.name.lowercase().replace('_', ' '))
+            if (iob != null) append(", insulin on board %.2f units".format(iob.iob))
+            if (basalRate != null) append(", basal rate %.2f units per hour".format(basalRate.rate))
+            if (battery != null) append(", battery ${battery.percentage} percent")
+            if (reservoir != null) append(", reservoir %.0f units".format(reservoir.unitsRemaining))
+        }
     } else {
         "No glucose data available"
     }
@@ -118,12 +128,12 @@ fun GlucoseHero(
                 Spacer(modifier = Modifier.height(4.dp))
                 FreshnessLabel(cgm.timestamp)
 
-                // Secondary metrics: IoB + Basal (like web's IoB/CoB)
-                if (iob != null || basalRate != null) {
+                // Secondary metrics: IoB + Basal + Battery + Reservoir
+                if (iob != null || basalRate != null || battery != null || reservoir != null) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
                     ) {
                         if (iob != null) {
                             SecondaryMetric(
@@ -131,9 +141,6 @@ fun GlucoseHero(
                                 value = "%.2fu".format(iob.iob),
                                 modifier = Modifier.testTag("hero_iob"),
                             )
-                        }
-                        if (iob != null && basalRate != null) {
-                            Spacer(modifier = Modifier.width(24.dp))
                         }
                         if (basalRate != null) {
                             val basalText = "%.2f u/hr".format(basalRate.rate)
@@ -146,6 +153,20 @@ fun GlucoseHero(
                                 label = "Basal",
                                 value = basalText + modeLabel,
                                 modifier = Modifier.testTag("hero_basal"),
+                            )
+                        }
+                        if (battery != null) {
+                            SecondaryMetric(
+                                label = "Battery",
+                                value = "${battery.percentage}%",
+                                modifier = Modifier.testTag("hero_battery"),
+                            )
+                        }
+                        if (reservoir != null) {
+                            SecondaryMetric(
+                                label = "Reservoir",
+                                value = "%.0fu".format(reservoir.unitsRemaining),
+                                modifier = Modifier.testTag("hero_reservoir"),
                             )
                         }
                     }

@@ -103,6 +103,21 @@ interface PumpDao {
     @Query("DELETE FROM cgm_readings WHERE timestampMs < :beforeMs")
     suspend fun deleteCgmBefore(beforeMs: Long): Int
 
+    // -- Time in Range aggregation --------------------------------------------
+
+    @Query(
+        """
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN glucoseMgDl < 70 THEN 1 ELSE 0 END) AS lowCount,
+            SUM(CASE WHEN glucoseMgDl >= 70 AND glucoseMgDl <= 180 THEN 1 ELSE 0 END) AS inRangeCount,
+            SUM(CASE WHEN glucoseMgDl > 180 THEN 1 ELSE 0 END) AS highCount
+        FROM cgm_readings
+        WHERE timestampMs >= :sinceMs
+        """,
+    )
+    fun observeTimeInRangeCounts(sinceMs: Long): Flow<TimeInRangeCounts>
+
     // -- Transactional cleanup ------------------------------------------------
 
     @Transaction
@@ -117,3 +132,10 @@ interface PumpDao {
         return total
     }
 }
+
+data class TimeInRangeCounts(
+    val total: Int,
+    val lowCount: Int,
+    val inRangeCount: Int,
+    val highCount: Int,
+)
