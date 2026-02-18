@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.data.repository
 
 import com.glycemicgpt.mobile.data.local.dao.PumpDao
+import com.glycemicgpt.mobile.data.local.dao.TimeInRangeCounts
 import com.glycemicgpt.mobile.data.local.entity.BasalReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.BatteryReadingEntity
 import com.glycemicgpt.mobile.data.local.entity.CgmReadingEntity
@@ -227,6 +228,32 @@ class PumpDataRepositoryTest {
         val result = repository.observeLatestCgm().first()
         assertNotNull(result)
         assertEquals(CgmTrend.UNKNOWN, result!!.trendArrow)
+    }
+
+    // -- Time in Range --------------------------------------------------------
+
+    @Test
+    fun `observeTimeInRange maps counts to percentages`() = runTest {
+        val counts = TimeInRangeCounts(total = 100, lowCount = 10, inRangeCount = 70, highCount = 20)
+        coEvery { pumpDao.observeTimeInRangeCounts(any()) } returns flowOf(counts)
+
+        val result = repository.observeTimeInRange(Instant.now()).first()
+        assertEquals(10f, result.lowPercent, 0.001f)
+        assertEquals(70f, result.inRangePercent, 0.001f)
+        assertEquals(20f, result.highPercent, 0.001f)
+        assertEquals(100, result.totalReadings)
+    }
+
+    @Test
+    fun `observeTimeInRange returns zeros when no readings`() = runTest {
+        val counts = TimeInRangeCounts(total = 0, lowCount = 0, inRangeCount = 0, highCount = 0)
+        coEvery { pumpDao.observeTimeInRangeCounts(any()) } returns flowOf(counts)
+
+        val result = repository.observeTimeInRange(Instant.now()).first()
+        assertEquals(0f, result.lowPercent, 0.001f)
+        assertEquals(0f, result.inRangePercent, 0.001f)
+        assertEquals(0f, result.highPercent, 0.001f)
+        assertEquals(0, result.totalReadings)
     }
 
     // -- Cleanup --------------------------------------------------------------

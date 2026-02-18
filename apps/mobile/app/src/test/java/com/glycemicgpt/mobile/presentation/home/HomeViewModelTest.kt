@@ -9,6 +9,7 @@ import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
+import com.glycemicgpt.mobile.domain.model.TimeInRangeData
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.service.BackendSyncManager
 import com.glycemicgpt.mobile.service.SyncStatus
@@ -19,6 +20,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -188,6 +190,51 @@ class HomeViewModelTest {
 
         connectionStateFlow.value = ConnectionState.CONNECTED
         assertEquals(ConnectionState.CONNECTED, vm.connectionState.value)
+
+        job.cancel()
+    }
+
+    // -- Time in Range --------------------------------------------------------
+
+    @Test
+    fun `initial TIR period is 24 hours`() = runTest {
+        val vm = createViewModel()
+        assertEquals(TirPeriod.TWENTY_FOUR_HOURS, vm.selectedTirPeriod.value)
+    }
+
+    @Test
+    fun `onTirPeriodSelected updates selected period`() = runTest {
+        val vm = createViewModel()
+
+        vm.onTirPeriodSelected(TirPeriod.THREE_DAYS)
+        assertEquals(TirPeriod.THREE_DAYS, vm.selectedTirPeriod.value)
+
+        vm.onTirPeriodSelected(TirPeriod.SEVEN_DAYS)
+        assertEquals(TirPeriod.SEVEN_DAYS, vm.selectedTirPeriod.value)
+    }
+
+    @Test
+    fun `timeInRange state flow emits repository data`() = runTest {
+        val tirData = TimeInRangeData(
+            lowPercent = 5f,
+            inRangePercent = 80f,
+            highPercent = 15f,
+            totalReadings = 200,
+        )
+        every { repository.observeTimeInRange(any()) } returns flowOf(tirData)
+
+        val vm = createViewModel()
+
+        val job = backgroundScope.launch(testDispatcher) {
+            vm.timeInRange.collect {}
+        }
+
+        advanceUntilIdle()
+
+        val result = vm.timeInRange.value
+        assertNotNull(result)
+        assertEquals(80f, result!!.inRangePercent, 0.001f)
+        assertEquals(200, result.totalReadings)
 
         job.cancel()
     }

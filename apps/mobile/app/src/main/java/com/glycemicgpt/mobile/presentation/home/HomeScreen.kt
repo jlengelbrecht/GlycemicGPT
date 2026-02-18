@@ -13,18 +13,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Battery0Bar
-import androidx.compose.material.icons.filled.Battery1Bar
-import androidx.compose.material.icons.filled.Battery3Bar
-import androidx.compose.material.icons.filled.Battery5Bar
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -43,9 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.ConnectionState
-import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 import com.glycemicgpt.mobile.service.SyncStatus
 import kotlinx.coroutines.delay
@@ -69,6 +61,8 @@ fun HomeScreen(
     val iobHistory by viewModel.iobHistory.collectAsState()
     val basalHistory by viewModel.basalHistory.collectAsState()
     val bolusHistory by viewModel.bolusHistory.collectAsState()
+    val selectedTirPeriod by viewModel.selectedTirPeriod.collectAsState()
+    val timeInRange by viewModel.timeInRange.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -82,18 +76,18 @@ fun HomeScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Connection + sync status
-            ConnectionStatusBanner(connectionState)
-            Spacer(modifier = Modifier.height(4.dp))
-            SyncStatusBanner(syncStatus)
+            // Compact connection + sync status row
+            ConnectionSyncRow(connectionState, syncStatus)
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Glucose hero: large current BG + trend + IoB + Basal
+            // Glucose hero: large current BG + trend + IoB + Basal + Battery + Reservoir
             GlucoseHero(
                 cgm = cgm,
                 iob = iob,
                 basalRate = basalRate,
+                battery = battery,
+                reservoir = reservoir,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -110,10 +104,11 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Compact pump status row
-            PumpStatusRow(
-                battery = battery,
-                reservoir = reservoir,
+            // Time in Range bar
+            TimeInRangeBar(
+                data = timeInRange,
+                selectedPeriod = selectedTirPeriod,
+                onPeriodSelected = { viewModel.onTirPeriodSelected(it) },
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -136,90 +131,66 @@ fun HomeScreen(
 }
 
 @Composable
-private fun PumpStatusRow(
-    battery: BatteryStatus?,
-    reservoir: ReservoirReading?,
-) {
-    val batteryIcon = when {
-        battery == null -> Icons.Default.Battery0Bar
-        battery.percentage >= 95 -> Icons.Default.BatteryFull
-        battery.percentage >= 70 -> Icons.Default.Battery5Bar
-        battery.percentage >= 40 -> Icons.Default.Battery3Bar
-        battery.percentage >= 15 -> Icons.Default.Battery1Bar
-        else -> Icons.Default.Battery0Bar
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Battery indicator
-        Icon(
-            imageVector = batteryIcon,
-            contentDescription = "Battery",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
-        )
-        Spacer(modifier = Modifier.width(3.dp))
-        Text(
-            text = battery?.let { "${it.percentage}%" } ?: "--%",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.testTag("battery_card"),
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        // Reservoir indicator
-        Icon(
-            imageVector = Icons.Default.Opacity,
-            contentDescription = "Reservoir",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
-        )
-        Spacer(modifier = Modifier.width(3.dp))
-        Text(
-            text = reservoir?.let { "%.0fu".format(it.unitsRemaining) } ?: "--u",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.testTag("reservoir_card"),
-        )
-    }
-}
-
-@Composable
-private fun ConnectionStatusBanner(state: ConnectionState) {
-    val (icon, text, color) = when (state) {
-        ConnectionState.CONNECTED -> Triple(
+private fun ConnectionSyncRow(state: ConnectionState, syncStatus: SyncStatus) {
+    val (bleIcon, bleA11y, bleColor, bleText) = when (state) {
+        ConnectionState.CONNECTED -> Quad(
             Icons.Default.BluetoothConnected,
             "Pump connected",
             MaterialTheme.colorScheme.primary,
+            null,
         )
-        ConnectionState.CONNECTING, ConnectionState.AUTHENTICATING -> Triple(
+        ConnectionState.CONNECTING, ConnectionState.AUTHENTICATING -> Quad(
             Icons.AutoMirrored.Filled.BluetoothSearching,
+            "Connecting to pump",
+            MaterialTheme.colorScheme.tertiary,
             "Connecting...",
-            MaterialTheme.colorScheme.tertiary,
         )
-        ConnectionState.RECONNECTING -> Triple(
+        ConnectionState.RECONNECTING -> Quad(
             Icons.Default.Bluetooth,
+            "Reconnecting to pump",
+            MaterialTheme.colorScheme.tertiary,
             "Reconnecting...",
-            MaterialTheme.colorScheme.tertiary,
         )
-        ConnectionState.SCANNING -> Triple(
+        ConnectionState.SCANNING -> Quad(
             Icons.AutoMirrored.Filled.BluetoothSearching,
-            "Scanning...",
+            "Scanning for pump",
             MaterialTheme.colorScheme.tertiary,
+            "Scanning...",
         )
-        ConnectionState.AUTH_FAILED -> Triple(
+        ConnectionState.AUTH_FAILED -> Quad(
             Icons.Default.BluetoothDisabled,
-            "Pairing failed",
+            "Pump pairing failed",
             MaterialTheme.colorScheme.error,
+            "Pairing failed",
         )
-        ConnectionState.DISCONNECTED -> Triple(
+        ConnectionState.DISCONNECTED -> Quad(
             Icons.Default.BluetoothDisabled,
             "No pump connected",
             MaterialTheme.colorScheme.error,
+            null,
+        )
+    }
+
+    val (syncIcon, syncA11y, syncColor) = when {
+        syncStatus.lastError != null -> Triple(
+            Icons.Default.CloudOff,
+            "Sync error",
+            MaterialTheme.colorScheme.error,
+        )
+        syncStatus.pendingCount > 0 -> Triple(
+            Icons.Default.CloudSync,
+            "${syncStatus.pendingCount} readings pending sync",
+            MaterialTheme.colorScheme.tertiary,
+        )
+        syncStatus.lastSyncAtMs > 0 -> Triple(
+            Icons.Default.CloudDone,
+            "Synced to cloud",
+            MaterialTheme.colorScheme.primary,
+        )
+        else -> Triple(
+            Icons.Default.CloudOff,
+            "Not synced",
+            MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 
@@ -231,80 +202,30 @@ private fun ConnectionStatusBanner(state: ConnectionState) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = icon,
-            contentDescription = text,
-            tint = color,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = color,
-        )
-    }
-}
-
-@Composable
-private fun SyncStatusBanner(status: SyncStatus) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000)
-            now = System.currentTimeMillis()
-        }
-    }
-
-    val (icon, text, color) = when {
-        status.lastError != null -> Triple(
-            Icons.Default.CloudOff,
-            "Sync error",
-            MaterialTheme.colorScheme.error,
-        )
-        status.pendingCount > 0 -> Triple(
-            Icons.Default.CloudSync,
-            "${status.pendingCount} pending",
-            MaterialTheme.colorScheme.tertiary,
-        )
-        status.lastSyncAtMs > 0 -> {
-            val ago = (now - status.lastSyncAtMs) / 1000
-            val label = when {
-                ago < 60 -> "just now"
-                ago < 3600 -> "${ago / 60}m ago"
-                else -> "${ago / 3600}h ago"
-            }
-            Triple(
-                Icons.Default.CloudDone,
-                "Synced $label",
-                MaterialTheme.colorScheme.primary,
-            )
-        }
-        else -> Triple(
-            Icons.Default.CloudOff,
-            "Not synced",
-            MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = text,
-            tint = color,
+            imageVector = bleIcon,
+            contentDescription = bleA11y,
+            tint = bleColor,
             modifier = Modifier.size(16.dp),
         )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = color,
+        if (bleText != null) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = bleText,
+                style = MaterialTheme.typography.labelSmall,
+                color = bleColor,
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Icon(
+            imageVector = syncIcon,
+            contentDescription = syncA11y,
+            tint = syncColor,
+            modifier = Modifier.size(16.dp),
         )
     }
 }
+
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 internal fun FreshnessLabel(timestamp: Instant) {

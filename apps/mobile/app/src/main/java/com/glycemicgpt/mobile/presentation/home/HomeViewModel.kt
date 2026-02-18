@@ -10,6 +10,7 @@ import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
+import com.glycemicgpt.mobile.domain.model.TimeInRangeData
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.service.BackendSyncManager
 import com.glycemicgpt.mobile.service.PumpPollingOrchestrator
@@ -102,6 +103,24 @@ class HomeViewModel @Inject constructor(
 
     fun onPeriodSelected(period: ChartPeriod) {
         _selectedPeriod.value = period
+    }
+
+    // -- Time in Range state --------------------------------------------------
+
+    private val _selectedTirPeriod = MutableStateFlow(TirPeriod.TWENTY_FOUR_HOURS)
+    val selectedTirPeriod: StateFlow<TirPeriod> = _selectedTirPeriod.asStateFlow()
+
+    val timeInRange: StateFlow<TimeInRangeData?> = _selectedTirPeriod
+        .flatMapLatest { period ->
+            val since = Instant.ofEpochMilli(
+                System.currentTimeMillis() - period.hours * 3600_000L,
+            )
+            repository.observeTimeInRange(since)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    fun onTirPeriodSelected(period: TirPeriod) {
+        _selectedTirPeriod.value = period
     }
 
     /**
