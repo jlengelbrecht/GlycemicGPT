@@ -160,10 +160,10 @@ class BolusBasalHistoryParserTest {
     }
 
     @Test
-    fun `parseBolusDeliveryPayload with excessive deliveredTotal returns null`() {
-        // 260 units = 260000 milliunits, over the 250000 limit
+    fun `parseBolusDeliveryPayload with large deliveredTotal accepted`() {
+        // uint16 field: max is 65535 milliunits = 65.535 units
+        // Large but valid -- uint16 naturally bounds the value
         val data = buildBolusData(deliveredTotal = 60000)
-        // 60000 milliunits = 60 units, should be fine
         val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime)
         assertNotNull(result)
         assertEquals(60.0f, result!!.units, 0.001f)
@@ -395,6 +395,56 @@ class BolusBasalHistoryParserTest {
         val data = buildBasalData(commandedRate = 25001)
         val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime)
         assertNull(result)
+    }
+
+    // =======================================================================
+    // TempRate Source Test
+    // =======================================================================
+
+    @Test
+    fun `parseBasalDeliveryPayload with TempRate source is not automated`() {
+        val data = buildBasalData(sourceRaw = 2, commandedRate = 1500)
+        val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime)
+        assertNotNull(result)
+        assertEquals(1.5f, result!!.rate, 0.001f)
+        assertFalse(result.isAutomated) // TempRate (manual temp basal) is NOT automated
+    }
+
+    // =======================================================================
+    // 18-byte Record Graceful Skip Tests
+    // =======================================================================
+
+    @Test
+    fun `extractBolusesFromHistoryLogs skips records shorter than 26 bytes`() {
+        // Build an 18-byte record (opcode 61 format) instead of 26-byte FFF8 format
+        val shortRecord = ByteArray(18)
+        val b64 = java.util.Base64.getEncoder().encodeToString(shortRecord)
+        val records = listOf(
+            HistoryLogRecord(
+                sequenceNumber = 1,
+                eventTypeId = 280,
+                pumpTimeSeconds = validPumpTime,
+                rawBytesB64 = b64,
+            ),
+        )
+        val result = StatusResponseParser.extractBolusesFromHistoryLogs(records)
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `extractBasalFromHistoryLogs skips records shorter than 26 bytes`() {
+        val shortRecord = ByteArray(18)
+        val b64 = java.util.Base64.getEncoder().encodeToString(shortRecord)
+        val records = listOf(
+            HistoryLogRecord(
+                sequenceNumber = 1,
+                eventTypeId = 279,
+                pumpTimeSeconds = validPumpTime,
+                rawBytesB64 = b64,
+            ),
+        )
+        val result = StatusResponseParser.extractBasalFromHistoryLogs(records)
+        assertTrue(result.isEmpty())
     }
 
     // =======================================================================

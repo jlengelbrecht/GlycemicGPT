@@ -553,11 +553,11 @@ object StatusResponseParser {
     /** Set of event type IDs that carry CGM glucose data. */
     private val CGM_EVENT_TYPES = setOf(EVENT_TYPE_BG_METER_READING, EVENT_TYPE_CGM_DATA_G7)
 
-    /** Maximum sane bolus delivery in milliunits (250 units). */
-    private const val MAX_BOLUS_MILLIUNITS = 250_000
-
     /** Maximum sane basal rate in milliunits/hr (25 units/hr). */
     private const val MAX_BASAL_RATE_MILLIUNITS = 25_000
+
+    /** Basal rate sources that indicate automated (non-manual) delivery. */
+    private val AUTOMATED_BASAL_SOURCES = setOf(0, 3, 4)
 
     /**
      * Parse a CGM glucose value from a type 16 (LidBgReadingTaken) payload.
@@ -682,7 +682,7 @@ object StatusResponseParser {
 
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         val deliveredTotalMu = buf.getShort(14).toInt() and 0xFFFF
-        if (deliveredTotalMu == 0 || deliveredTotalMu > MAX_BOLUS_MILLIUNITS) return null
+        if (deliveredTotalMu == 0) return null // uint16 field; max 65535mu = 65.5u, always within pump limits
 
         val bolusTypeRaw = data[3].toInt() and 0xFF
         val bolusSourceRaw = data[4].toInt() and 0xFF
@@ -755,7 +755,7 @@ object StatusResponseParser {
         if (commandedRateMu > MAX_BASAL_RATE_MILLIUNITS) return null
 
         // Sources 0 (Suspended), 3 (Algorithm), 4 (Temp+Algorithm) are automated
-        val isAutomated = sourceRaw in setOf(0, 3, 4)
+        val isAutomated = sourceRaw in AUTOMATED_BASAL_SOURCES
 
         return BasalReading(
             rate = commandedRateMu / 1000f,
