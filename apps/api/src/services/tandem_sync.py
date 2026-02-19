@@ -1006,7 +1006,7 @@ async def get_latest_pump_event(
 async def get_pump_events(
     db: AsyncSession,
     user_id: uuid.UUID,
-    hours: int = 24,
+    hours: float = 24,
     limit: int = 100,
     event_type: PumpEventType | None = None,
 ) -> list[PumpEvent]:

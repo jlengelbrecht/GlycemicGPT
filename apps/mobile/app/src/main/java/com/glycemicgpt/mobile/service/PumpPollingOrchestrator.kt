@@ -383,6 +383,8 @@ class PumpPollingOrchestrator @Inject constructor(
                     val basalReadings = StatusResponseParser.extractBasalFromHistoryLogs(records)
                     if (basalReadings.isNotEmpty()) {
                         repository.saveBasalBatch(basalReadings)
+                        syncEnqueuer.enqueueBasalBatch(basalReadings)
+                        backendSyncManager?.triggerSync()
                         Timber.d("Backfilled %d basal readings from history logs", basalReadings.size)
                     }
                 }

@@ -31,6 +31,10 @@ class SyncQueueEnqueuer @Inject constructor(
         enqueue(PumpEventMapper.fromBasal(reading))
     }
 
+    suspend fun enqueueBasalBatch(readings: List<BasalReading>) {
+        readings.forEach { enqueue(PumpEventMapper.fromBasal(it)) }
+    }
+
     suspend fun enqueueBoluses(events: List<BolusEvent>) {
         events.forEach { enqueue(PumpEventMapper.fromBolus(it)) }
     }

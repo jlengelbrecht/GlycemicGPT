@@ -2225,6 +2225,46 @@ export async function getGlucoseHistory(
 }
 
 // ============================================================================
+// Pump Event History
+// ============================================================================
+
+export type PumpEventType = "basal" | "bolus" | "correction" | "suspend" | "resume" | "bg_reading";
+
+export interface PumpEventReading {
+  event_type: PumpEventType;
+  event_timestamp: string;
+  units: number | null;
+  duration_minutes: number | null;
+  is_automated: boolean;
+  control_iq_reason: string | null;
+  control_iq_mode: string | null;
+  basal_adjustment_pct: number | null;
+  received_at: string;
+  source: string;
+}
+
+export interface PumpEventHistoryResponse {
+  events: PumpEventReading[];
+  count: number;
+}
+
+export async function getPumpEventHistory(
+  minutes: number = 180,
+  limit: number = 500
+): Promise<PumpEventHistoryResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/pump/history?minutes=${minutes}&limit=${limit}`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch pump events: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+// ============================================================================
 // Time in Range Statistics
 // ============================================================================
 
