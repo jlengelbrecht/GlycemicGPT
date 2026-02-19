@@ -52,6 +52,11 @@ class PumpPollingOrchestrator @Inject constructor(
     @Volatile
     private var hardwareInfoCached: Boolean = false
 
+    /** Whether we have been connected at least once this service session.
+     *  Used to distinguish reconnection (accelerated polling) from initial connection. */
+    @Volatile
+    private var hasBeenConnectedBefore: Boolean = false
+
     /** Track the last alert type sent to watch to avoid re-sending the same alert. */
     @Volatile
     private var previousAlertType: String? = null
@@ -78,8 +83,15 @@ class PumpPollingOrchestrator @Inject constructor(
 
                 pumpDriver.observeConnectionState().collectLatest { state ->
                     if (state == ConnectionState.CONNECTED) {
-                        Timber.d("Pump connected, starting polling")
-                        startPollingLoops(scope)
+                        val isReconnection = hasBeenConnectedBefore
+                        hasBeenConnectedBefore = true
+                        if (isReconnection) {
+                            Timber.d("Pump reconnected, starting accelerated polling (reduced initial delays)")
+                            startReconnectionPollingLoops(scope)
+                        } else {
+                            Timber.d("Pump connected (initial), starting normal polling")
+                            startPollingLoops(scope)
+                        }
                     } else {
                         Timber.d("Pump disconnected (state=%s), pausing polling", state)
                         previousAlertType = null
@@ -96,6 +108,7 @@ class PumpPollingOrchestrator @Inject constructor(
             cancelPollingLoops()
             connectionWatcherJob?.cancel()
             connectionWatcherJob = null
+            hasBeenConnectedBefore = false
         }
     }
 
@@ -106,6 +119,21 @@ class PumpPollingOrchestrator @Inject constructor(
             fastJob = scope.launch { pollFastLoop() }
             mediumJob = scope.launch { pollMediumLoop() }
             slowJob = scope.launch { pollSlowLoop() }
+        }
+    }
+
+    /**
+     * Start polling with reduced initial delays for reconnection.
+     * Bolus history fires within 5s instead of 60s to backfill missed data.
+     * Battery/reservoir/history fires within 3s instead of 30s.
+     */
+    private fun startReconnectionPollingLoops(scope: CoroutineScope) {
+        synchronized(lock) {
+            cancelPollingLoops()
+
+            fastJob = scope.launch { pollFastLoop(INITIAL_POLL_DELAY_MS) }
+            mediumJob = scope.launch { pollMediumLoop(RECONNECT_MEDIUM_DELAY_MS) }
+            slowJob = scope.launch { pollSlowLoop(RECONNECT_SLOW_DELAY_MS) }
         }
     }
 
@@ -126,14 +154,14 @@ class PumpPollingOrchestrator @Inject constructor(
     /**
      * Fast loop: IoB + basal rate + CGM at least every ~15s.
      *
-     * Waits [INITIAL_POLL_DELAY_MS] for the connection to stabilize, then
+     * Waits [initialDelayMs] for the connection to stabilize, then
      * staggers requests by [REQUEST_STAGGER_MS] to avoid overwhelming the
      * pump with simultaneous BLE writes. The actual period is approximately
      * INTERVAL_FAST_MS + (FAST_REQUEST_COUNT - 1) * REQUEST_STAGGER_MS
      * plus any BLE response latency.
      */
-    private suspend fun pollFastLoop() {
-        delay(INITIAL_POLL_DELAY_MS)
+    private suspend fun pollFastLoop(initialDelayMs: Long = INITIAL_POLL_DELAY_MS) {
+        delay(initialDelayMs)
         while (true) {
             pollIoB()
             delay(REQUEST_STAGGER_MS)
@@ -145,11 +173,8 @@ class PumpPollingOrchestrator @Inject constructor(
     }
 
     /** Medium loop: last bolus status at least every ~5 min. */
-    private suspend fun pollMediumLoop() {
-        // Wait for the fast loop to establish a stable connection rhythm
-        // before introducing additional request types. The pump can reject
-        // unfamiliar opcodes with GATT_ERROR (133), killing the connection.
-        delay(MEDIUM_LOOP_INITIAL_DELAY_MS)
+    private suspend fun pollMediumLoop(initialDelayMs: Long = MEDIUM_LOOP_INITIAL_DELAY_MS) {
+        delay(initialDelayMs)
         while (true) {
             pollBolusHistory()
             delay(effectiveInterval(INTERVAL_MEDIUM_MS))
@@ -157,11 +182,8 @@ class PumpPollingOrchestrator @Inject constructor(
     }
 
     /** Slow loop: battery + reservoir + raw history logs at least every ~5 min. */
-    private suspend fun pollSlowLoop() {
-        // Wait for the fast loop to run a couple of cycles before introducing
-        // battery/reservoir/history reads. Starts before the medium loop (60s)
-        // since these are lightweight status reads the pump handles readily.
-        delay(SLOW_LOOP_INITIAL_DELAY_MS)
+    private suspend fun pollSlowLoop(initialDelayMs: Long = SLOW_LOOP_INITIAL_DELAY_MS) {
+        delay(initialDelayMs)
         while (true) {
             pollBattery()
             delay(REQUEST_STAGGER_MS)
@@ -281,6 +303,15 @@ class PumpPollingOrchestrator @Inject constructor(
          *  Gives the fast loop a couple of cycles to stabilize BLE before
          *  introducing additional lightweight status reads. */
         const val SLOW_LOOP_INITIAL_DELAY_MS = 30_000L    // 30 seconds
+
+        /** Delay before starting medium loop on reconnection (bolus history).
+         *  Short delay to let the fast loop establish rhythm first, but much
+         *  faster than the initial 60s delay for immediate bolus backfill. */
+        const val RECONNECT_MEDIUM_DELAY_MS = 5_000L      // 5 seconds
+
+        /** Delay before starting slow loop on reconnection (battery, reservoir).
+         *  Let fast loop fire first, then quickly catch up on hardware status. */
+        const val RECONNECT_SLOW_DELAY_MS = 3_000L        // 3 seconds
 
         // When phone battery is low, slow everything down by this factor
         const val LOW_BATTERY_MULTIPLIER = 3

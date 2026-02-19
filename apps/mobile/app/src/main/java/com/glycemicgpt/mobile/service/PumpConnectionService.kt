@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -76,12 +77,31 @@ class PumpConnectionService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var batteryReceiverRegistered = false
+    private var bluetoothReceiverRegistered = false
     private val wakeLockSync = Any()
     private var wakeLock: PowerManager.WakeLock? = null
     private var connectionWatcherJob: Job? = null
     private var wakeLockRenewalJob: Job? = null
     @Volatile
     private var started = false
+
+    private val bluetoothStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            when (state) {
+                BluetoothAdapter.STATE_ON -> {
+                    Timber.d("Bluetooth turned ON, triggering reconnect if paired")
+                    connectionManager.autoReconnectIfPaired()
+                }
+                BluetoothAdapter.STATE_OFF,
+                BluetoothAdapter.STATE_TURNING_OFF -> {
+                    Timber.d("Bluetooth turning OFF")
+                    // GATT callbacks will handle the disconnection
+                }
+            }
+        }
+    }
 
     private val batteryReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -187,6 +207,14 @@ class PumpConnectionService : Service() {
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
             batteryReceiverRegistered = true
+
+            ContextCompat.registerReceiver(
+                this,
+                bluetoothStateReceiver,
+                IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+                ContextCompat.RECEIVER_EXPORTED,
+            )
+            bluetoothReceiverRegistered = true
         }
 
         Timber.d("PumpConnectionService started in foreground with polling")
@@ -211,6 +239,14 @@ class PumpConnectionService : Service() {
                 // Receiver was not registered
             }
             batteryReceiverRegistered = false
+        }
+        if (bluetoothReceiverRegistered) {
+            try {
+                unregisterReceiver(bluetoothStateReceiver)
+            } catch (_: IllegalArgumentException) {
+                // Receiver was not registered
+            }
+            bluetoothReceiverRegistered = false
         }
         started = false
         serviceScope.cancel()
