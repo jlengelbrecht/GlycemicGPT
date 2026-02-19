@@ -370,6 +370,21 @@ class PumpPollingOrchestrator @Inject constructor(
                         repository.saveCgmBatch(cgmReadings)
                         Timber.d("Backfilled %d CGM readings from history logs", cgmReadings.size)
                     }
+
+                    // Extract bolus events from history logs
+                    val bolusEvents = StatusResponseParser.extractBolusesFromHistoryLogs(records)
+                    if (bolusEvents.isNotEmpty()) {
+                        repository.saveBoluses(bolusEvents)
+                        syncEnqueuer.enqueueBoluses(bolusEvents)
+                        Timber.d("Backfilled %d bolus events from history logs", bolusEvents.size)
+                    }
+
+                    // Extract basal delivery events from history logs
+                    val basalReadings = StatusResponseParser.extractBasalFromHistoryLogs(records)
+                    if (basalReadings.isNotEmpty()) {
+                        repository.saveBasalBatch(basalReadings)
+                        Timber.d("Backfilled %d basal readings from history logs", basalReadings.size)
+                    }
                 }
             }
             .onFailure { Timber.w(it, "Failed to poll history logs") }

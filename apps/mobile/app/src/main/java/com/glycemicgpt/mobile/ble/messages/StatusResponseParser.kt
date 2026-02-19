@@ -536,7 +536,7 @@ object StatusResponseParser {
         )
     }
 
-    // -- History log CGM extraction -----------------------------------------
+    // -- History log event extraction ---------------------------------------
 
     /** Event type ID for fingerstick BG meter readings (LidBgReadingTaken). */
     const val EVENT_TYPE_BG_METER_READING = 16
@@ -544,8 +544,20 @@ object StatusResponseParser {
     /** Event type ID for Dexcom G7 CGM readings (LidCgmDataG7). */
     const val EVENT_TYPE_CGM_DATA_G7 = 399
 
+    /** Event type ID for basal insulin delivery segments (LidBasalDelivery). */
+    const val EVENT_TYPE_BASAL_DELIVERY = 279
+
+    /** Event type ID for bolus insulin delivery (LidBolusDelivery). */
+    const val EVENT_TYPE_BOLUS_DELIVERY = 280
+
     /** Set of event type IDs that carry CGM glucose data. */
     private val CGM_EVENT_TYPES = setOf(EVENT_TYPE_BG_METER_READING, EVENT_TYPE_CGM_DATA_G7)
+
+    /** Maximum sane bolus delivery in milliunits (250 units). */
+    private const val MAX_BOLUS_MILLIUNITS = 250_000
+
+    /** Maximum sane basal rate in milliunits/hr (25 units/hr). */
+    private const val MAX_BASAL_RATE_MILLIUNITS = 25_000
 
     /**
      * Parse a CGM glucose value from a type 16 (LidBgReadingTaken) payload.
@@ -636,6 +648,141 @@ object StatusResponseParser {
                     EVENT_TYPE_CGM_DATA_G7 -> parseCgmG7EventPayload(payload, pumpTimeSec)
                     else -> parseCgmEventPayload(payload, pumpTimeSec)
                 }
+            }
+            .sortedBy { it.timestamp }
+    }
+
+    // -- Bolus delivery extraction ------------------------------------------
+
+    /**
+     * Parse a bolus delivery event (type 280, LidBolusDelivery) from its
+     * 16-byte data payload.
+     *
+     * Raw BLE payload layout (16 bytes, LE):
+     *   bytes 0-1:   bolusId (uint16 LE)
+     *   byte  2:     deliveryStatus (0=Completed, 1=Started)
+     *   byte  3:     bolusType (bitmask: 0x08 = correction component)
+     *   byte  4:     bolusSource (7=Algorithm/Control-IQ)
+     *   byte  5:     remoteId
+     *   bytes 6-7:   requestedNow (uint16 LE, milliunits)
+     *   bytes 8-9:   correction portion (uint16 LE, milliunits)
+     *   bytes 10-11: requestedLater (uint16 LE, extended bolus milliunits)
+     *   bytes 12-13: reserved
+     *   bytes 14-15: deliveredTotal (uint16 LE, milliunits)
+     *
+     * @param data 16-byte event data payload (bytes 10-25 of 26-byte record)
+     * @param pumpTimeSec raw pump timestamp (seconds since Tandem epoch)
+     * @return BolusEvent or null if status is not Completed or data is invalid
+     */
+    fun parseBolusDeliveryPayload(data: ByteArray, pumpTimeSec: Long): BolusEvent? {
+        if (data.size < 16) return null
+
+        val deliveryStatus = data[2].toInt() and 0xFF
+        if (deliveryStatus != 0) return null // skip Started events
+
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        val deliveredTotalMu = buf.getShort(14).toInt() and 0xFFFF
+        if (deliveredTotalMu == 0 || deliveredTotalMu > MAX_BOLUS_MILLIUNITS) return null
+
+        val bolusTypeRaw = data[3].toInt() and 0xFF
+        val bolusSourceRaw = data[4].toInt() and 0xFF
+        val isCorrection = (bolusTypeRaw and 0x08) != 0
+        // Only bolusSource=7 (Algorithm) means the system initiated the bolus.
+        // A user-initiated meal bolus with a correction component is NOT automated.
+        val isAutomated = bolusSourceRaw == 7
+
+        return BolusEvent(
+            units = deliveredTotalMu / 1000f,
+            isAutomated = isAutomated,
+            isCorrection = isCorrection,
+            timestamp = pumpTimeToInstant(pumpTimeSec),
+        )
+    }
+
+    /**
+     * Extract bolus events from a list of history log records.
+     *
+     * Filters for event type 280 (LidBolusDelivery), decodes each record's
+     * base64 raw bytes, extracts the 16-byte data payload, and parses the
+     * bolus delivery fields.
+     *
+     * @param records list of history log records (any event types)
+     * @return list of BolusEvents sorted by timestamp, empty if none found
+     */
+    fun extractBolusesFromHistoryLogs(records: List<HistoryLogRecord>): List<BolusEvent> {
+        return records
+            .filter { it.eventTypeId == EVENT_TYPE_BOLUS_DELIVERY }
+            .mapNotNull { record ->
+                val rawBytes = Base64.decode(record.rawBytesB64, Base64.NO_WRAP)
+                if (rawBytes.size < STREAM_RECORD_SIZE) return@mapNotNull null
+                val payload = rawBytes.copyOfRange(10, 26)
+                parseBolusDeliveryPayload(payload, record.pumpTimeSeconds)
+            }
+            .sortedBy { it.timestamp }
+    }
+
+    // -- Basal delivery extraction ------------------------------------------
+
+    /**
+     * Parse a basal delivery event (type 279, LidBasalDelivery) from its
+     * 16-byte data payload.
+     *
+     * Raw BLE payload layout (16 bytes, LE):
+     *   bytes 0-1: commandedRateSourceRaw (uint16 LE)
+     *              0=Suspended, 1=Profile, 2=TempRate, 3=Algorithm, 4=Temp+Algorithm
+     *   bytes 2-3: unknown
+     *   bytes 4-5: profileBasalRate (uint16 LE, milliunits/hr)
+     *   bytes 6-7: commandedRate (uint16 LE, milliunits/hr) -- actual delivery
+     *   bytes 8-9: algorithmRate/tempRate (uint16 LE, milliunits/hr)
+     *   bytes 10-15: padding
+     *
+     * @param data 16-byte event data payload (bytes 10-25 of 26-byte record)
+     * @param pumpTimeSec raw pump timestamp (seconds since Tandem epoch)
+     * @return BasalReading or null if data is invalid
+     */
+    fun parseBasalDeliveryPayload(data: ByteArray, pumpTimeSec: Long): BasalReading? {
+        if (data.size < 8) return null
+
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        val sourceRaw = buf.getShort(0).toInt() and 0xFFFF
+        // Payload layout (16 bytes, LE):
+        //   [0-1] commandedRateSourceRaw  [2-3] unknown
+        //   [4-5] profileBasalRate        [6-7] commandedRate (actual delivery)
+        //   [8-9] algorithmRate/tempRate   [10+] padding
+        val commandedRateMu = buf.getShort(6).toInt() and 0xFFFF
+
+        // Suspended basal (source=0) has rate=0 -- this is valid, don't reject.
+        if (commandedRateMu > MAX_BASAL_RATE_MILLIUNITS) return null
+
+        // Sources 0 (Suspended), 3 (Algorithm), 4 (Temp+Algorithm) are automated
+        val isAutomated = sourceRaw in setOf(0, 3, 4)
+
+        return BasalReading(
+            rate = commandedRateMu / 1000f,
+            isAutomated = isAutomated,
+            controlIqMode = ControlIqMode.STANDARD, // mode not in history payload
+            timestamp = pumpTimeToInstant(pumpTimeSec),
+        )
+    }
+
+    /**
+     * Extract basal delivery readings from a list of history log records.
+     *
+     * Filters for event type 279 (LidBasalDelivery), decodes each record's
+     * base64 raw bytes, extracts the 16-byte data payload, and parses the
+     * basal delivery fields.
+     *
+     * @param records list of history log records (any event types)
+     * @return list of BasalReadings sorted by timestamp, empty if none found
+     */
+    fun extractBasalFromHistoryLogs(records: List<HistoryLogRecord>): List<BasalReading> {
+        return records
+            .filter { it.eventTypeId == EVENT_TYPE_BASAL_DELIVERY }
+            .mapNotNull { record ->
+                val rawBytes = Base64.decode(record.rawBytesB64, Base64.NO_WRAP)
+                if (rawBytes.size < STREAM_RECORD_SIZE) return@mapNotNull null
+                val payload = rawBytes.copyOfRange(10, 26)
+                parseBasalDeliveryPayload(payload, record.pumpTimeSeconds)
             }
             .sortedBy { it.timestamp }
     }

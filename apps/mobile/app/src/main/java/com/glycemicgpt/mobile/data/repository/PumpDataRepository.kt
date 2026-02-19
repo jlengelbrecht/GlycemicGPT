@@ -73,6 +73,20 @@ class PumpDataRepository @Inject constructor(
         )
     }
 
+    suspend fun saveBasalBatch(readings: List<BasalReading>) {
+        if (readings.isEmpty()) return
+        pumpDao.insertBasalBatch(
+            readings.map {
+                BasalReadingEntity(
+                    rate = it.rate,
+                    isAutomated = it.isAutomated,
+                    controlIqMode = it.controlIqMode.name,
+                    timestampMs = it.timestamp.toEpochMilli(),
+                )
+            },
+        )
+    }
+
     fun observeLatestBasal(): Flow<BasalReading?> =
         pumpDao.observeLatestBasal().map { it?.toDomain() }
 

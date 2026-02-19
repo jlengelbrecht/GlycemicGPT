@@ -16,7 +16,7 @@ data class IoBReadingEntity(
 
 @Entity(
     tableName = "basal_readings",
-    indices = [Index(value = ["timestampMs"])],
+    indices = [Index(value = ["timestampMs"], unique = true)],
 )
 data class BasalReadingEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

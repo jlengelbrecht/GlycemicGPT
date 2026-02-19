@@ -23,8 +23,6 @@ object DatabaseModule {
     /** Migration 6->7: make cgm_readings.timestampMs index unique for dedup. */
     private val MIGRATION_6_7 = object : Migration(6, 7) {
         override fun migrate(db: SupportSQLiteDatabase) {
-            // Drop the old non-unique index and create a unique one.
-            // Remove duplicate timestamps first (keep the row with the highest id).
             db.execSQL(
                 """DELETE FROM cgm_readings WHERE id NOT IN (
                     SELECT MAX(id) FROM cgm_readings GROUP BY timestampMs
@@ -37,11 +35,26 @@ object DatabaseModule {
         }
     }
 
+    /** Migration 7->8: make basal_readings.timestampMs index unique for dedup. */
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """DELETE FROM basal_readings WHERE id NOT IN (
+                    SELECT MAX(id) FROM basal_readings GROUP BY timestampMs
+                )""",
+            )
+            db.execSQL("DROP INDEX IF EXISTS index_basal_readings_timestampMs")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_basal_readings_timestampMs ON basal_readings(timestampMs)",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "glycemicgpt.db")
-            .addMigrations(MIGRATION_6_7)
+            .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration()
             .build()
 
