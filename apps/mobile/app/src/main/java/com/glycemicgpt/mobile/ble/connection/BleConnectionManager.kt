@@ -79,6 +79,14 @@ class BleConnectionManager @Inject constructor(
     private var reconnectJob: Job? = null
     @Volatile
     private var autoReconnect = true
+    @Volatile
+    private var reconnectPhase = ReconnectPhase.FAST
+    // Passive autoConnect=true GATT for slow-phase reconnection.
+    // Android's BLE stack handles reconnection in the kernel when the device
+    // comes back in range, without requiring CPU wake or polling.
+    @Volatile
+    private var autoConnectGatt: BluetoothGatt? = null
+    private val autoConnectLock = Any()
 
     // Tracks rapid disconnections after connect (bond loss detection).
     // If the pump disconnects us multiple times before we ever reach CONNECTED,
@@ -90,7 +98,8 @@ class BleConnectionManager @Inject constructor(
     // If this happens repeatedly, the pump is not responding (likely needs re-pairing).
     @Volatile
     private var zeroResponseConnectionCount = 0
-    // Tracks consecutive INSUFFICIENT_ENCRYPTION disconnects during active sessions.
+    // Tracks consecutive INSUFFICIENT_ENCRYPTION disconnects (during active sessions
+    // or reconnection attempts after a prior successful session).
     // After MAX_ENCRYPTION_FAILURES, the bond is considered genuinely stale.
     @Volatile
     private var encryptionFailureCount = 0
@@ -170,6 +179,7 @@ class BleConnectionManager @Inject constructor(
         // Cancel any pending scheduled reconnect to avoid racing with this connect
         reconnectJob?.cancel()
         reconnectJob = null
+        cancelAutoConnectGatt()
         _connectionState.value = ConnectionState.CONNECTING
         autoReconnect = true
         if (resetCounters) {
@@ -208,6 +218,7 @@ class BleConnectionManager @Inject constructor(
         hadSuccessfulSession = false
         reconnectJob?.cancel()
         reconnectJob = null
+        cancelAutoConnectGatt()
         authTimeoutJob?.cancel()
         authTimeoutJob = null
         settleJob?.cancel()
@@ -247,6 +258,7 @@ class BleConnectionManager @Inject constructor(
         if (address != null) {
             removeBond(address)
         }
+        cancelAutoConnectGatt()
         Timber.d("Pump unpaired, credentials + JPAKE session cleared, bond removed")
     }
 
@@ -287,6 +299,12 @@ class BleConnectionManager @Inject constructor(
     /** Attempt auto-reconnect to the previously paired pump. */
     fun autoReconnectIfPaired() {
         val address = credentialStore.getPairedAddress() ?: return
+        // Fresh reconnect: reset to fast phase (called from BT state receiver,
+        // service startup, etc. -- these are all "new" reconnection attempts).
+        synchronized(autoConnectLock) {
+            reconnectPhase = ReconnectPhase.FAST
+        }
+        cancelAutoConnectGatt()
         // Pass null for pairingCode -- reconnects use JPAKE confirmation mode
         // with the saved derived secret from initial pairing.
         connect(address, pairingCode = null)
@@ -438,27 +456,123 @@ class BleConnectionManager @Inject constructor(
         drainOperationQueue()
     }
 
+    /**
+     * Schedule the next reconnection attempt using a tiered strategy:
+     *
+     * **FAST phase:** Exponential backoff 1s -> 32s for the first
+     * [MAX_FAST_RECONNECT_ATTEMPTS] attempts (~5 minutes). Suitable for
+     * transient radio interference or momentary pump distance.
+     *
+     * **SLOW phase:** Periodic attempts every [SLOW_RECONNECT_INTERVAL_MS]
+     * (2 minutes) indefinitely. Also opens a passive `autoConnect=true` GATT
+     * connection so Android's BLE stack can reconnect immediately when the
+     * pump comes back in range (runs in kernel, no CPU wake needed).
+     *
+     * The pump is a medical device -- if the user hasn't explicitly unpaired,
+     * we should always try to reconnect. Bond-loss detection (insufficient
+     * auth, insufficient encryption, rapid disconnects, zero-response) still
+     * triggers AUTH_FAILED when appropriate.
+     */
     private fun scheduleReconnect() {
         if (!autoReconnect) return
         val address = credentialStore.getPairedAddress() ?: return
 
-        reconnectAttempt = minOf(reconnectAttempt + 1, 10)
-        val delayMs = minOf(1000L * (1 shl minOf(reconnectAttempt, 5)), 32_000L)
         _connectionState.value = ConnectionState.RECONNECTING
 
-        Timber.d("Scheduling reconnect attempt %d in %d ms", reconnectAttempt, delayMs)
+        // Synchronize phase transitions to prevent races with autoReconnectIfPaired()
+        // or onAuthSuccess() resetting the phase from another thread.
+        val delayMs: Long
+        synchronized(autoConnectLock) {
+            if (reconnectPhase == ReconnectPhase.FAST) {
+                reconnectAttempt = minOf(reconnectAttempt + 1, MAX_FAST_RECONNECT_ATTEMPTS)
+                if (reconnectAttempt >= MAX_FAST_RECONNECT_ATTEMPTS) {
+                    // Transition to slow phase -- start passive autoConnect GATT
+                    reconnectPhase = ReconnectPhase.SLOW
+                    Timber.d("Fast reconnect exhausted (%d attempts), switching to slow phase", reconnectAttempt)
+                    startAutoConnectGatt(address)
+                    delayMs = SLOW_RECONNECT_INTERVAL_MS
+                } else {
+                    delayMs = minOf(1000L * (1 shl minOf(reconnectAttempt, 5)), 32_000L)
+                    Timber.d("Fast reconnect attempt %d in %d ms", reconnectAttempt, delayMs)
+                }
+            } else {
+                // SLOW phase: periodic attempts every 2 minutes with autoConnect=true
+                // as a passive supplement. The autoConnect GATT runs in the kernel BLE
+                // stack and triggers immediately when the device comes back in range.
+                // The periodic timer is a fallback for devices with buggy autoConnect.
+                Timber.d("Slow reconnect: next attempt in %d ms", SLOW_RECONNECT_INTERVAL_MS)
+                // Ensure autoConnect GATT is open (may have been closed by a connect attempt)
+                startAutoConnectGatt(address)
+                delayMs = SLOW_RECONNECT_INTERVAL_MS
+            }
+        }
+
         reconnectJob = scope.launch {
             delay(delayMs)
             if (autoReconnect && _connectionState.value == ConnectionState.RECONNECTING) {
-                // Pass null for pairingCode -- reconnects use JPAKE confirmation mode
-                // with the saved derived secret (or bootstrap if no secret saved).
-                // resetCounters=false preserves exponential backoff across attempts.
                 connect(address, pairingCode = null, resetCounters = false)
             } else if (_connectionState.value == ConnectionState.RECONNECTING) {
-                // autoReconnect was toggled off while we were waiting. Clean up
-                // the stale RECONNECTING state so the UI doesn't show it forever.
                 _connectionState.value = ConnectionState.DISCONNECTED
             }
+        }
+    }
+
+    /** Open a passive autoConnect=true GATT connection for background reconnection. */
+    @SuppressLint("MissingPermission")
+    private fun startAutoConnectGatt(address: String) {
+        synchronized(autoConnectLock) {
+            if (autoConnectGatt != null) return // already open
+            val adapter = bluetoothManager?.adapter ?: run {
+                Timber.w("Cannot open autoConnect GATT: BluetoothAdapter not available")
+                return
+            }
+            val device = adapter.getRemoteDevice(address)
+            Timber.d("Opening autoConnect=true GATT for passive reconnection")
+            autoConnectGatt = device.connectGatt(context, true, autoConnectCallback, BluetoothDevice.TRANSPORT_LE)
+        }
+    }
+
+    /** Close the passive autoConnect GATT if open. */
+    @SuppressLint("MissingPermission")
+    private fun cancelAutoConnectGatt() {
+        synchronized(autoConnectLock) {
+            autoConnectGatt?.let {
+                it.disconnect()
+                it.close()
+                Timber.d("autoConnect GATT cancelled")
+            }
+            autoConnectGatt = null
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private val autoConnectCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                Timber.d("autoConnect GATT triggered -- device back in range, initiating full connect")
+                // Close the auto-connect GATT -- we'll open a proper one via connect()
+                synchronized(autoConnectLock) {
+                    gatt.disconnect()
+                    gatt.close()
+                    autoConnectGatt = null
+                }
+                // Post to coroutine scope: connect() performs GATT operations that must
+                // not run on the binder thread delivering this callback.
+                scope.launch {
+                    reconnectJob?.cancel()
+                    val address = credentialStore.getPairedAddress() ?: return@launch
+                    connect(address, pairingCode = null, resetCounters = false)
+                }
+            } else if (newState == BluetoothProfile.STATE_CONNECTED) {
+                // Connected but with non-success status -- close and let autoConnect retry
+                Timber.w("autoConnect GATT connected with error status=%d, closing", status)
+                synchronized(autoConnectLock) {
+                    gatt.disconnect()
+                    gatt.close()
+                    autoConnectGatt = null
+                }
+            }
+            // STATE_DISCONNECTED: autoConnect will keep retrying in the BLE stack
         }
     }
 
@@ -502,18 +616,13 @@ class BleConnectionManager @Inject constructor(
                             // Idle-timeout during reconnection, not bond loss.
                             // The pump previously accepted our connection this session,
                             // so status 19 means it dropped idle -- not bond rejection.
-                            consecutiveReconnectFailures++
-                            Timber.d("Status 19 during reconnect after prior successful session (%d/%d) -- treating as idle-timeout",
-                                consecutiveReconnectFailures, MAX_RECONNECT_FAILURES)
-                            if (consecutiveReconnectFailures >= MAX_RECONNECT_FAILURES) {
-                                Timber.e("Pump unreachable after %d consecutive reconnect failures -- possible bond loss mid-session",
-                                    consecutiveReconnectFailures)
-                                autoReconnect = false
-                                authTimeoutJob?.cancel()
-                                reconnectJob?.cancel()
-                                _connectionState.value = ConnectionState.AUTH_FAILED
-                                return
-                            }
+                            // Let scheduleReconnect() handle the phase transition
+                            // (fast -> slow) rather than giving up with AUTH_FAILED.
+                            // The pump is a medical device: if the user hasn't unpaired,
+                            // keep trying indefinitely.
+                            consecutiveReconnectFailures = minOf(consecutiveReconnectFailures + 1, MAX_CONSECUTIVE_RECONNECT_FAILURES)
+                            Timber.d("Status 19 during reconnect after prior successful session (%d/%d) -- treating as idle-timeout, continuing reconnection",
+                                consecutiveReconnectFailures, MAX_FAST_RECONNECT_ATTEMPTS)
                         } else {
                             rapidDisconnectCount++
                             if (rapidDisconnectCount >= MAX_RAPID_DISCONNECTS) {
@@ -522,6 +631,7 @@ class BleConnectionManager @Inject constructor(
                                 autoReconnect = false
                                 authTimeoutJob?.cancel()
                                 reconnectJob?.cancel()
+                                cancelAutoConnectGatt()
                                 _connectionState.value = ConnectionState.AUTH_FAILED
                                 return
                             }
@@ -538,42 +648,53 @@ class BleConnectionManager @Inject constructor(
                         rapidDisconnectCount = 0
                         authTimeoutJob?.cancel()
                         reconnectJob?.cancel()
+                        cancelAutoConnectGatt()
                         _connectionState.value = ConnectionState.AUTH_FAILED
                         return
                     }
-                    // Insufficient encryption handling depends on whether we had
-                    // a fully established session. During CONNECTED state, status 8
-                    // often means the phone woke from deep sleep and the BLE link
-                    // needs to renegotiate encryption -- the bond is still valid,
-                    // so allow auto-reconnect. Remove the bond if we hadn't reached
-                    // CONNECTED (genuinely stale keys) or if repeated encryption
-                    // failures indicate the bond is not recoverable.
+                    // Insufficient encryption handling: status 8 often means the
+                    // phone woke from deep sleep and the BLE link needs to
+                    // renegotiate encryption. If we had a prior successful session
+                    // (hadSuccessfulSession=true), this is transient -- allow
+                    // reconnect and count failures. Only declare bond loss if:
+                    // (a) we never had a successful session (genuinely stale keys),
+                    // or (b) MAX_ENCRYPTION_FAILURES consecutive failures.
                     if (status == GATT_INSUFFICIENT_ENCRYPTION) {
                         val wasFullyConnected = _connectionState.value == ConnectionState.CONNECTED
-                        if (!wasFullyConnected) {
+                        if (!wasFullyConnected && !hadSuccessfulSession) {
+                            // Never had a successful session and encryption failed
+                            // before reaching CONNECTED -- bond keys genuinely stale.
                             Timber.e("Pump reports insufficient encryption before connected -- bond keys stale, removing bond for re-pairing")
                             val addr = credentialStore.getPairedAddress()
                             if (addr != null) removeBond(addr)
                             autoReconnect = false
                             authTimeoutJob?.cancel()
                             reconnectJob?.cancel()
+                            cancelAutoConnectGatt()
                             _connectionState.value = ConnectionState.AUTH_FAILED
                             return
                         }
+                        // Either we were fully connected (active session disruption)
+                        // or we had a prior successful session (transient encryption
+                        // renegotiation during reconnect -- e.g., phone woke from
+                        // deep sleep and BLE link key refresh failed transiently).
+                        // Count failures and only give up after MAX_ENCRYPTION_FAILURES.
                         encryptionFailureCount++
                         if (encryptionFailureCount >= MAX_ENCRYPTION_FAILURES) {
-                            Timber.e("Encryption failed %d consecutive times during active sessions -- bond likely stale, removing for re-pairing",
+                            Timber.e("Encryption failed %d consecutive times -- bond likely stale, removing for re-pairing",
                                 encryptionFailureCount)
                             val addr = credentialStore.getPairedAddress()
                             if (addr != null) removeBond(addr)
                             autoReconnect = false
                             authTimeoutJob?.cancel()
                             reconnectJob?.cancel()
+                            cancelAutoConnectGatt()
                             _connectionState.value = ConnectionState.AUTH_FAILED
                             return
                         }
-                        rapidDisconnectCount = 0
-                        Timber.d("Insufficient encryption during active session (%d/%d) -- reconnecting (bond preserved)",
+                        if (wasFullyConnected) rapidDisconnectCount = 0
+                        Timber.d("Insufficient encryption %s (%d/%d) -- reconnecting (bond preserved)",
+                            if (wasFullyConnected) "during active session" else "before connected (prior session exists)",
                             encryptionFailureCount, MAX_ENCRYPTION_FAILURES)
                         // Fall through to normal disconnect/reconnect path
                     }
@@ -593,6 +714,7 @@ class BleConnectionManager @Inject constructor(
                             autoReconnect = false
                             authTimeoutJob?.cancel()
                             reconnectJob?.cancel()
+                            cancelAutoConnectGatt()
                             _connectionState.value = ConnectionState.AUTH_FAILED
                             return
                         }
@@ -841,6 +963,10 @@ class BleConnectionManager @Inject constructor(
         rapidDisconnectCount = 0
         encryptionFailureCount = 0
         consecutiveReconnectFailures = 0
+        synchronized(autoConnectLock) {
+            reconnectPhase = ReconnectPhase.FAST
+        }
+        cancelAutoConnectGatt()
         hadSuccessfulSession = true
         // Save credentials on first successful pairing
         val address = synchronized(gattLock) { gatt?.device?.address }
@@ -1045,15 +1171,25 @@ class BleConnectionManager @Inject constructor(
         /** Max connections with zero pump responses before giving up. */
         const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
 
-        /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects during active sessions
-         *  before treating the bond as genuinely stale and removing it. */
+        /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects (during active sessions
+         *  or reconnection after a prior successful session) before treating the bond
+         *  as genuinely stale and removing it. */
         const val MAX_ENCRYPTION_FAILURES = 3
 
-        /** Max consecutive reconnect failures (even with hadSuccessfulSession) before
-         *  declaring the pump unreachable. Covers mid-session bond loss scenarios
-         *  like pump factory reset or battery pull. With 32s max backoff, 10 attempts
-         *  takes ~5 minutes -- enough to survive transient radio issues. */
-        const val MAX_RECONNECT_FAILURES = 10
+        /** Max attempts in the fast reconnection phase before transitioning to
+         *  slow (patient) reconnection. With 32s max backoff, 10 attempts takes
+         *  ~5 minutes. After this, reconnection continues indefinitely at a
+         *  slower rate (every 2 minutes) with autoConnect=true as a supplement. */
+        const val MAX_FAST_RECONNECT_ATTEMPTS = 10
+
+        /** Interval for slow-phase periodic reconnection attempts (2 minutes).
+         *  Runs alongside a passive autoConnect=true GATT. The periodic timer
+         *  is a fallback for devices with buggy autoConnect implementations. */
+        const val SLOW_RECONNECT_INTERVAL_MS = 120_000L
+
+        /** Cap for [consecutiveReconnectFailures] to prevent unbounded growth.
+         *  Only used for logging; the slow phase reconnects indefinitely. */
+        private const val MAX_CONSECUTIVE_RECONNECT_FAILURES = 100
 
         // Named GATT status codes used in bond-loss detection
         private const val GATT_INSUFFICIENT_AUTHENTICATION = 0x05
@@ -1079,4 +1215,12 @@ class BleConnectionManager @Inject constructor(
             else -> "UNKNOWN_0x${status.toString(16)}"
         }
     }
+}
+
+/** Reconnection phase: fast exponential backoff, then slow periodic. */
+private enum class ReconnectPhase {
+    /** Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s. ~5 minutes total. */
+    FAST,
+    /** Periodic every 2 minutes with autoConnect=true supplement. Runs indefinitely. */
+    SLOW,
 }

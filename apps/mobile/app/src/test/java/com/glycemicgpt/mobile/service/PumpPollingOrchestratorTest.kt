@@ -356,6 +356,65 @@ class PumpPollingOrchestratorTest {
         orchestrator.stop()
     }
 
+    // -- Reconnection accelerated polling tests --------------------------------
+
+    @Test
+    fun `reconnection uses reduced medium loop delay`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        // First connection
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(SETTLE_TIME_MS)
+        coVerify(exactly = 1) { pumpDriver.getIoB() }
+
+        // Disconnect
+        connectionStateFlow.value = ConnectionState.DISCONNECTED
+        advanceTimeBy(1000)
+
+        // Reconnection: bolus history should fire within RECONNECT_MEDIUM_DELAY_MS (5s)
+        // not MEDIUM_LOOP_INITIAL_DELAY_MS (60s)
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(PumpPollingOrchestrator.RECONNECT_MEDIUM_DELAY_MS + 100)
+        coVerify(atLeast = 1) { pumpDriver.getBolusHistory(any()) }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `initial connection uses full medium loop delay`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        // First connection -- should NOT poll bolus history before MEDIUM_LOOP_INITIAL_DELAY_MS
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(PumpPollingOrchestrator.RECONNECT_MEDIUM_DELAY_MS + 100)
+
+        // At 5.1 seconds, bolus history should NOT have been polled (initial delay is 60s)
+        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any()) }
+        orchestrator.stop()
+    }
+
+    @Test
+    fun `reconnection uses reduced slow loop delay`() = runTest {
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        // First connection -- only settle briefly (not long enough for slow loop at 30s)
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(SETTLE_TIME_MS)
+
+        // Disconnect
+        connectionStateFlow.value = ConnectionState.DISCONNECTED
+        advanceTimeBy(1000)
+
+        // Reconnection: battery should fire within RECONNECT_SLOW_DELAY_MS (3s)
+        // instead of SLOW_LOOP_INITIAL_DELAY_MS (30s)
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        advanceTimeBy(PumpPollingOrchestrator.RECONNECT_SLOW_DELAY_MS + 100)
+        coVerify(atLeast = 1) { pumpDriver.getBatteryStatus() }
+        orchestrator.stop()
+    }
+
     @Test
     fun `does not resend same alert type`() = runTest {
         coEvery { pumpDriver.getCgmStatus() } returns Result.success(
