@@ -2,7 +2,7 @@ name: Auto Label PRs
 
 on:
   pull_request_target:
-    branches: [main]
+    branches: [main, develop]
     types: [opened, synchronize, reopened, edited]
 
 permissions:

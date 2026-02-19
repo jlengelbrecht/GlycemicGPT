@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     types: [opened, synchronize, reopened]
 
 concurrency:
@@ -156,10 +156,11 @@ jobs:
 
       - name: Check for prohibited Co-Authored-By lines
         run: |
-          if git log --format="%B" origin/main..HEAD 2>/dev/null | grep -qiE '^Co-Authored-By:.*(claude|anthropic|noreply@anthropic)'; then
+          BASE_REF="${{ github.event.pull_request.base.ref || github.ref_name }}"
+          if git log --format="%B" "origin/${BASE_REF}..HEAD" 2>/dev/null | grep -qiE '^Co-Authored-By:.*(claude|anthropic|noreply@anthropic)'; then
             echo "ERROR: Found prohibited Co-Authored-By attribution in commit messages."
             echo "The following commits contain AI tool attribution:"
-            git log --format="%h %s" origin/main..HEAD | while read -r hash rest; do
+            git log --format="%h %s" "origin/${BASE_REF}..HEAD" | while read -r hash rest; do
               if git log -1 --format="%B" "$hash" | grep -qiE '^Co-Authored-By:.*(claude|anthropic|noreply@anthropic)'; then
                 echo "  - $hash $rest"
               fi

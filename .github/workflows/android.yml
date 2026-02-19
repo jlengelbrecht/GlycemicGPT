@@ -2,7 +2,7 @@ name: Android
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths: ['apps/mobile/**']
     types: [opened, synchronize, reopened]
 

@@ -2,7 +2,7 @@ name: Build and Push Container Images
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
@@ -84,6 +84,7 @@ jobs:
           images: ${{ env.IMAGE_PREFIX }}-api
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
             type=sha,prefix=sha-
@@ -139,6 +140,7 @@ jobs:
           images: ${{ env.IMAGE_PREFIX }}-web
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
             type=sha,prefix=sha-
@@ -194,6 +196,7 @@ jobs:
           images: ${{ env.IMAGE_PREFIX }}-sidecar
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
             type=sha,prefix=sha-
