@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.ble.messages.StatusResponseParser
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.entity.RawHistoryLogEntity
@@ -362,6 +363,13 @@ class PumpPollingOrchestrator @Inject constructor(
                     lastSequenceNumber = records.maxOf { it.sequenceNumber }
                     backendSyncManager?.triggerSync()
                     Timber.d("Saved %d raw history log records", records.size)
+
+                    // Extract CGM readings from history logs to fill chart gaps
+                    val cgmReadings = StatusResponseParser.extractCgmFromHistoryLogs(records)
+                    if (cgmReadings.isNotEmpty()) {
+                        repository.saveCgmBatch(cgmReadings)
+                        Timber.d("Backfilled %d CGM readings from history logs", cgmReadings.size)
+                    }
                 }
             }
             .onFailure { Timber.w(it, "Failed to poll history logs") }

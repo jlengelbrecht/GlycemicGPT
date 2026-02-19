@@ -148,6 +148,19 @@ class PumpDataRepository @Inject constructor(
         )
     }
 
+    suspend fun saveCgmBatch(readings: List<CgmReading>) {
+        if (readings.isEmpty()) return
+        pumpDao.insertCgmBatch(
+            readings.map {
+                CgmReadingEntity(
+                    glucoseMgDl = it.glucoseMgDl,
+                    trendArrow = it.trendArrow.name,
+                    timestampMs = it.timestamp.toEpochMilli(),
+                )
+            },
+        )
+    }
+
     fun observeLatestCgm(): Flow<CgmReading?> =
         pumpDao.observeLatestCgm().map { it?.toDomain() }
 

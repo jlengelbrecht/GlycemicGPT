@@ -94,6 +94,9 @@ interface PumpDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCgm(reading: CgmReadingEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCgmBatch(readings: List<CgmReadingEntity>)
+
     @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestCgm(): Flow<CgmReadingEntity?>
 
