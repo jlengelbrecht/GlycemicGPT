@@ -121,10 +121,6 @@ async def generate_glucose_stream(
                                     "Failed to get IoB projection", error=str(e)
                                 )
 
-                            # CoB is not yet implemented - will be added in future story
-                            # For now, explicitly set to null (Issue 7 fix)
-                            cob_data = None
-
                             glucose_event = {
                                 "value": latest.value,
                                 "trend": latest.trend.value
@@ -135,7 +131,6 @@ async def generate_glucose_stream(
                                 "minutes_ago": minutes_ago,
                                 "is_stale": is_stale,
                                 "iob": iob_data,
-                                "cob": cob_data,  # Issue 7: Include CoB (null for now)
                                 "timestamp": now.isoformat(),
                             }
 
@@ -245,7 +240,7 @@ async def stream_glucose(
     """Stream glucose updates via Server-Sent Events.
 
     Provides real-time glucose data and alerts for the dashboard. Events include:
-    - `glucose`: Current glucose reading with trend, IoB, and CoB data
+    - `glucose`: Current glucose reading with trend and IoB data
     - `alert`: New predictive or threshold-based alert (Story 6.3)
     - `heartbeat`: Keep-alive signal every 30 seconds
     - `no_data`: Sent when no glucose readings are available

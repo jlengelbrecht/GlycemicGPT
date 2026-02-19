@@ -53,6 +53,10 @@ from src.schemas.pump import (
     PumpEventResponse,
     PumpPushRequest,
     PumpPushResponse,
+    PumpStatusBasal,
+    PumpStatusBattery,
+    PumpStatusReservoir,
+    PumpStatusResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
     TandemUploadSettingsRequest,
@@ -75,6 +79,7 @@ from src.services.tandem_sync import (
     TandemSyncError,
     get_control_iq_activity,
     get_latest_pump_event,
+    get_latest_pump_status,
     get_pump_events,
     sync_tandem_for_user,
 )
@@ -983,6 +988,59 @@ async def get_pump_event_history(
     return PumpEventHistoryResponse(
         events=[PumpEventResponse.model_validate(e) for e in events],
         count=len(events),
+    )
+
+
+@router.get(
+    "/pump/status",
+    response_model=PumpStatusResponse,
+    responses={
+        200: {"description": "Latest pump status (basal, battery, reservoir)"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_pump_status(
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> PumpStatusResponse:
+    """Get latest pump status for the dashboard hero card.
+
+    Returns the most recent basal rate, battery percentage, and reservoir
+    level from synced pump events.
+
+    Field mapping notes:
+    - PumpEvent.units stores the numeric value (rate, percentage, or units remaining)
+    - PumpEvent.is_automated is reused for battery events to store is_charging
+      (Tandem pumps use non-rechargeable batteries so this is always False)
+    """
+    status = await get_latest_pump_status(db, current_user.id)
+
+    basal_event = status.get("basal")
+    battery_event = status.get("battery")
+    reservoir_event = status.get("reservoir")
+
+    return PumpStatusResponse(
+        basal=PumpStatusBasal(
+            rate=basal_event.units or 0.0,
+            is_automated=basal_event.is_automated,
+            timestamp=basal_event.event_timestamp,
+        )
+        if basal_event
+        else None,
+        battery=PumpStatusBattery(
+            percentage=int(battery_event.units or 0),
+            is_charging=battery_event.is_automated,
+            timestamp=battery_event.event_timestamp,
+        )
+        if battery_event
+        else None,
+        reservoir=PumpStatusReservoir(
+            units_remaining=reservoir_event.units or 0.0,
+            timestamp=reservoir_event.event_timestamp,
+        )
+        if reservoir_event
+        else None,
     )
 
 

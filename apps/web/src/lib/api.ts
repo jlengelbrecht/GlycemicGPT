@@ -2228,7 +2228,7 @@ export async function getGlucoseHistory(
 // Pump Event History
 // ============================================================================
 
-export type PumpEventType = "basal" | "bolus" | "correction" | "suspend" | "resume" | "bg_reading";
+export type PumpEventType = "basal" | "bolus" | "correction" | "suspend" | "resume" | "bg_reading" | "battery" | "reservoir";
 
 export interface PumpEventReading {
   event_type: PumpEventType;
@@ -2259,6 +2259,46 @@ export async function getPumpEventHistory(
     const error = await response.json().catch(() => ({}));
     throw new Error(
       error.detail || `Failed to fetch pump events: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+// ============================================================================
+// Pump Status (Hero Card)
+// ============================================================================
+
+export interface PumpStatusBasal {
+  rate: number;
+  is_automated: boolean;
+  timestamp: string;
+}
+
+export interface PumpStatusBattery {
+  percentage: number;
+  is_charging: boolean;
+  timestamp: string;
+}
+
+export interface PumpStatusReservoir {
+  units_remaining: number;
+  timestamp: string;
+}
+
+export interface PumpStatusResponse {
+  basal: PumpStatusBasal | null;
+  battery: PumpStatusBattery | null;
+  reservoir: PumpStatusReservoir | null;
+}
+
+export async function getPumpStatus(): Promise<PumpStatusResponse> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/api/integrations/pump/status`
+  );
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      error.detail || `Failed to fetch pump status: ${response.status}`
     );
   }
   return response.json();

@@ -337,13 +337,21 @@ class PumpPollingOrchestrator @Inject constructor(
 
     private suspend fun pollBattery() {
         pumpDriver.getBatteryStatus()
-            .onSuccess { repository.saveBattery(it) }
+            .onSuccess {
+                repository.saveBattery(it)
+                syncEnqueuer.enqueueBattery(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll battery") }
     }
 
     private suspend fun pollReservoir() {
         pumpDriver.getReservoirLevel()
-            .onSuccess { repository.saveReservoir(it) }
+            .onSuccess {
+                repository.saveReservoir(it)
+                syncEnqueuer.enqueueReservoir(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll reservoir") }
     }
 

@@ -75,10 +75,6 @@ interface RawGlucoseData {
     current: number;
     is_stale: boolean;
   } | null;
-  cob: {
-    current: number;
-    is_stale: boolean;
-  } | null;
   timestamp: string;
 }
 
@@ -122,11 +118,6 @@ export interface GlucoseData {
   is_stale: boolean;
   /** Insulin on board data (if available) */
   iob: {
-    current: number;
-    is_stale: boolean;
-  } | null;
-  /** Carbs on board data (if available) - Issue 6 & 7 fix */
-  cob: {
     current: number;
     is_stale: boolean;
   } | null;

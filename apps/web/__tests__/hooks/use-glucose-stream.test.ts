@@ -196,7 +196,6 @@ describe("useGlucoseStream", () => {
       minutes_ago: 2,
       is_stale: false,
       iob: { current: 2.4, is_stale: false },
-      cob: null,
       timestamp: "2024-01-01T12:00:00Z",
     };
 
@@ -229,24 +228,6 @@ describe("useGlucoseStream", () => {
       expect(result.current.connectionState).toBe("connected");
     });
 
-    it("should include cob in data when available", async () => {
-      const { result } = renderHook(() => useGlucoseStream(true));
-
-      const dataWithCob = {
-        ...mockRawGlucoseData,
-        cob: { current: 15, is_stale: false },
-      };
-
-      act(() => {
-        MockEventSource.getLastInstance()?.simulateOpen();
-      });
-
-      act(() => {
-        MockEventSource.getLastInstance()?.simulateMessage("glucose", dataWithCob);
-      });
-
-      expect(result.current.data?.cob).toEqual({ current: 15, is_stale: false });
-    });
   });
 
   describe("Heartbeat Events", () => {

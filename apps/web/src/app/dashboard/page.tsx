@@ -31,6 +31,7 @@ import { PERIOD_LABELS } from "@/components/dashboard/time-in-range-bar";
 import { useGlucoseStreamContext, useUserContext } from "@/providers";
 import { useTimeInRangeStats } from "@/hooks/use-time-in-range-stats";
 import { useGlucoseRange } from "@/hooks/use-glucose-range";
+import { usePumpStatus } from "@/hooks/use-pump-status";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -63,6 +64,9 @@ export default function DashboardPage() {
   const glucoseThresholds = useGlucoseRange();
   const targetRange = `${glucoseThresholds.low}-${glucoseThresholds.high} mg/dL`;
 
+  // Fetch latest pump status (basal, battery, reservoir) for hero card
+  const pumpStatus = usePumpStatus(chartRefreshKey);
+
   // Redirect caregivers to the caregiver-specific dashboard (Story 8.3)
   useEffect(() => {
     if (user?.role === "caregiver") {
@@ -88,8 +92,6 @@ export default function DashboardPage() {
   const glucoseValue = glucose?.value ?? null;
   const glucoseTrend = glucose?.trend ?? "Unknown";
   const iob = glucose?.iob?.current ?? null;
-  // Issue 6 fix: Pass CoB to GlucoseHero (null if not available)
-  const cob = glucose?.cob?.current ?? null;
   const minutesAgo = glucose?.minutes_ago ?? null;
   const isStale = glucose?.is_stale ?? false;
 
@@ -128,7 +130,9 @@ export default function DashboardPage() {
         value={glucoseValue}
         trend={glucoseTrend}
         iob={iob}
-        cob={cob}
+        basalRate={pumpStatus.basal?.rate ?? null}
+        batteryPct={pumpStatus.battery?.percentage ?? null}
+        reservoirUnits={pumpStatus.reservoir?.units_remaining ?? null}
         isLoading={!isLive && !glucose}
         thresholds={glucoseThresholds}
       />
