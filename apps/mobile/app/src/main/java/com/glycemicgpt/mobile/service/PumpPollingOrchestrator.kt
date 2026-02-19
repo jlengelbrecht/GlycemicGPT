@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.service
 
+import com.glycemicgpt.mobile.ble.messages.StatusResponseParser
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.local.entity.RawHistoryLogEntity
@@ -336,13 +337,21 @@ class PumpPollingOrchestrator @Inject constructor(
 
     private suspend fun pollBattery() {
         pumpDriver.getBatteryStatus()
-            .onSuccess { repository.saveBattery(it) }
+            .onSuccess {
+                repository.saveBattery(it)
+                syncEnqueuer.enqueueBattery(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll battery") }
     }
 
     private suspend fun pollReservoir() {
         pumpDriver.getReservoirLevel()
-            .onSuccess { repository.saveReservoir(it) }
+            .onSuccess {
+                repository.saveReservoir(it)
+                syncEnqueuer.enqueueReservoir(it)
+                backendSyncManager?.triggerSync()
+            }
             .onFailure { Timber.w(it, "Failed to poll reservoir") }
     }
 
@@ -362,6 +371,30 @@ class PumpPollingOrchestrator @Inject constructor(
                     lastSequenceNumber = records.maxOf { it.sequenceNumber }
                     backendSyncManager?.triggerSync()
                     Timber.d("Saved %d raw history log records", records.size)
+
+                    // Extract CGM readings from history logs to fill chart gaps
+                    val cgmReadings = StatusResponseParser.extractCgmFromHistoryLogs(records)
+                    if (cgmReadings.isNotEmpty()) {
+                        repository.saveCgmBatch(cgmReadings)
+                        Timber.d("Backfilled %d CGM readings from history logs", cgmReadings.size)
+                    }
+
+                    // Extract bolus events from history logs
+                    val bolusEvents = StatusResponseParser.extractBolusesFromHistoryLogs(records)
+                    if (bolusEvents.isNotEmpty()) {
+                        repository.saveBoluses(bolusEvents)
+                        syncEnqueuer.enqueueBoluses(bolusEvents)
+                        Timber.d("Backfilled %d bolus events from history logs", bolusEvents.size)
+                    }
+
+                    // Extract basal delivery events from history logs
+                    val basalReadings = StatusResponseParser.extractBasalFromHistoryLogs(records)
+                    if (basalReadings.isNotEmpty()) {
+                        repository.saveBasalBatch(basalReadings)
+                        syncEnqueuer.enqueueBasalBatch(basalReadings)
+                        backendSyncManager?.triggerSync()
+                        Timber.d("Backfilled %d basal readings from history logs", basalReadings.size)
+                    }
                 }
             }
             .onFailure { Timber.w(it, "Failed to poll history logs") }

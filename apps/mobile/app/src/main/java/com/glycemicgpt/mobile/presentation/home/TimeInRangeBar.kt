@@ -41,6 +41,8 @@ enum class TirPeriod(val label: String, val hours: Long) {
     TWENTY_FOUR_HOURS("24H", 24),
     THREE_DAYS("3D", 72),
     SEVEN_DAYS("7D", 168),
+    FOURTEEN_DAYS("14D", 336),
+    THIRTY_DAYS("30D", 720),
 }
 
 private val TirLow = GlucoseColors.UrgentLow   // Red

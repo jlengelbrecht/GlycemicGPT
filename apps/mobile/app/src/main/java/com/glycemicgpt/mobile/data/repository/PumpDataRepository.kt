@@ -73,6 +73,20 @@ class PumpDataRepository @Inject constructor(
         )
     }
 
+    suspend fun saveBasalBatch(readings: List<BasalReading>) {
+        if (readings.isEmpty()) return
+        pumpDao.insertBasalBatch(
+            readings.map {
+                BasalReadingEntity(
+                    rate = it.rate,
+                    isAutomated = it.isAutomated,
+                    controlIqMode = it.controlIqMode.name,
+                    timestampMs = it.timestamp.toEpochMilli(),
+                )
+            },
+        )
+    }
+
     fun observeLatestBasal(): Flow<BasalReading?> =
         pumpDao.observeLatestBasal().map { it?.toDomain() }
 
@@ -145,6 +159,19 @@ class PumpDataRepository @Inject constructor(
                 trendArrow = reading.trendArrow.name,
                 timestampMs = reading.timestamp.toEpochMilli(),
             ),
+        )
+    }
+
+    suspend fun saveCgmBatch(readings: List<CgmReading>) {
+        if (readings.isEmpty()) return
+        pumpDao.insertCgmBatch(
+            readings.map {
+                CgmReadingEntity(
+                    glucoseMgDl = it.glucoseMgDl,
+                    trendArrow = it.trendArrow.name,
+                    timestampMs = it.timestamp.toEpochMilli(),
+                )
+            },
         )
     }
 

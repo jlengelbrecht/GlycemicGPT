@@ -5,8 +5,10 @@ import com.glycemicgpt.mobile.data.local.entity.SyncQueueEntity
 import com.glycemicgpt.mobile.data.remote.PumpEventMapper
 import com.glycemicgpt.mobile.data.remote.dto.PumpEventDto
 import com.glycemicgpt.mobile.domain.model.BasalReading
+import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.squareup.moshi.Moshi
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,8 +33,20 @@ class SyncQueueEnqueuer @Inject constructor(
         enqueue(PumpEventMapper.fromBasal(reading))
     }
 
+    suspend fun enqueueBasalBatch(readings: List<BasalReading>) {
+        readings.forEach { enqueue(PumpEventMapper.fromBasal(it)) }
+    }
+
     suspend fun enqueueBoluses(events: List<BolusEvent>) {
         events.forEach { enqueue(PumpEventMapper.fromBolus(it)) }
+    }
+
+    suspend fun enqueueBattery(status: BatteryStatus) {
+        enqueue(PumpEventMapper.fromBattery(status))
+    }
+
+    suspend fun enqueueReservoir(reading: ReservoirReading) {
+        enqueue(PumpEventMapper.fromReservoir(reading))
     }
 
     private suspend fun enqueue(dto: PumpEventDto) {

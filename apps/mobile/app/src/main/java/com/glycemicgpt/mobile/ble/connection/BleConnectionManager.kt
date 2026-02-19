@@ -136,6 +136,17 @@ class BleConnectionManager @Inject constructor(
     // Pending status read requests: txId -> deferred response cargo
     private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<ByteArray>>()
 
+    // FFF8 history log stream: collects multi-packet notifications after opcode 60.
+    // The pump sends N independent Tandem-framed packets on FFF8, each containing
+    // a few records. We accumulate all packet cargos and complete the deferred
+    // after an idle timeout (pump stops sending).
+    private val historyLogAssembler = PacketAssembler()
+    @Volatile
+    private var historyLogDeferred: CompletableDeferred<List<ByteArray>>? = null
+    private val historyLogBuffer = mutableListOf<ByteArray>()
+    @Volatile
+    private var historyLogIdleJob: Job? = null
+
     // Handshake timeout: fail if authentication doesn't complete within this window.
     // JPAKE has 5 round trips; 30s is generous even on slow BLE connections.
     private var authTimeoutJob: Job? = null
@@ -198,6 +209,8 @@ class BleConnectionManager @Inject constructor(
         assemblers.clear()
         statusAssemblers.clear()
         cancelPendingRequests()
+        // Cancel any pending history log stream request from previous connection
+        cancelHistoryLogDeferred()
 
         Timber.d("Connecting to pump: %s", address)
         val newGatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
@@ -226,6 +239,7 @@ class BleConnectionManager @Inject constructor(
         operationQueue.clear()
         operationInFlight.set(false)
         cancelPendingRequests()
+        cancelHistoryLogDeferred()
         synchronized(gattLock) {
             gatt?.let {
                 Timber.d("Disconnecting from pump")
@@ -245,6 +259,18 @@ class BleConnectionManager @Inject constructor(
             val entry = iter.next()
             iter.remove()
             entry.value.cancel()
+        }
+    }
+
+    /** Cancel any pending history log stream request and reset the assembler. */
+    private fun cancelHistoryLogDeferred() {
+        historyLogIdleJob?.cancel()
+        historyLogIdleJob = null
+        historyLogDeferred?.cancel()
+        historyLogDeferred = null
+        synchronized(historyLogAssembler) {
+            historyLogAssembler.reset()
+            historyLogBuffer.clear()
         }
     }
 
@@ -360,6 +386,72 @@ class BleConnectionManager @Inject constructor(
         } finally {
             // Always clean up -- whether completed, timed out, or cancelled
             pendingRequests.remove(id, deferred)
+        }
+    }
+
+    /**
+     * Send an opcode 60 (HistoryLogRequest) on FFF6 and collect the response
+     * that arrives on FFF8 (HISTORY_LOG_UUID).
+     *
+     * The pump responds with a 2-byte ACK on FFF6 and streams actual records
+     * on FFF8. This method ignores the FFF6 ACK and waits for the FFF8 data.
+     *
+     * @param cargo 5-byte opcode 60 cargo (uint32 LE startIndex + byte count)
+     * @param timeoutMs max time to wait for FFF8 response
+     * @return list of individual FFF8 packet cargos (each with optional 2-byte header + 26-byte records)
+     */
+    suspend fun requestHistoryLogStream(
+        cargo: ByteArray,
+        timeoutMs: Long = TandemProtocol.HISTORY_LOG_TIMEOUT_MS,
+    ): List<ByteArray> {
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            throw IllegalStateException("Not connected to pump")
+        }
+
+        val deferred = CompletableDeferred<List<ByteArray>>()
+        // Reset assembler, buffer, and set deferred atomically so FFF8
+        // notifications can't feed stale data or find a null deferred.
+        synchronized(historyLogAssembler) {
+            historyLogAssembler.reset()
+            historyLogBuffer.clear()
+            historyLogIdleJob?.cancel()
+            historyLogDeferred = deferred
+        }
+
+        // Send opcode 60 on FFF6. The FFF6 response is a 2-byte ACK which
+        // sendStatusRequest will return. We ignore it.
+        val id = nextTxId()
+        val ackDeferred = CompletableDeferred<ByteArray>()
+        pendingRequests.put(id, ackDeferred)?.cancel()
+
+        Timber.d("BLE_RAW TX opcode=0x%02x txId=%d cargoLen=%d (history log request)",
+            TandemProtocol.OPCODE_HISTORY_LOG_REQ, id, cargo.size)
+        debugStore.add(BleDebugStore.Entry(
+            timestamp = Instant.now(),
+            direction = BleDebugStore.Direction.TX,
+            opcode = TandemProtocol.OPCODE_HISTORY_LOG_REQ,
+            opcodeName = TandemProtocol.opcodeName(TandemProtocol.OPCODE_HISTORY_LOG_REQ),
+            txId = id,
+            cargoHex = cargo.toHexString(),
+            cargoSize = cargo.size,
+        ))
+
+        val chunks = Packetize.encode(
+            TandemProtocol.OPCODE_HISTORY_LOG_REQ, id, cargo,
+            TandemProtocol.CHUNK_SIZE_SHORT,
+        )
+        enqueueWrite(TandemProtocol.CURRENT_STATUS_UUID, chunks)
+
+        return try {
+            // Wait for FFF8 packets (ignore FFF6 ACK)
+            withTimeout(timeoutMs) {
+                deferred.await()
+            }
+        } finally {
+            historyLogIdleJob?.cancel()
+            historyLogIdleJob = null
+            historyLogDeferred = null
+            pendingRequests.remove(id, ackDeferred)
         }
     }
 
@@ -885,12 +977,55 @@ class BleConnectionManager @Inject constructor(
     }
 
     /**
-     * Log FFF8 (HISTORY_LOG_UUID) notifications for debugging. The FFF8
-     * streaming protocol (opcode 0x81, flow control, record format) needs
-     * further reverse-engineering before we can parse records from it.
+     * Handle FFF8 (HISTORY_LOG_UUID) notifications.
+     *
+     * After an opcode 60 request is sent on FFF6, the pump sends history
+     * log records as packetized messages on FFF8. Uses the same PacketAssembler
+     * + Packetize.parseHeader flow as status responses, completing the
+     * [historyLogDeferred] when a full message arrives.
      */
     private fun handleHistoryLogNotification(data: ByteArray) {
         Timber.d("BLE_RAW RX_HIST len=%d hex=%s", data.size, data.toHexString())
+
+        val deferred = historyLogDeferred ?: return
+
+        val raw: ByteArray
+        synchronized(historyLogAssembler) {
+            if (!historyLogAssembler.feed(data)) return
+            raw = historyLogAssembler.assemble()
+            historyLogAssembler.reset()
+        }
+
+        // Extract cargo from this packet
+        val cargo = Packetize.parseHeader(raw)?.let { (opcode, _, c) ->
+            Timber.d("BLE_RAW RX_HIST_PARSED opcode=0x%02x cargoLen=%d", opcode, c.size)
+            c
+        } ?: raw.also {
+            Timber.d("BLE_RAW RX_HIST_RAW len=%d", raw.size)
+        }
+
+        // Accumulate cargo into buffer and (re)start idle timeout.
+        // The pump sends multiple independent FFF8 packets per opcode 60 request.
+        // After 500ms of no new packets, we deliver all collected cargos.
+        // All buffer/job access is synchronized to prevent races between
+        // near-simultaneous GATT callback invocations.
+        synchronized(historyLogAssembler) {
+            historyLogBuffer.add(cargo)
+            historyLogIdleJob?.cancel()
+            historyLogIdleJob = scope.launch {
+                delay(HISTORY_LOG_IDLE_TIMEOUT_MS)
+                val packets: List<ByteArray>
+                synchronized(historyLogAssembler) {
+                    packets = historyLogBuffer.toList()
+                    Timber.d("BLE_RAW RX_HIST_COMPLETE packets=%d totalBytes=%d",
+                        packets.size, packets.sumOf { it.size })
+                    historyLogBuffer.clear()
+                }
+                // Re-read deferred to avoid completing a stale reference
+                // if the request timed out and was discarded.
+                historyLogDeferred?.complete(packets)
+            }
+        }
     }
 
     private fun startAuthentication() {
@@ -1155,6 +1290,9 @@ class BleConnectionManager @Inject constructor(
     }
 
     companion object {
+        /** Idle timeout (ms) after the last FFF8 notification before completing the stream. */
+        private const val HISTORY_LOG_IDLE_TIMEOUT_MS = 500L
+
         /** Post-auth settle delay (ms) before setting CONNECTED state.
          *  After JPAKE completes and init sequence is sent, this gives the pump
          *  time to process initialization before we send status requests.

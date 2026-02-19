@@ -15,8 +15,11 @@ import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
 import com.glycemicgpt.mobile.domain.model.PumpSettings
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,6 +38,12 @@ class TandemBleDriver @Inject constructor(
     private val connectionManager: BleConnectionManager,
     private val debugStore: BleDebugStore,
 ) : PumpDriver {
+
+    /** Progressive scan position for history log fetching (pump record INDEX).
+     *  Persists across poll cycles so each cycle continues where the last left off.
+     *  Reset to 0 when the pump's index range shifts beyond the lookback window. */
+    @Volatile
+    private var nextHistoryIndex: Int = 0
 
     override suspend fun connect(deviceAddress: String): Result<Unit> {
         return try {
@@ -133,7 +142,10 @@ class TandemBleDriver @Inject constructor(
     }
 
     override suspend fun getHistoryLogs(sinceSequence: Int): Result<List<HistoryLogRecord>> {
-        // Get the available sequence range from the pump (opcode 58).
+        // Step 1: Get the available index range from the pump (opcode 58).
+        // IMPORTANT: The pump's firstSeq/lastSeq are record INDICES, not event
+        // sequence numbers. Opcode 60 takes a start INDEX. Records returned
+        // contain their own event sequence numbers which are unrelated to indices.
         val rangeResult = runStatusRequest(
             opcode = TandemProtocol.OPCODE_HISTORY_LOG_STATUS_REQ,
         ) { cargo ->
@@ -143,15 +155,65 @@ class TandemBleDriver @Inject constructor(
         if (rangeResult.isFailure) return Result.failure(rangeResult.exceptionOrNull()!!)
 
         val range = rangeResult.getOrThrow()
-        Timber.d("History log range: firstSeq=%d lastSeq=%d sinceSequence=%d",
-            range.firstSeq, range.lastSeq, sinceSequence)
+        val windowStart = maxOf(range.firstSeq, range.lastSeq - HISTORY_LOOKBACK_INDICES + 1)
+        // Resume from previous scan position if still within the lookback window,
+        // otherwise start from the beginning of the window (new session / range shift).
+        val fetchStart = if (nextHistoryIndex in windowStart..range.lastSeq) {
+            nextHistoryIndex
+        } else {
+            windowStart
+        }
+        Timber.d("History log range: firstIdx=%d lastIdx=%d numEntries=%d windowStart=%d fetchStart=%d resumed=%s sinceSeq=%d",
+            range.firstSeq, range.lastSeq, range.lastSeq - range.firstSeq + 1,
+            windowStart, fetchStart, fetchStart != windowStart, sinceSequence)
 
-        // TODO: Fetching individual records requires opcode 60, which sends a
-        // 2-byte ACK on CURRENT_STATUS_UUID (FFF6) and streams actual records
-        // on HISTORY_LOG_UUID (FFF8, opcode 0x81). The FFF8 streaming protocol
-        // (flow control, record framing, ACKs) needs further reverse-engineering.
-        // For now we report the range for diagnostics and return empty.
-        return Result.success(emptyList())
+        if (range.lastSeq < range.firstSeq) return Result.success(emptyList())
+
+        // Step 2: Fetch records in batches via opcode 60.
+        // Opcode 60 sends a 2-byte ACK on FFF6 and streams records on FFF8.
+        // Cap total time to avoid blocking the slow poll loop (pump drops
+        // idle connections at ~30s; other reads need time to execute too).
+        val allRecords = mutableListOf<HistoryLogRecord>()
+        var currentIndex = fetchStart
+        val deadline = System.currentTimeMillis() + MAX_HISTORY_FETCH_DURATION_MS
+
+        while (currentIndex <= range.lastSeq &&
+            allRecords.size < MAX_HISTORY_RECORDS_PER_POLL &&
+            System.currentTimeMillis() < deadline
+        ) {
+            val batchSize = minOf(HISTORY_BATCH_SIZE, range.lastSeq - currentIndex + 1)
+            val cargo = buildHistoryLogCargo(currentIndex, batchSize)
+
+            val fff8Packets = try {
+                connectionManager.requestHistoryLogStream(
+                    cargo = cargo,
+                    timeoutMs = TandemProtocol.HISTORY_LOG_TIMEOUT_MS,
+                )
+            } catch (e: Exception) {
+                Timber.w(e, "History log stream request failed at index=%d", currentIndex)
+                break
+            }
+
+            // Parse each FFF8 packet individually (each has its own header + records).
+            // Dedup is handled by IGNORE strategy on insert (unique timestampMs index).
+            val records = fff8Packets.flatMap { packet ->
+                StatusResponseParser.parseHistoryLogStreamCargo(packet)
+            }
+            if (records.isEmpty()) {
+                Timber.d("No records parsed from %d FFF8 packets at index=%d",
+                    fff8Packets.size, currentIndex)
+                break
+            }
+            allRecords.addAll(records)
+            // Advance by batch size (indices), not by record sequence numbers.
+            currentIndex += batchSize
+            delay(HISTORY_BATCH_STAGGER_MS)
+        }
+
+        // Save progress for next poll cycle (progressive scanning).
+        nextHistoryIndex = currentIndex
+        Timber.d("Fetched %d history log records (fetchStart=%d nextIndex=%d)", allRecords.size, fetchStart, currentIndex)
+        return Result.success(allRecords)
     }
 
     override suspend fun getPumpHardwareInfo(): Result<PumpHardwareInfo> {
@@ -176,6 +238,39 @@ class TandemBleDriver @Inject constructor(
 
     override fun observeConnectionState(): Flow<ConnectionState> =
         connectionManager.connectionState
+
+    companion object {
+        /** Max records to request per opcode 60 batch. */
+        const val HISTORY_BATCH_SIZE = 20
+
+        /** Delay between consecutive batch requests to avoid BLE congestion. */
+        const val HISTORY_BATCH_STAGGER_MS = 200L
+
+        /** Safety cap on total records fetched per poll cycle. */
+        const val MAX_HISTORY_RECORDS_PER_POLL = 200
+
+        /** Max time (ms) to spend fetching history logs per poll cycle.
+         *  Keeps the slow loop responsive and avoids pump idle-timeout. */
+        const val MAX_HISTORY_FETCH_DURATION_MS = 15_000L
+
+        /** How many indices from the end of the range to scan for gap-fill.
+         *  ~2000 indices covers roughly 12-24h of pump events depending on
+         *  Control-IQ activity. Progressive scanning across poll cycles ensures
+         *  the entire window is covered even with the 200 records/cycle cap. */
+        const val HISTORY_LOOKBACK_INDICES = 2000
+
+        /**
+         * Build the 5-byte cargo for opcode 60 (HistoryLogRequest).
+         * Layout: uint32 LE startIndex + uint8 count.
+         * Note: the pump treats this as a record INDEX, not an event sequence number.
+         */
+        fun buildHistoryLogCargo(startIndex: Int, count: Int): ByteArray {
+            val buf = ByteBuffer.allocate(5).order(ByteOrder.LITTLE_ENDIAN)
+            buf.putInt(startIndex)
+            buf.put(count.coerceIn(1, 255).toByte())
+            return buf.array()
+        }
+    }
 
     /**
      * Send a status request and parse the response. Wraps the entire

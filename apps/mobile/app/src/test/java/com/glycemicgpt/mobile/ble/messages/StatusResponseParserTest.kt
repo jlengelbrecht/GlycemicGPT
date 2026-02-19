@@ -479,6 +479,108 @@ class StatusResponseParserTest {
     }
 
     @Test
+    fun `parseLastBolusStatusResponse V2 20-byte cargo with prefix byte`() {
+        // V2/extended format: 1-byte prefix + 17-byte V1 fields + 2-byte extension
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"))
+            val tenMinAgoLocal = LocalDateTime.now().minusMinutes(10)
+            val recentPumpTime = (tenMinAgoLocal.toEpochSecond(ZoneOffset.UTC) - 1199145600L).toInt()
+            val buf = ByteBuffer.allocate(20).order(ByteOrder.LITTLE_ENDIAN)
+            buf.put(0x01)              // V2 status prefix
+            buf.putInt(5249)           // bolusId
+            buf.putInt(recentPumpTime) // timestamp
+            buf.putInt(2060)           // deliveredVolume (milliunits = 2.06 units)
+            buf.put(3)                 // bolusStatusId = COMPLETED
+            buf.put(0)                 // bolusSourceId = GUI (manual)
+            buf.put(0x09.toByte())     // bolusTypeBitmask = STANDARD | CORRECTION
+            buf.putShort(0)            // extendedBolusDuration
+            buf.put(0)                 // V2 extension byte
+
+            val since = Instant.now().minusSeconds(3600)
+            val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+            assertEquals(1, events.size)
+            assertEquals(2.06f, events[0].units, 0.01f)
+            assertFalse(events[0].isAutomated) // GUI = manual
+            assertTrue(events[0].isCorrection) // bitmask bit 3
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
+    }
+
+    @Test
+    fun `parseLastBolusStatusResponse V2 auto-pilot correction`() {
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"))
+            val fiveMinAgoLocal = LocalDateTime.now().minusMinutes(5)
+            val recentPumpTime = (fiveMinAgoLocal.toEpochSecond(ZoneOffset.UTC) - 1199145600L).toInt()
+            val buf = ByteBuffer.allocate(20).order(ByteOrder.LITTLE_ENDIAN)
+            buf.put(0x01)              // V2 status prefix
+            buf.putInt(5250)           // bolusId
+            buf.putInt(recentPumpTime) // timestamp
+            buf.putInt(1500)           // deliveredVolume (1.5 units)
+            buf.put(3)                 // bolusStatusId = COMPLETED
+            buf.put(1)                 // bolusSourceId = AUTO_PILOT
+            buf.put(0x08.toByte())     // bolusTypeBitmask = CORRECTION only
+            buf.putShort(0)            // extendedBolusDuration
+            buf.put(0)                 // V2 extension byte
+
+            val since = Instant.now().minusSeconds(3600)
+            val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+            assertEquals(1, events.size)
+            assertEquals(1.5f, events[0].units, 0.001f)
+            assertTrue(events[0].isAutomated) // AUTO_PILOT
+            assertTrue(events[0].isCorrection) // bitmask bit 3
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
+    }
+
+    @Test
+    fun `parseLastBolusStatusResponse V2 canceled bolus returns empty`() {
+        val savedTz = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Chicago"))
+            val oneMinAgoLocal = LocalDateTime.now().minusMinutes(1)
+            val recentPumpTime = (oneMinAgoLocal.toEpochSecond(ZoneOffset.UTC) - 1199145600L).toInt()
+            val buf = ByteBuffer.allocate(20).order(ByteOrder.LITTLE_ENDIAN)
+            buf.put(0x01)              // V2 status prefix
+            buf.putInt(5251)           // bolusId
+            buf.putInt(recentPumpTime) // timestamp
+            buf.putInt(2000)           // deliveredVolume
+            buf.put(2)                 // bolusStatusId = CANCELED
+            buf.put(0)                 // bolusSourceId = GUI
+            buf.put(0x01)              // bolusTypeBitmask = STANDARD
+            buf.putShort(0)
+            buf.put(0)
+
+            val since = Instant.now().minusSeconds(3600)
+            val events = StatusResponseParser.parseLastBolusStatusResponse(buf.array(), since)
+            assertTrue(events.isEmpty())
+        } finally {
+            TimeZone.setDefault(savedTz)
+        }
+    }
+
+    @Test
+    fun `parseLastBolusStatusResponse rejects 18-byte cargo as invalid`() {
+        // 18 bytes is neither V1 (17) nor V2 (20+) -- should be rejected
+        val cargo = ByteArray(18)
+        assertTrue(
+            StatusResponseParser.parseLastBolusStatusResponse(cargo, Instant.now()).isEmpty(),
+        )
+    }
+
+    @Test
+    fun `parseLastBolusStatusResponse rejects 19-byte cargo as invalid`() {
+        val cargo = ByteArray(19)
+        assertTrue(
+            StatusResponseParser.parseLastBolusStatusResponse(cargo, Instant.now()).isEmpty(),
+        )
+    }
+
+    @Test
     fun `parseLastBolusStatusResponse returns empty for short cargo`() {
         assertTrue(
             StatusResponseParser.parseLastBolusStatusResponse(byteArrayOf(0x01, 0x02), Instant.now()).isEmpty(),

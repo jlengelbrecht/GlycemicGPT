@@ -38,6 +38,37 @@ class PumpEventHistoryResponse(BaseModel):
     count: int
 
 
+class PumpStatusBasal(BaseModel):
+    """Latest basal rate from pump."""
+
+    rate: float
+    is_automated: bool
+    timestamp: datetime
+
+
+class PumpStatusBattery(BaseModel):
+    """Latest battery status from pump."""
+
+    percentage: int
+    is_charging: bool
+    timestamp: datetime
+
+
+class PumpStatusReservoir(BaseModel):
+    """Latest reservoir level from pump."""
+
+    units_remaining: float
+    timestamp: datetime
+
+
+class PumpStatusResponse(BaseModel):
+    """Aggregated latest pump status (basal, battery, reservoir)."""
+
+    basal: PumpStatusBasal | None = None
+    battery: PumpStatusBattery | None = None
+    reservoir: PumpStatusReservoir | None = None
+
+
 class TandemSyncResponse(BaseModel):
     """Response schema for Tandem sync operation."""
 

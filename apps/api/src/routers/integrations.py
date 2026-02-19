@@ -25,7 +25,7 @@ from src.models.integration import (
     IntegrationStatus,
     IntegrationType,
 )
-from src.models.pump_data import PumpEvent
+from src.models.pump_data import PumpEvent, PumpEventType
 from src.models.pump_hardware_info import PumpHardwareInfo
 from src.models.pump_raw_event import PumpRawEvent
 from src.models.tandem_upload_state import TandemUploadState
@@ -49,9 +49,14 @@ from src.schemas.integration import (
 from src.schemas.pump import (
     ControlIQActivityResponse,
     IoBProjectionResponse,
+    PumpEventHistoryResponse,
     PumpEventResponse,
     PumpPushRequest,
     PumpPushResponse,
+    PumpStatusBasal,
+    PumpStatusBattery,
+    PumpStatusReservoir,
+    PumpStatusResponse,
     TandemSyncResponse,
     TandemSyncStatusResponse,
     TandemUploadSettingsRequest,
@@ -74,6 +79,8 @@ from src.services.tandem_sync import (
     TandemSyncError,
     get_control_iq_activity,
     get_latest_pump_event,
+    get_latest_pump_status,
+    get_pump_events,
     sync_tandem_for_user,
 )
 from src.services.target_glucose_range import get_or_create_range
@@ -951,6 +958,89 @@ async def get_tandem_sync_status(
         last_error=credential.last_error if credential else None,
         events_available=events_count,
         latest_event=latest_response,
+    )
+
+
+@router.get(
+    "/pump/history",
+    response_model=PumpEventHistoryResponse,
+    responses={
+        200: {"description": "Pump event history"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_pump_event_history(
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    minutes: int = Query(default=180, ge=1, le=1440),
+    limit: int = Query(default=500, ge=1, le=2000),
+    event_type: PumpEventType | None = Query(default=None),
+) -> PumpEventHistoryResponse:
+    """Get pump event history for the current user.
+
+    Returns bolus, basal, and other pump events within the specified time window.
+    Used by the dashboard chart to overlay insulin delivery on the glucose graph.
+    """
+    events = await get_pump_events(
+        db, current_user.id, hours=minutes / 60, limit=limit, event_type=event_type
+    )
+    return PumpEventHistoryResponse(
+        events=[PumpEventResponse.model_validate(e) for e in events],
+        count=len(events),
+    )
+
+
+@router.get(
+    "/pump/status",
+    response_model=PumpStatusResponse,
+    responses={
+        200: {"description": "Latest pump status (basal, battery, reservoir)"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+async def get_pump_status(
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+) -> PumpStatusResponse:
+    """Get latest pump status for the dashboard hero card.
+
+    Returns the most recent basal rate, battery percentage, and reservoir
+    level from synced pump events.
+
+    Field mapping notes:
+    - PumpEvent.units stores the numeric value (rate, percentage, or units remaining)
+    - PumpEvent.is_automated is reused for battery events to store is_charging
+      (Tandem pumps use non-rechargeable batteries so this is always False)
+    """
+    status = await get_latest_pump_status(db, current_user.id)
+
+    basal_event = status.get("basal")
+    battery_event = status.get("battery")
+    reservoir_event = status.get("reservoir")
+
+    return PumpStatusResponse(
+        basal=PumpStatusBasal(
+            rate=basal_event.units or 0.0,
+            is_automated=basal_event.is_automated,
+            timestamp=basal_event.event_timestamp,
+        )
+        if basal_event
+        else None,
+        battery=PumpStatusBattery(
+            percentage=int(battery_event.units or 0),
+            is_charging=battery_event.is_automated,
+            timestamp=battery_event.event_timestamp,
+        )
+        if battery_event
+        else None,
+        reservoir=PumpStatusReservoir(
+            units_remaining=reservoir_event.units or 0.0,
+            timestamp=reservoir_event.event_timestamp,
+        )
+        if reservoir_event
+        else None,
     )
 
 

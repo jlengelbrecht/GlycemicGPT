@@ -12,7 +12,7 @@
  * - Screen reader announcements with value, trend, and range status
  * - Dynamic aria-live (assertive for urgent, polite for normal)
  * - Keyboard focusable with visible focus ring
- * - Accessible labels for IoB/CoB metrics
+ * - Accessible labels for pump status metrics
  */
 
 import { motion, useReducedMotion } from "framer-motion";
@@ -46,8 +46,12 @@ export interface GlucoseHeroProps {
   trend: TrendDirection;
   /** Insulin on Board in units */
   iob: number | null;
-  /** Carbs on Board in grams */
-  cob: number | null;
+  /** Current basal rate in u/hr */
+  basalRate: number | null;
+  /** Battery percentage (0-100) */
+  batteryPct: number | null;
+  /** Reservoir insulin remaining in units */
+  reservoirUnits: number | null;
   /** Unit label (default: mg/dL) */
   unit?: string;
   /** Minutes since last reading */
@@ -193,7 +197,9 @@ export function GlucoseHero({
   value,
   trend,
   iob,
-  cob,
+  basalRate,
+  batteryPct,
+  reservoirUnits,
   unit = "mg/dL",
   minutesAgo,
   isStale = false,
@@ -227,7 +233,9 @@ export function GlucoseHero({
   // Defensive: sanitize numeric values
   const safeValue = sanitizeValue(value);
   const safeIob = sanitizeValue(iob, true); // IoB can be negative (rare but possible)
-  const safeCob = sanitizeValue(cob);
+  const safeBasal = sanitizeValue(basalRate);
+  const safeBattery = sanitizeValue(batteryPct);
+  const safeReservoir = sanitizeValue(reservoirUnits);
 
   const range = classifyGlucose(safeValue, thresholds);
   const colors = rangeColors[range];
@@ -316,11 +324,11 @@ export function GlucoseHero({
           </p>
         )}
 
-        {/* Secondary metrics: IoB and CoB with accessible labels */}
+        {/* Secondary metrics: IoB, Basal, Battery, Reservoir */}
         <div
-          className="flex items-center gap-6 mt-4 text-sm"
+          className="flex items-center gap-4 mt-4 text-sm"
           role="group"
-          aria-label="Insulin and carbohydrate metrics"
+          aria-label="Pump status metrics"
           data-testid="secondary-metrics"
         >
           <div
@@ -342,18 +350,52 @@ export function GlucoseHero({
           <div className="w-px h-6 bg-slate-700" aria-hidden="true" />
           <div
             className="flex flex-col items-center"
-            aria-label={safeCob !== null ? `Carbohydrates on board: ${Math.round(safeCob)} grams` : "Carbohydrates on board: unavailable"}
+            aria-label={safeBasal !== null ? `Basal rate: ${safeBasal.toFixed(2)} units per hour` : "Basal rate: unavailable"}
           >
             <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
-              CoB
+              Basal
             </span>
-            <span className="sr-only">Carbohydrates on board</span>
+            <span className="sr-only">Basal rate</span>
             <span
               className="text-slate-300 font-medium"
-              data-testid="cob-value"
+              data-testid="basal-value"
               aria-hidden="true"
             >
-              {safeCob !== null ? `${Math.round(safeCob)}g` : "--"}
+              {safeBasal !== null ? `${safeBasal.toFixed(2)} u/hr` : "--"}
+            </span>
+          </div>
+          <div className="w-px h-6 bg-slate-700" aria-hidden="true" />
+          <div
+            className="flex flex-col items-center"
+            aria-label={safeBattery !== null ? `Battery: ${Math.round(safeBattery)} percent` : "Battery: unavailable"}
+          >
+            <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
+              Battery
+            </span>
+            <span className="sr-only">Battery level</span>
+            <span
+              className="text-slate-300 font-medium"
+              data-testid="battery-value"
+              aria-hidden="true"
+            >
+              {safeBattery !== null ? `${Math.round(safeBattery)}%` : "--"}
+            </span>
+          </div>
+          <div className="w-px h-6 bg-slate-700" aria-hidden="true" />
+          <div
+            className="flex flex-col items-center"
+            aria-label={safeReservoir !== null ? `Reservoir: ${safeReservoir.toFixed(0)} units remaining` : "Reservoir: unavailable"}
+          >
+            <span className="text-slate-500 text-xs uppercase tracking-wide" aria-hidden="true">
+              Reservoir
+            </span>
+            <span className="sr-only">Reservoir level</span>
+            <span
+              className="text-slate-300 font-medium"
+              data-testid="reservoir-value"
+              aria-hidden="true"
+            >
+              {safeReservoir !== null ? `${Math.round(safeReservoir)}u` : "--"}
             </span>
           </div>
         </div>

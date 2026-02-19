@@ -19,7 +19,7 @@ import {
 describe("GlucoseHero Accessibility", () => {
   describe("Screen Reader Announcements", () => {
     it("announces glucose with value, trend, and range status", () => {
-      render(<GlucoseHero value={142} trend="Falling" iob={2.5} cob={15} />);
+      render(<GlucoseHero value={142} trend="Falling" iob={2.5} basalRate={1.5} batteryPct={85} reservoirUnits={180} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -35,7 +35,7 @@ describe("GlucoseHero Accessibility", () => {
     it("has exact announcement format matching AC1 pattern", () => {
       // AC1 pattern: "Glucose {value} milligrams per deciliter, {trend}, {range status}"
       // Example: "Glucose 142 milligrams per deciliter, falling, in target range"
-      render(<GlucoseHero value={142} trend="Falling" iob={null} cob={null} />);
+      render(<GlucoseHero value={142} trend="Falling" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -45,7 +45,7 @@ describe("GlucoseHero Accessibility", () => {
     });
 
     it("announces low glucose correctly", () => {
-      render(<GlucoseHero value={65} trend="Falling" iob={null} cob={null} />);
+      render(<GlucoseHero value={65} trend="Falling" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -55,7 +55,7 @@ describe("GlucoseHero Accessibility", () => {
     });
 
     it("announces urgent low glucose correctly", () => {
-      render(<GlucoseHero value={50} trend="FallingFast" iob={null} cob={null} />);
+      render(<GlucoseHero value={50} trend="FallingFast" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -65,7 +65,7 @@ describe("GlucoseHero Accessibility", () => {
     });
 
     it("announces high glucose correctly", () => {
-      render(<GlucoseHero value={200} trend="Rising" iob={null} cob={null} />);
+      render(<GlucoseHero value={200} trend="Rising" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -75,7 +75,7 @@ describe("GlucoseHero Accessibility", () => {
     });
 
     it("announces urgent high glucose correctly", () => {
-      render(<GlucoseHero value={280} trend="RisingFast" iob={null} cob={null} />);
+      render(<GlucoseHero value={280} trend="RisingFast" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -85,7 +85,7 @@ describe("GlucoseHero Accessibility", () => {
     });
 
     it("announces unavailable glucose correctly", () => {
-      render(<GlucoseHero value={null} trend="Unknown" iob={null} cob={null} />);
+      render(<GlucoseHero value={null} trend="Unknown" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const glucoseValue = screen.getByTestId("glucose-value");
       expect(glucoseValue).toHaveAttribute(
@@ -97,28 +97,28 @@ describe("GlucoseHero Accessibility", () => {
 
   describe("Aria-live Priority", () => {
     it("uses polite aria-live for in-range glucose", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
       expect(liveRegion).toHaveAttribute("aria-live", "polite");
     });
 
     it("uses assertive aria-live for urgent low glucose", () => {
-      render(<GlucoseHero value={50} trend="FallingFast" iob={null} cob={null} />);
+      render(<GlucoseHero value={50} trend="FallingFast" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
       expect(liveRegion).toHaveAttribute("aria-live", "assertive");
     });
 
     it("uses assertive aria-live for urgent high glucose", () => {
-      render(<GlucoseHero value={280} trend="RisingFast" iob={null} cob={null} />);
+      render(<GlucoseHero value={280} trend="RisingFast" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
       expect(liveRegion).toHaveAttribute("aria-live", "assertive");
     });
 
     it("uses polite aria-live for low (non-urgent) glucose", () => {
-      render(<GlucoseHero value={65} trend="Falling" iob={null} cob={null} />);
+      render(<GlucoseHero value={65} trend="Falling" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const liveRegion = screen.getByRole("region").querySelector("[aria-live]");
       expect(liveRegion).toHaveAttribute("aria-live", "polite");
@@ -127,30 +127,29 @@ describe("GlucoseHero Accessibility", () => {
 
   describe("Keyboard Navigation", () => {
     it("is keyboard focusable", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const region = screen.getByRole("region");
       expect(region).toHaveAttribute("tabIndex", "0");
     });
 
     it("has visible focus indicator class", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const region = screen.getByRole("region");
       expect(region.className).toMatch(/focus-visible:ring/);
     });
   });
 
-  describe("Accessible IoB/CoB Labels", () => {
+  describe("Accessible Pump Status Labels", () => {
     it("provides accessible IoB label", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={2.5} cob={null} />);
+      render(<GlucoseHero value={120} trend="Stable" iob={2.5} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const metricsGroup = screen.getByRole("group", {
-        name: /insulin and carbohydrate metrics/i,
+        name: /pump status metrics/i,
       });
       expect(metricsGroup).toBeInTheDocument();
 
-      // Check for aria-label on IoB container
       const iobContainer = metricsGroup.querySelector('[aria-label*="Insulin on board"]');
       expect(iobContainer).toHaveAttribute(
         "aria-label",
@@ -158,21 +157,30 @@ describe("GlucoseHero Accessibility", () => {
       );
     });
 
-    it("provides accessible CoB label", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={15} />);
+    it("provides accessible basal rate label", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={1.5} batteryPct={null} reservoirUnits={null} />);
 
       const metricsGroup = screen.getByRole("group");
-
-      // Check for aria-label on CoB container
-      const cobContainer = metricsGroup.querySelector('[aria-label*="Carbohydrates on board"]');
-      expect(cobContainer).toHaveAttribute(
+      const basalContainer = metricsGroup.querySelector('[aria-label*="Basal rate"]');
+      expect(basalContainer).toHaveAttribute(
         "aria-label",
-        "Carbohydrates on board: 15 grams"
+        "Basal rate: 1.50 units per hour"
+      );
+    });
+
+    it("provides accessible battery label", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={null} batteryPct={85} reservoirUnits={null} />);
+
+      const metricsGroup = screen.getByRole("group");
+      const batteryContainer = metricsGroup.querySelector('[aria-label*="Battery"]');
+      expect(batteryContainer).toHaveAttribute(
+        "aria-label",
+        "Battery: 85 percent"
       );
     });
 
     it("indicates unavailable IoB accessibly", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={null} cob={null} />);
+      render(<GlucoseHero value={120} trend="Stable" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} />);
 
       const metricsGroup = screen.getByRole("group");
       const iobContainer = metricsGroup.querySelector('[aria-label*="Insulin on board"]');
@@ -182,17 +190,17 @@ describe("GlucoseHero Accessibility", () => {
       );
     });
 
-    it("has screen-reader-only full text for IoB abbreviation", () => {
-      render(<GlucoseHero value={120} trend="Stable" iob={2.5} cob={15} />);
+    it("has screen-reader-only full text for abbreviations", () => {
+      render(<GlucoseHero value={120} trend="Stable" iob={2.5} basalRate={1.5} batteryPct={85} reservoirUnits={180} />);
 
       expect(screen.getAllByText("Insulin on board").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Carbohydrates on board").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Basal rate").length).toBeGreaterThan(0);
     });
   });
 
   describe("Loading State Accessibility", () => {
     it("indicates loading state with aria-busy", () => {
-      render(<GlucoseHero value={null} trend="Unknown" iob={null} cob={null} isLoading />);
+      render(<GlucoseHero value={null} trend="Unknown" iob={null} basalRate={null} batteryPct={null} reservoirUnits={null} isLoading />);
 
       const region = screen.getByRole("region");
       expect(region).toHaveAttribute("aria-busy", "true");

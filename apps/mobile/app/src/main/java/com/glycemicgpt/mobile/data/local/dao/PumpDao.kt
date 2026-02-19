@@ -38,6 +38,9 @@ interface PumpDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBasal(reading: BasalReadingEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertBasalBatch(readings: List<BasalReadingEntity>)
+
     @Query("SELECT * FROM basal_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestBasal(): Flow<BasalReadingEntity?>
 
@@ -93,6 +96,9 @@ interface PumpDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCgm(reading: CgmReadingEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCgmBatch(readings: List<CgmReadingEntity>)
 
     @Query("SELECT * FROM cgm_readings ORDER BY timestampMs DESC LIMIT 1")
     fun observeLatestCgm(): Flow<CgmReadingEntity?>

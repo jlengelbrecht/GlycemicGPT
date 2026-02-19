@@ -2,13 +2,13 @@ package com.glycemicgpt.mobile.data.remote
 
 import com.glycemicgpt.mobile.data.remote.dto.PumpEventDto
 import com.glycemicgpt.mobile.domain.model.BasalReading
+import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.model.ReservoirReading
 
 /**
  * Maps domain models to [PumpEventDto] for backend sync.
- *
- * Only IoB, basal, and bolus events are synced; battery and reservoir are local-only.
  */
 object PumpEventMapper {
 
@@ -37,4 +37,19 @@ object PumpEventMapper {
             isAutomated = event.isAutomated,
         )
     }
+
+    fun fromBattery(status: BatteryStatus): PumpEventDto =
+        PumpEventDto(
+            eventType = "battery",
+            eventTimestamp = status.timestamp,
+            units = status.percentage.toFloat(),
+            isAutomated = status.isCharging,
+        )
+
+    fun fromReservoir(reading: ReservoirReading): PumpEventDto =
+        PumpEventDto(
+            eventType = "reservoir",
+            eventTimestamp = reading.timestamp,
+            units = reading.unitsRemaining,
+        )
 }

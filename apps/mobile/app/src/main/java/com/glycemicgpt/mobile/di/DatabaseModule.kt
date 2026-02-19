@@ -2,6 +2,8 @@ package com.glycemicgpt.mobile.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.glycemicgpt.mobile.data.local.AppDatabase
 import com.glycemicgpt.mobile.data.local.dao.AlertDao
 import com.glycemicgpt.mobile.data.local.dao.PumpDao
@@ -18,10 +20,41 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    /** Migration 6->7: make cgm_readings.timestampMs index unique for dedup. */
+    private val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """DELETE FROM cgm_readings WHERE id NOT IN (
+                    SELECT MAX(id) FROM cgm_readings GROUP BY timestampMs
+                )""",
+            )
+            db.execSQL("DROP INDEX IF EXISTS index_cgm_readings_timestampMs")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_cgm_readings_timestampMs ON cgm_readings(timestampMs)",
+            )
+        }
+    }
+
+    /** Migration 7->8: make basal_readings.timestampMs index unique for dedup. */
+    private val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """DELETE FROM basal_readings WHERE id NOT IN (
+                    SELECT MAX(id) FROM basal_readings GROUP BY timestampMs
+                )""",
+            )
+            db.execSQL("DROP INDEX IF EXISTS index_basal_readings_timestampMs")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_basal_readings_timestampMs ON basal_readings(timestampMs)",
+            )
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "glycemicgpt.db")
+            .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration()
             .build()
 

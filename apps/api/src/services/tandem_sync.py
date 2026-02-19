@@ -1006,7 +1006,7 @@ async def get_latest_pump_event(
 async def get_pump_events(
     db: AsyncSession,
     user_id: uuid.UUID,
-    hours: int = 24,
+    hours: float = 24,
     limit: int = 100,
     event_type: PumpEventType | None = None,
 ) -> list[PumpEvent]:
@@ -1036,6 +1036,39 @@ async def get_pump_events(
 
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+async def get_latest_pump_status(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> dict[str, PumpEvent | None]:
+    """Get the latest basal, battery, and reservoir events for a user.
+
+    Returns a dict with keys 'basal', 'battery', 'reservoir' mapped to
+    the most recent PumpEvent of each type, or None if no events exist.
+
+    Uses PostgreSQL DISTINCT ON to fetch all three in a single query.
+    """
+    target_types = [
+        PumpEventType.BASAL,
+        PumpEventType.BATTERY,
+        PumpEventType.RESERVOIR,
+    ]
+    query = (
+        select(PumpEvent)
+        .distinct(PumpEvent.event_type)
+        .where(
+            PumpEvent.user_id == user_id,
+            PumpEvent.event_type.in_(target_types),
+        )
+        .order_by(PumpEvent.event_type, PumpEvent.event_timestamp.desc())
+    )
+    rows = await db.execute(query)
+    events = rows.scalars().all()
+    result: dict[str, PumpEvent | None] = {t.value: None for t in target_types}
+    for event in events:
+        result[event.event_type.value] = event
+    return result
 
 
 @dataclass

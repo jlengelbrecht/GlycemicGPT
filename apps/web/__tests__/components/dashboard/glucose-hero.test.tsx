@@ -113,7 +113,9 @@ describe("GlucoseHero", () => {
     value: 142,
     trend: "Stable" as TrendDirection,
     iob: 2.4,
-    cob: 15,
+    basalRate: 1.5,
+    batteryPct: 85,
+    reservoirUnits: 180,
   };
 
   describe("glucose value display", () => {
@@ -180,10 +182,22 @@ describe("GlucoseHero", () => {
       expect(screen.getByTestId("iob-value")).toHaveTextContent("2.40u");
     });
 
-    it("displays CoB value with unit", () => {
-      render(<GlucoseHero {...defaultProps} cob={15} />);
+    it("displays basal rate with unit", () => {
+      render(<GlucoseHero {...defaultProps} basalRate={1.5} />);
 
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("15g");
+      expect(screen.getByTestId("basal-value")).toHaveTextContent("1.50 u/hr");
+    });
+
+    it("displays battery percentage", () => {
+      render(<GlucoseHero {...defaultProps} batteryPct={85} />);
+
+      expect(screen.getByTestId("battery-value")).toHaveTextContent("85%");
+    });
+
+    it("displays reservoir units", () => {
+      render(<GlucoseHero {...defaultProps} reservoirUnits={180} />);
+
+      expect(screen.getByTestId("reservoir-value")).toHaveTextContent("180u");
     });
 
     it('displays "--" for null IoB', () => {
@@ -192,10 +206,22 @@ describe("GlucoseHero", () => {
       expect(screen.getByTestId("iob-value")).toHaveTextContent("--");
     });
 
-    it('displays "--" for null CoB', () => {
-      render(<GlucoseHero {...defaultProps} cob={null} />);
+    it('displays "--" for null basal rate', () => {
+      render(<GlucoseHero {...defaultProps} basalRate={null} />);
 
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("--");
+      expect(screen.getByTestId("basal-value")).toHaveTextContent("--");
+    });
+
+    it('displays "--" for null battery', () => {
+      render(<GlucoseHero {...defaultProps} batteryPct={null} />);
+
+      expect(screen.getByTestId("battery-value")).toHaveTextContent("--");
+    });
+
+    it('displays "--" for null reservoir', () => {
+      render(<GlucoseHero {...defaultProps} reservoirUnits={null} />);
+
+      expect(screen.getByTestId("reservoir-value")).toHaveTextContent("--");
     });
 
     it("formats IoB to 2 decimal places", () => {
@@ -204,16 +230,10 @@ describe("GlucoseHero", () => {
       expect(screen.getByTestId("iob-value")).toHaveTextContent("2.46u");
     });
 
-    it("rounds CoB to nearest integer", () => {
-      render(<GlucoseHero {...defaultProps} cob={15.7} />);
+    it("formats basal rate to 2 decimal places", () => {
+      render(<GlucoseHero {...defaultProps} basalRate={1.234} />);
 
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("16g");
-    });
-
-    it("rounds CoB down when below .5", () => {
-      render(<GlucoseHero {...defaultProps} cob={15.3} />);
-
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("15g");
+      expect(screen.getByTestId("basal-value")).toHaveTextContent("1.23 u/hr");
     });
   });
 
@@ -426,16 +446,16 @@ describe("GlucoseHero", () => {
       expect(screen.getByTestId("iob-value")).toHaveTextContent("--");
     });
 
-    it("treats NaN CoB as null", () => {
-      render(<GlucoseHero {...defaultProps} cob={NaN} />);
+    it("treats NaN battery as null", () => {
+      render(<GlucoseHero {...defaultProps} batteryPct={NaN} />);
 
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("--");
+      expect(screen.getByTestId("battery-value")).toHaveTextContent("--");
     });
 
-    it("treats negative CoB as null", () => {
-      render(<GlucoseHero {...defaultProps} cob={-10} />);
+    it("treats negative reservoir as null", () => {
+      render(<GlucoseHero {...defaultProps} reservoirUnits={-10} />);
 
-      expect(screen.getByTestId("cob-value")).toHaveTextContent("--");
+      expect(screen.getByTestId("reservoir-value")).toHaveTextContent("--");
     });
 
     it("allows negative IoB (rare but possible)", () => {

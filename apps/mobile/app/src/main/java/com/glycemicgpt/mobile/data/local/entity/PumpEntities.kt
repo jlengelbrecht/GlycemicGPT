@@ -16,7 +16,7 @@ data class IoBReadingEntity(
 
 @Entity(
     tableName = "basal_readings",
-    indices = [Index(value = ["timestampMs"])],
+    indices = [Index(value = ["timestampMs"], unique = true)],
 )
 data class BasalReadingEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -64,7 +64,7 @@ data class ReservoirReadingEntity(
 
 @Entity(
     tableName = "cgm_readings",
-    indices = [Index(value = ["timestampMs"])],
+    indices = [Index(value = ["timestampMs"], unique = true)],
 )
 data class CgmReadingEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

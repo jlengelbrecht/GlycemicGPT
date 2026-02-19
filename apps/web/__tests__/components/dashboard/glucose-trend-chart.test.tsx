@@ -39,6 +39,23 @@ jest.mock("../../../src/hooks/use-glucose-history", () => ({
   useGlucoseHistory: () => mockHookReturn,
 }));
 
+// Mock the usePumpEvents hook
+const mockRefetchPump = jest.fn();
+let mockPumpReturn = {
+  events: [] as Array<{
+    event_type: string;
+    event_timestamp: string;
+    units: number | null;
+    is_automated: boolean;
+  }>,
+  isLoading: false,
+  refetch: mockRefetchPump,
+};
+
+jest.mock("../../../src/hooks/use-pump-events", () => ({
+  usePumpEvents: () => mockPumpReturn,
+}));
+
 // Mock recharts - render minimal DOM so we can test surrounding logic
 jest.mock("recharts", () => ({
   ResponsiveContainer: ({
@@ -46,7 +63,7 @@ jest.mock("recharts", () => ({
   }: {
     children: React.ReactNode;
   }) => <div data-testid="responsive-container">{children}</div>,
-  ScatterChart: ({
+  ComposedChart: ({
     children,
   }: {
     children: React.ReactNode;
@@ -54,6 +71,7 @@ jest.mock("recharts", () => ({
   Scatter: ({ data }: { data: unknown[] }) => (
     <div data-testid="scatter" data-count={data?.length ?? 0} />
   ),
+  Area: () => <div data-testid="area" />,
   XAxis: () => <div data-testid="x-axis" />,
   YAxis: () => <div data-testid="y-axis" />,
   CartesianGrid: () => <div data-testid="cartesian-grid" />,
@@ -61,6 +79,7 @@ jest.mock("recharts", () => ({
   ReferenceArea: ({ y1, y2 }: { y1: number; y2: number }) => (
     <div data-testid="reference-area" data-y1={y1} data-y2={y2} />
   ),
+  ReferenceLine: () => <div data-testid="reference-line" />,
   Cell: () => <div data-testid="cell" />,
 }));
 
@@ -96,6 +115,11 @@ beforeEach(() => {
     period: "3h",
     setPeriod: mockSetPeriod,
     refetch: mockRefetch,
+  };
+  mockPumpReturn = {
+    events: [],
+    isLoading: false,
+    refetch: mockRefetchPump,
   };
 });
 
