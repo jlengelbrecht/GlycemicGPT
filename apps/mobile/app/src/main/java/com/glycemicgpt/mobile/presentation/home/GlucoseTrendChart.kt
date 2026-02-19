@@ -57,12 +57,12 @@ enum class ChartPeriod(val label: String, val hours: Long) {
 }
 
 private object ChartColors {
-    val BasalAuto = Color(0xFF00BCD4)     // Teal -- auto basal (Control-IQ adjusted)
+    val BasalAuto = Color(0xFF00BCD4)     // Teal -- auto basal (algorithm adjusted)
     val BasalProfile = Color(0xFF78909C)  // Blue-grey -- profile/manual basal
     val BasalSleep = Color(0xFF7E57C2)    // Purple -- sleep mode
     val BasalExercise = Color(0xFFFF9800) // Orange -- exercise mode
-    val BolusAutoCorrection = Color(0xFFE91E63) // Pink -- auto-correction bolus
-    val BolusMeal = Color(0xFF4CAF50)     // Green -- meal/manual bolus
+    val Correction = Color(0xFFE91E63)    // Pink -- correction bolus (auto or manual)
+    val Bolus = Color(0xFF7C4DFF)         // Deep purple -- meal/standard bolus
 }
 
 @Composable
@@ -178,10 +178,17 @@ fun GlucoseTrendChart(
                         }
                     }
                 }
+                val bolusTypesPresent = remember(bolusEvents) {
+                    buildSet {
+                        for (b in bolusEvents) {
+                            if (b.isAutomated || b.isCorrection) add("correction") else add("bolus")
+                        }
+                    }
+                }
                 ChartLegend(
                     hasIob = iobReadings.isNotEmpty(),
                     basalModesPresent = basalModesPresent,
-                    hasBolus = bolusEvents.isNotEmpty(),
+                    bolusTypesPresent = bolusTypesPresent,
                     iobColor = iobColor,
                 )
             }
@@ -193,7 +200,7 @@ fun GlucoseTrendChart(
 private fun ChartLegend(
     hasIob: Boolean,
     basalModesPresent: Set<String>,
-    hasBolus: Boolean,
+    bolusTypesPresent: Set<String>,
     iobColor: Color,
 ) {
     Row(
@@ -205,10 +212,8 @@ private fun ChartLegend(
         if ("profile" in basalModesPresent) LegendItem(color = ChartColors.BasalProfile, label = "Profile")
         if ("sleep" in basalModesPresent) LegendItem(color = ChartColors.BasalSleep, label = "Sleep")
         if ("exercise" in basalModesPresent) LegendItem(color = ChartColors.BasalExercise, label = "Exercise")
-        if (hasBolus) {
-            LegendItem(color = ChartColors.BolusAutoCorrection, label = "Correction")
-            LegendItem(color = ChartColors.BolusMeal, label = "Meal")
-        }
+        if ("correction" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "Correction")
+        if ("bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Bolus, label = "Bolus")
         if (hasIob) LegendItem(color = iobColor.copy(alpha = 0.7f), label = "IoB")
     }
 }
@@ -545,11 +550,8 @@ private fun DrawScope.drawBolusMarkers(
         }
         prevX = x
 
-        val color = if (event.isAutomated || event.isCorrection) {
-            ChartColors.BolusAutoCorrection
-        } else {
-            ChartColors.BolusMeal
-        }
+        val isCorrection = event.isAutomated || event.isCorrection
+        val color = if (isCorrection) ChartColors.Correction else ChartColors.Bolus
 
         val markerY = baseMarkerY + staggerLevel * staggerStep
 
@@ -586,5 +588,16 @@ private fun DrawScope.drawBolusMarkers(
                 labelY,
             ),
         )
+
+        // "AUTO" tag above units label for automated corrections
+        if (event.isAutomated) {
+            val autoTagStyle = TextStyle(fontSize = 7.sp, color = color.copy(alpha = 0.8f))
+            val autoTag = textMeasurer.measure("AUTO", autoTagStyle)
+            val autoTagY = (labelY - autoTag.size.height - 1.dp.toPx()).coerceAtLeast(0f)
+            drawText(
+                autoTag,
+                topLeft = Offset(x - autoTag.size.width / 2f, autoTagY),
+            )
+        }
     }
 }

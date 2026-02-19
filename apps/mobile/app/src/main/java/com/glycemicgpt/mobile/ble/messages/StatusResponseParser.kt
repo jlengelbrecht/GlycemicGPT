@@ -267,7 +267,7 @@ object StatusResponseParser {
     /**
      * Parse LastBolusStatusResponse (opcode 49).
      *
-     * Cargo layout (17 bytes, all little-endian unsigned):
+     * V1 cargo layout (17 bytes, all little-endian unsigned):
      *   bytes  0- 3: bolusId (uint32 LE)
      *   bytes  4- 7: timestampSeconds (uint32 LE, seconds since Tandem epoch)
      *   bytes  8-11: deliveredVolume (uint32 LE, milliunits -- 1000x per unit)
@@ -276,18 +276,48 @@ object StatusResponseParser {
      *   byte  14:    bolusTypeBitmask (1=STANDARD, 2=EXTENDED, 4=FOOD, 8=CORRECTION)
      *   bytes 15-16: extendedBolusDuration (uint16 LE, minutes)
      *
+     * Extended cargo layout (20 bytes, firmware v7.7+):
+     *   byte  0:     status prefix (always 0x01)
+     *   bytes  1-17: same fields as V1 (shifted by 1 byte)
+     *   bytes 18-19: V2 extension fields (bolusRequestId, uint16 LE)
+     *
      * Returns a single-element list with the last bolus (if completed and
      * newer than [since]), or an empty list otherwise.
      */
     fun parseLastBolusStatusResponse(cargo: ByteArray, since: Instant): List<BolusEvent> {
-        if (cargo.size < 17) return emptyList()
-        val buf = ByteBuffer.wrap(cargo).order(ByteOrder.LITTLE_ENDIAN)
+        // V1 (exactly 17 bytes): fields start at offset 0.
+        // Extended (20+ bytes): 1-byte status prefix, fields start at offset 1.
+        // Sizes 18-19 are neither valid V1 nor V2 -- reject them.
+        val baseOffset = when {
+            cargo.size >= 20 -> {
+                val prefix = cargo[0].toInt() and 0xFF
+                if (prefix != 0x01) {
+                    Timber.w("LastBolus: unexpected V2 prefix byte 0x%02x (expected 0x01), size=%d",
+                        prefix, cargo.size)
+                }
+                1
+            }
+            cargo.size == 17 -> 0
+            else -> {
+                if (cargo.size > 0) {
+                    Timber.w("LastBolus: unexpected cargo size %d (expected 17 or 20+)", cargo.size)
+                }
+                return emptyList()
+            }
+        }
+
+        val buf = ByteBuffer.wrap(cargo, baseOffset, cargo.size - baseOffset)
+            .order(ByteOrder.LITTLE_ENDIAN)
         buf.int // skip bolusId
         val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
         val deliveredMilliUnits = buf.int.toLong() and 0xFFFFFFFFL
-        val bolusStatusId = cargo[12].toInt() and 0xFF
-        val bolusSourceId = cargo[13].toInt() and 0xFF
-        val bolusTypeBitmask = cargo[14].toInt() and 0xFF
+        val bolusStatusId = cargo[baseOffset + 12].toInt() and 0xFF
+        val bolusSourceId = cargo[baseOffset + 13].toInt() and 0xFF
+        val bolusTypeBitmask = cargo[baseOffset + 14].toInt() and 0xFF
+
+        Timber.v("LastBolus: size=%d baseOffset=%d statusId=%d sourceId=%d typeMask=0x%02x deliveredMu=%d pumpTime=%d",
+            cargo.size, baseOffset, bolusStatusId, bolusSourceId, bolusTypeBitmask,
+            deliveredMilliUnits, pumpTimeSec)
 
         // Only report completed boluses (status 3)
         if (bolusStatusId != 3) return emptyList()
