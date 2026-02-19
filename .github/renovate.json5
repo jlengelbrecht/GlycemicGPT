@@ -8,6 +8,8 @@
     ":automergeDigest",
     ":automergeBranch"
   ],
+  // Target develop as the integration branch
+  "baseBranches": ["develop"],
   // Branch naming
   "branchPrefix": "renovate/",
   // Commit message format (semantic commits)

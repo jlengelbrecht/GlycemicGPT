@@ -104,4 +104,43 @@ class AppUpdateCheckerTest {
     fun `sanitizeFileName preserves valid name`() {
         assertEquals("GlycemicGPT-0.1.81-release.apk", AppUpdateChecker.sanitizeFileName("GlycemicGPT-0.1.81-release.apk"))
     }
+
+    // parseDevRunNumber tests
+
+    @Test
+    fun `parseDevRunNumber extracts run number from dev APK name`() {
+        assertEquals(42, AppUpdateChecker.parseDevRunNumber("GlycemicGPT-0.1.95-dev.42-debug.apk"))
+    }
+
+    @Test
+    fun `parseDevRunNumber extracts large run number`() {
+        assertEquals(1234, AppUpdateChecker.parseDevRunNumber("GlycemicGPT-0.2.0-dev.1234-debug.apk"))
+    }
+
+    @Test
+    fun `parseDevRunNumber returns 0 for stable APK name`() {
+        assertEquals(0, AppUpdateChecker.parseDevRunNumber("GlycemicGPT-0.1.95-release.apk"))
+    }
+
+    @Test
+    fun `parseDevRunNumber returns 0 for non-matching string`() {
+        assertEquals(0, AppUpdateChecker.parseDevRunNumber("base.apk"))
+    }
+
+    @Test
+    fun `parseDevRunNumber returns 0 for empty string`() {
+        assertEquals(0, AppUpdateChecker.parseDevRunNumber(""))
+    }
+
+    @Test
+    fun `parseDevRunNumber newer run number is greater`() {
+        val older = AppUpdateChecker.parseDevRunNumber("GlycemicGPT-0.1.95-dev.10-debug.apk")
+        val newer = AppUpdateChecker.parseDevRunNumber("GlycemicGPT-0.1.95-dev.11-debug.apk")
+        assertTrue(newer > older)
+    }
+
+    @Test
+    fun `parseDevRunNumber rejects loose match without hyphens`() {
+        assertEquals(0, AppUpdateChecker.parseDevRunNumber("some-devtools.5thing.apk"))
+    }
 }
