@@ -333,18 +333,15 @@ object StatusResponseParser {
      *
      * The pump streams records on FFF8 after an opcode 60 request. The cargo
      * may contain a 2-byte header (record count + flags) followed by one or
-     * more 26-byte records (pumpX2 wire format):
-     *   bytes 0-3: sequence number (Int32 LE)
-     *   bytes 4-7: pump time in seconds (Int32 LE)
-     *   bytes 8-9: event type ID (UInt16 LE)
+     * more 26-byte records:
+     *   bytes 0-1: event type ID (UInt16 LE)
+     *   bytes 2-5: pump time in seconds (UInt32 LE, since Tandem epoch)
+     *   bytes 6-9: record index (Int32 LE)
      *   bytes 10-25: raw event data (16 bytes)
      *
-     * We convert each 26-byte record to an 18-byte HistoryLogRecord
-     * (truncating the 16-byte payload to 8 bytes for storage consistency).
-     *
-     * Returns only records with sequence > [sinceSequence].
+     * Returns all valid records. Dedup is handled at the insert layer (IGNORE).
      */
-    fun parseHistoryLogStreamCargo(cargo: ByteArray, sinceSequence: Int): List<HistoryLogRecord> {
+    fun parseHistoryLogStreamCargo(cargo: ByteArray): List<HistoryLogRecord> {
         // Try to find 26-byte records, with or without a leading header.
         // Try offsets 0 and 2 (in case of a 2-byte count/status prefix).
         for (headerSize in intArrayOf(0, 2)) {
@@ -355,13 +352,13 @@ object StatusResponseParser {
             // 26-byte format structurally matches. Parse records and return
             // (even if empty due to filtering) -- don't fall through to
             // 18-byte format which would misinterpret the same bytes.
-            val records = parseStreamRecords(cargo, headerSize, sinceSequence)
+            val records = parseStreamRecords(cargo, headerSize)
             Timber.d("Parsed %d records from FFF8 cargo (headerSize=%d)", records.size, headerSize)
             return records
         }
 
         // Fallback: try 18-byte format (same as opcode 61 on FFF6)
-        val fallback = parseHistoryLogResponse(cargo, sinceSequence)
+        val fallback = parseHistoryLogResponse(cargo, sinceSequence = 0)
         if (fallback.isNotEmpty()) {
             Timber.d("Parsed %d records from FFF8 cargo using 18-byte fallback", fallback.size)
             return fallback
@@ -375,35 +372,33 @@ object StatusResponseParser {
     private fun parseStreamRecords(
         cargo: ByteArray,
         offset: Int,
-        sinceSequence: Int,
     ): List<HistoryLogRecord> {
         val records = mutableListOf<HistoryLogRecord>()
         var pos = offset
         while (pos + STREAM_RECORD_SIZE <= cargo.size) {
             val buf = ByteBuffer.wrap(cargo, pos, STREAM_RECORD_SIZE).order(ByteOrder.LITTLE_ENDIAN)
-            val seqNum = buf.int
-            val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
+            // FFF8 stream record layout: eventTypeId(2) + pumpTimeSec(4) + recordIndex(4) + data(16)
             val eventTypeId = buf.short.toInt() and 0xFFFF
+            val pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
+            val seqNum = buf.int // record index (used as sequence number for tracking)
 
-            // Sanity check: reject obviously invalid fields
-            if (seqNum <= 0 || eventTypeId > MAX_KNOWN_EVENT_TYPE) {
+            // Sanity check: reject obviously invalid fields.
+            if (seqNum == 0 || eventTypeId > MAX_KNOWN_EVENT_TYPE) {
                 pos += STREAM_RECORD_SIZE
                 continue
             }
 
-            if (seqNum > sinceSequence) {
-                // Store full 26-byte record to preserve all event data for cloud upload
-                val rawRecord = cargo.copyOfRange(pos, pos + STREAM_RECORD_SIZE)
-                val rawB64 = Base64.encodeToString(rawRecord, Base64.NO_WRAP)
-                records.add(
-                    HistoryLogRecord(
-                        sequenceNumber = seqNum,
-                        rawBytesB64 = rawB64,
-                        eventTypeId = eventTypeId,
-                        pumpTimeSeconds = pumpTimeSec,
-                    ),
-                )
-            }
+            // Store full 26-byte record to preserve all event data for cloud upload
+            val rawRecord = cargo.copyOfRange(pos, pos + STREAM_RECORD_SIZE)
+            val rawB64 = Base64.encodeToString(rawRecord, Base64.NO_WRAP)
+            records.add(
+                HistoryLogRecord(
+                    sequenceNumber = seqNum,
+                    rawBytesB64 = rawB64,
+                    eventTypeId = eventTypeId,
+                    pumpTimeSeconds = pumpTimeSec,
+                ),
+            )
             pos += STREAM_RECORD_SIZE
         }
         return records
@@ -412,7 +407,7 @@ object StatusResponseParser {
     /** Upper bound for known Tandem event type IDs (sanity check). */
     private const val MAX_KNOWN_EVENT_TYPE = 512
 
-    /** FFF8 stream record size: 4(seq) + 4(time) + 2(eventId) + 16(data) = 26 bytes */
+    /** FFF8 stream record size: 2(eventId) + 4(time) + 4(index) + 16(data) = 26 bytes */
     private const val STREAM_RECORD_SIZE = 26
 
     /**
@@ -543,13 +538,19 @@ object StatusResponseParser {
 
     // -- History log CGM extraction -----------------------------------------
 
-    /** Event type ID for CGM BG readings in Tandem history logs. */
-    const val EVENT_TYPE_CGM_BG_READING = 16
+    /** Event type ID for fingerstick BG meter readings (LidBgReadingTaken). */
+    const val EVENT_TYPE_BG_METER_READING = 16
+
+    /** Event type ID for Dexcom G7 CGM readings (LidCgmDataG7). */
+    const val EVENT_TYPE_CGM_DATA_G7 = 399
+
+    /** Set of event type IDs that carry CGM glucose data. */
+    private val CGM_EVENT_TYPES = setOf(EVENT_TYPE_BG_METER_READING, EVENT_TYPE_CGM_DATA_G7)
 
     /**
-     * Parse a CGM glucose value from a history log event payload.
+     * Parse a CGM glucose value from a type 16 (LidBgReadingTaken) payload.
      *
-     * Event type 16 (LidBgReadingTaken) payload layout (8 bytes, LE):
+     * Payload layout (8 bytes, LE):
      *   bytes 0-1: glucose mg/dL (uint16 LE)
      *   bytes 2-7: status flags (unused for chart display)
      *
@@ -571,39 +572,70 @@ object StatusResponseParser {
     }
 
     /**
+     * Parse a CGM glucose value from a type 399 (LidCgmDataG7) payload.
+     *
+     * Payload layout (16 bytes from FFF8 data field, LE):
+     *   bytes 0-1: padding (always 00 00)
+     *   byte  2:   status (01 = valid reading)
+     *   byte  3:   trendRate (signed byte, rate of change)
+     *   byte  4:   reading type flag (0x20)
+     *   byte  5:   unknown
+     *   bytes 6-7: glucose mg/dL (uint16 LE)
+     *   bytes 8-15: timestamp duplicate + session info
+     *
+     * @param payload 8+ byte event payload from the history log record
+     * @param pumpTimeSec raw pump timestamp (seconds since Tandem epoch)
+     * @return CgmReading or null if the glucose value is invalid
+     */
+    fun parseCgmG7EventPayload(payload: ByteArray, pumpTimeSec: Long): CgmReading? {
+        if (payload.size < 8) return null
+        // Status byte at offset 2: 0x01 = valid reading. Reject others
+        // (calibrating, sensor error, etc.) to avoid garbage glucose values.
+        val status = payload[2].toInt() and 0xFF
+        if (status != 1) return null
+        val buf = ByteBuffer.wrap(payload, 6, 2).order(ByteOrder.LITTLE_ENDIAN)
+        val glucoseMgDl = buf.short.toInt() and 0xFFFF
+        if (glucoseMgDl == 0 || glucoseMgDl > 500) return null
+        val timestamp = pumpTimeToInstant(pumpTimeSec)
+        return CgmReading(
+            glucoseMgDl = glucoseMgDl,
+            trendArrow = CgmTrend.UNKNOWN, // trend not available from history
+            timestamp = timestamp,
+        )
+    }
+
+    /**
      * Extract CGM readings from a list of history log records.
      *
-     * Filters for event type 16 (LidBgReadingTaken), decodes each record's
-     * base64 raw bytes, extracts the 8-byte payload and pump timestamp,
-     * and parses the glucose value.
+     * Filters for CGM event types (16: LidBgReadingTaken, 399: LidCgmDataG7),
+     * decodes each record's base64 raw bytes, extracts the payload and pump
+     * timestamp, and parses the glucose value.
      *
      * @param records list of history log records (any event types)
      * @return list of CgmReadings sorted by timestamp, empty if none found
      */
     fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>): List<CgmReading> {
         return records
-            .filter { it.eventTypeId == EVENT_TYPE_CGM_BG_READING }
+            .filter { it.eventTypeId in CGM_EVENT_TYPES }
             .mapNotNull { record ->
                 val rawBytes = Base64.decode(record.rawBytesB64, Base64.NO_WRAP)
-                // Support both 26-byte stream format and 18-byte opcode 61 format
-                val pumpTimeSec: Long
-                val payload: ByteArray
-                when {
-                    rawBytes.size >= STREAM_RECORD_SIZE -> {
-                        // 26-byte stream: seq(4) + pumpTimeSec(4) + eventTypeId(2) + data(16)
-                        val buf = ByteBuffer.wrap(rawBytes, 4, 4).order(ByteOrder.LITTLE_ENDIAN)
-                        pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
-                        payload = rawBytes.copyOfRange(10, minOf(18, rawBytes.size))
-                    }
-                    rawBytes.size >= 18 -> {
-                        // 18-byte format: seq(4) + eventTypeId(2) + pumpTimeSec(4) + data(8)
-                        val buf = ByteBuffer.wrap(rawBytes, 6, 4).order(ByteOrder.LITTLE_ENDIAN)
-                        pumpTimeSec = buf.int.toLong() and 0xFFFFFFFFL
-                        payload = rawBytes.copyOfRange(10, 18)
-                    }
+                // Use the already-parsed pumpTimeSeconds from the record instead
+                // of re-decoding it from raw bytes (avoids redundant work and
+                // potential divergence if formats differ).
+                val pumpTimeSec = record.pumpTimeSeconds
+                // Extract the event data payload (starts at byte 10 in both formats)
+                val payload: ByteArray = when {
+                    rawBytes.size >= STREAM_RECORD_SIZE ->
+                        rawBytes.copyOfRange(10, minOf(18, rawBytes.size))
+                    rawBytes.size >= 18 ->
+                        rawBytes.copyOfRange(10, 18)
                     else -> return@mapNotNull null
                 }
-                parseCgmEventPayload(payload, pumpTimeSec)
+                // Dispatch to the correct payload parser based on event type
+                when (record.eventTypeId) {
+                    EVENT_TYPE_CGM_DATA_G7 -> parseCgmG7EventPayload(payload, pumpTimeSec)
+                    else -> parseCgmEventPayload(payload, pumpTimeSec)
+                }
             }
             .sortedBy { it.timestamp }
     }

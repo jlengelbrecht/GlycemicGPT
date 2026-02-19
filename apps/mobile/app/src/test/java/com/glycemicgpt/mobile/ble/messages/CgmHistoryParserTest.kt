@@ -55,7 +55,7 @@ class CgmHistoryParserTest {
 
     /**
      * Build a 26-byte raw history log record (FFF8 stream format):
-     *   seq(4) + pumpTimeSec(4) + eventTypeId(2) + data(16)
+     *   eventTypeId(2) + pumpTimeSec(4) + recordIndex(4) + data(16)
      */
     private fun buildStreamRecord(
         seq: Int,
@@ -64,9 +64,9 @@ class CgmHistoryParserTest {
         data: ByteArray = ByteArray(16),
     ): ByteArray {
         val buf = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(seq)
-        buf.putInt(pumpTimeSec.toInt())
         buf.putShort(eventTypeId.toShort())
+        buf.putInt(pumpTimeSec.toInt())
+        buf.putInt(seq)
         buf.put(data.copyOf(16)) // pad/truncate to 16 bytes
         return buf.array()
     }
@@ -78,9 +78,19 @@ class CgmHistoryParserTest {
         return payload
     }
 
+    /** Build 16-byte data field for type 16 (glucose at offset 0). */
     private fun buildCgmData16(glucoseMgDl: Int): ByteArray {
         val data = ByteArray(16)
         val buf = ByteBuffer.wrap(data, 0, 2).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(glucoseMgDl.toShort())
+        return data
+    }
+
+    /** Build 16-byte data field for type 399 / LidCgmDataG7 (glucose at offset 6). */
+    private fun buildCgmG7Data16(glucoseMgDl: Int): ByteArray {
+        val data = ByteArray(16)
+        data[2] = 0x01 // status = valid
+        val buf = ByteBuffer.wrap(data, 6, 2).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(glucoseMgDl.toShort())
         return data
     }
@@ -240,13 +250,115 @@ class CgmHistoryParserTest {
         assertEquals(150, result[1].glucoseMgDl)
     }
 
+    // -- parseCgmG7EventPayload tests -----------------------------------------
+
+    @Test
+    fun `parseCgmG7EventPayload returns reading for valid glucose`() {
+        val payload = buildCgmG7Data16(165).copyOfRange(0, 8)
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNotNull(result)
+        assertEquals(165, result!!.glucoseMgDl)
+        assertEquals(CgmTrend.UNKNOWN, result.trendArrow)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns null for zero glucose`() {
+        val payload = buildCgmG7Data16(0).copyOfRange(0, 8)
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns null for glucose above 500`() {
+        val payload = buildCgmG7Data16(501).copyOfRange(0, 8)
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns reading for boundary glucose 1`() {
+        val payload = buildCgmG7Data16(1).copyOfRange(0, 8)
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNotNull(result)
+        assertEquals(1, result!!.glucoseMgDl)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns reading for boundary glucose 500`() {
+        val payload = buildCgmG7Data16(500).copyOfRange(0, 8)
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNotNull(result)
+        assertEquals(500, result!!.glucoseMgDl)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns null for invalid status byte`() {
+        val payload = buildCgmG7Data16(165).copyOfRange(0, 8)
+        payload[2] = 0x00 // status = invalid
+        val result = StatusResponseParser.parseCgmG7EventPayload(payload, 500_000_000L)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseCgmG7EventPayload returns null for short payload`() {
+        val result = StatusResponseParser.parseCgmG7EventPayload(ByteArray(4), 500_000_000L)
+        assertNull(result)
+    }
+
+    // -- extractCgmFromHistoryLogs tests (type 399 / G7 CGM) ------------------
+
+    @Test
+    fun `extractCgmFromHistoryLogs extracts type 399 G7 CGM records`() {
+        val pumpTime = 500_000_000L
+        val streamRaw = buildStreamRecord(100, pumpTime, 399, buildCgmG7Data16(210))
+
+        val records = listOf(toHistoryLogRecord(streamRaw, 100, 399, pumpTime))
+        val result = StatusResponseParser.extractCgmFromHistoryLogs(records)
+        assertEquals(1, result.size)
+        assertEquals(210, result[0].glucoseMgDl)
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs handles mixed type 16 and type 399 records`() {
+        val pumpTime = 500_000_000L
+        val record16 = buildRawRecord18(100, 16, pumpTime, buildCgmPayload(120))
+        val record399 = buildStreamRecord(101, pumpTime + 300, 399, buildCgmG7Data16(180))
+        val recordOther = buildStreamRecord(102, pumpTime + 600, 280, ByteArray(16))
+
+        val records = listOf(
+            toHistoryLogRecord(record16, 100, 16, pumpTime),
+            toHistoryLogRecord(record399, 101, 399, pumpTime + 300),
+            toHistoryLogRecord(recordOther, 102, 280, pumpTime + 600),
+        )
+
+        val result = StatusResponseParser.extractCgmFromHistoryLogs(records)
+        assertEquals(2, result.size)
+        assertEquals(120, result[0].glucoseMgDl)
+        assertEquals(180, result[1].glucoseMgDl)
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs skips type 399 with invalid glucose`() {
+        val pumpTime = 500_000_000L
+        val validRaw = buildStreamRecord(100, pumpTime, 399, buildCgmG7Data16(165))
+        val invalidRaw = buildStreamRecord(101, pumpTime + 300, 399, buildCgmG7Data16(0))
+
+        val records = listOf(
+            toHistoryLogRecord(validRaw, 100, 399, pumpTime),
+            toHistoryLogRecord(invalidRaw, 101, 399, pumpTime + 300),
+        )
+
+        val result = StatusResponseParser.extractCgmFromHistoryLogs(records)
+        assertEquals(1, result.size)
+        assertEquals(165, result[0].glucoseMgDl)
+    }
+
     // -- parseHistoryLogStreamCargo tests -------------------------------------
 
     @Test
     fun `parseHistoryLogStreamCargo parses single 26-byte record without header`() {
         val record = buildStreamRecord(1000, 500_000_000L, 16, buildCgmData16(140))
-        // Cargo = just the 26-byte record (no header)
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(record, sinceSequence = 999)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(record)
         assertEquals(1, result.size)
         assertEquals(1000, result[0].sequenceNumber)
         assertEquals(16, result[0].eventTypeId)
@@ -255,13 +367,12 @@ class CgmHistoryParserTest {
     @Test
     fun `parseHistoryLogStreamCargo parses single record with 2-byte header`() {
         val record = buildStreamRecord(1000, 500_000_000L, 280, ByteArray(16))
-        // Cargo = 2-byte header + 26-byte record
         val cargo = ByteArray(2 + 26)
         cargo[0] = 1 // record count
         cargo[1] = 0 // flags
         System.arraycopy(record, 0, cargo, 2, 26)
 
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(cargo, sinceSequence = 999)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(cargo)
         assertEquals(1, result.size)
         assertEquals(1000, result[0].sequenceNumber)
         assertEquals(280, result[0].eventTypeId)
@@ -271,37 +382,27 @@ class CgmHistoryParserTest {
     fun `parseHistoryLogStreamCargo parses multiple records with header`() {
         val record1 = buildStreamRecord(1000, 500_000_000L, 16, buildCgmData16(120))
         val record2 = buildStreamRecord(1001, 500_000_300L, 280, ByteArray(16))
-        // Cargo = 2-byte header + 2 x 26-byte records
         val cargo = ByteArray(2 + 52)
         cargo[0] = 2 // record count
         System.arraycopy(record1, 0, cargo, 2, 26)
         System.arraycopy(record2, 0, cargo, 28, 26)
 
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(cargo, sinceSequence = 999)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(cargo)
         assertEquals(2, result.size)
         assertEquals(1000, result[0].sequenceNumber)
         assertEquals(1001, result[1].sequenceNumber)
     }
 
     @Test
-    fun `parseHistoryLogStreamCargo filters by sinceSequence`() {
-        val record = buildStreamRecord(1000, 500_000_000L, 16, buildCgmData16(120))
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(record, sinceSequence = 1000)
-        // seq 1000 is NOT > sinceSequence 1000, so filtered out
-        assertTrue(result.isEmpty())
-    }
-
-    @Test
     fun `parseHistoryLogStreamCargo returns empty for too-short cargo`() {
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(ByteArray(10), sinceSequence = 0)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(ByteArray(10))
         assertTrue(result.isEmpty())
     }
 
     @Test
     fun `parseHistoryLogStreamCargo falls back to 18-byte format`() {
-        // Build a valid 18-byte record
         val record = buildRawRecord18(500, 16, 500_000_000L, buildCgmPayload(100))
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(record, sinceSequence = 499)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(record)
         assertEquals(1, result.size)
         assertEquals(500, result[0].sequenceNumber)
     }
@@ -310,18 +411,16 @@ class CgmHistoryParserTest {
     fun `parseHistoryLogStreamCargo preserves full 26-byte rawBytesB64`() {
         val data = buildCgmData16(200)
         val record = buildStreamRecord(1000, 500_000_000L, 16, data)
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(record, sinceSequence = 999)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(record)
         assertEquals(1, result.size)
-        // Decode the stored base64 and verify it's the full 26 bytes
         val decoded = java.util.Base64.getDecoder().decode(result[0].rawBytesB64)
         assertEquals(26, decoded.size)
     }
 
     @Test
     fun `parseHistoryLogStreamCargo rejects records with invalid event types`() {
-        // Build a record with an impossibly high event type (> MAX_KNOWN_EVENT_TYPE)
         val record = buildStreamRecord(1000, 500_000_000L, 60000, ByteArray(16))
-        val result = StatusResponseParser.parseHistoryLogStreamCargo(record, sinceSequence = 999)
+        val result = StatusResponseParser.parseHistoryLogStreamCargo(record)
         assertTrue(result.isEmpty())
     }
 }
