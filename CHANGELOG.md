@@ -14,6 +14,29 @@
 
 ---
 
+## [0.1.96](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.95...v0.1.96) (2026-02-20)
+
+
+### ✨ Features
+
+* add develop/main branching strategy with dev release channels ([#254](https://github.com/jlengelbrecht/GlycemicGPT/issues/254)) ([54efa66](https://github.com/jlengelbrecht/GlycemicGPT/commit/54efa66caf370fb1c45de73db45dc36a38a8778f))
+* add time in range bar and move pump status into hero card ([#237](https://github.com/jlengelbrecht/GlycemicGPT/issues/237)) ([7169533](https://github.com/jlengelbrecht/GlycemicGPT/commit/71695333c13bd08300c33b3358fd8bc3c3c94dc3))
+* BLE history backfill, chart overlays, pump status hero, and V2 bolus parser fix ([#252](https://github.com/jlengelbrecht/GlycemicGPT/issues/252)) ([a6fcc0a](https://github.com/jlengelbrecht/GlycemicGPT/commit/a6fcc0ad507b8b6666015953d2b4d8d3ecfceb1a))
+* glucose trend chart with basal/bolus overlays for mobile home ([#236](https://github.com/jlengelbrecht/GlycemicGPT/issues/236)) ([62c0f9a](https://github.com/jlengelbrecht/GlycemicGPT/commit/62c0f9a936bf12dd49cfa375fb84bac64c4df837))
+* make glucose thresholds dynamic from backend settings ([#241](https://github.com/jlengelbrecht/GlycemicGPT/issues/241)) ([36bb020](https://github.com/jlengelbrecht/GlycemicGPT/commit/36bb0203dd45eac71916bd100acb6c7ac73fb7ef))
+* tiered BLE reconnection with indefinite slow phase ([#244](https://github.com/jlengelbrecht/GlycemicGPT/issues/244)) ([1801393](https://github.com/jlengelbrecht/GlycemicGPT/commit/180139374db68afedb9af207009023ca53134bde))
+
+
+### 🐛 Bug Fixes
+
+* **deps:** update dependency next to v15.5.12 ([#233](https://github.com/jlengelbrecht/GlycemicGPT/issues/233)) ([94b4cad](https://github.com/jlengelbrecht/GlycemicGPT/commit/94b4cadffb9ed21483fb2020308ba507c9cb91e5))
+* use dynamic glucose thresholds in Time in Range pipeline ([#242](https://github.com/jlengelbrecht/GlycemicGPT/issues/242)) ([83bd5ab](https://github.com/jlengelbrecht/GlycemicGPT/commit/83bd5ab62b1e5c8fcea05786ea872c7aa51f63df))
+
+
+### 👷 CI/CD
+
+* add attribution guardrails -- commit-msg hook and CI check ([#231](https://github.com/jlengelbrecht/GlycemicGPT/issues/231)) ([aa11e82](https://github.com/jlengelbrecht/GlycemicGPT/commit/aa11e829347cc95edbe9fc2ab4726c633fc28ade))
+
 ## [0.1.95](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.94...v0.1.95) (2026-02-17)
 
 
