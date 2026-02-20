@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.98](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.97...v0.1.98) (2026-02-20)
+
+
+### 🐛 Bug Fixes
+
+* add DEV_BUILD_NUMBER to release build config ([#259](https://github.com/jlengelbrecht/GlycemicGPT/issues/259)) ([d45570b](https://github.com/jlengelbrecht/GlycemicGPT/commit/d45570bd681412ec052a42f513c774700e15b3ee))
+
 ## [0.1.97](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.96...v0.1.97) (2026-02-20)
 
 
