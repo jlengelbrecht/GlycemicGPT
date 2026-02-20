@@ -11,12 +11,9 @@ import com.glycemicgpt.mobile.BuildConfig
 import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
-import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
-import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
-import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
-import com.glycemicgpt.mobile.data.repository.DeviceRepository
+import com.glycemicgpt.mobile.data.repository.AuthRepository
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
 import com.glycemicgpt.mobile.service.AlertStreamService
 import com.glycemicgpt.mobile.service.PumpConnectionService
@@ -27,12 +24,16 @@ import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -87,12 +88,10 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
-    private val authTokenStore: AuthTokenStore,
     private val pumpCredentialStore: PumpCredentialStore,
     private val appSettingsStore: AppSettingsStore,
     private val glucoseRangeStore: GlucoseRangeStore,
-    private val api: GlycemicGptApi,
-    private val deviceRepository: DeviceRepository,
+    private val authRepository: AuthRepository,
     private val appUpdateChecker: AppUpdateChecker,
     private val authManager: AuthManager,
 ) : ViewModel() {
@@ -103,16 +102,27 @@ class SettingsViewModel @Inject constructor(
     /** Observable auth state for UI-level session expiry handling. */
     val authState: StateFlow<AuthState> = authManager.authState
 
+    /** One-shot event to navigate to onboarding after logout. */
+    private val _navigateToOnboarding = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateToOnboarding: SharedFlow<Unit> = _navigateToOnboarding.asSharedFlow()
+
     init {
         loadState()
+
+        // Re-load state when auth status changes (e.g. login from onboarding).
+        // drop(1) skips the initial emission (already handled by loadState() above),
+        // distinctUntilChanged avoids redundant reloads on duplicate state emissions.
+        viewModelScope.launch {
+            authManager.authState.drop(1).distinctUntilChanged().collect { loadState() }
+        }
     }
 
     fun loadState() {
-        val loggedIn = authTokenStore.isLoggedIn()
+        val loggedIn = authRepository.isLoggedIn()
         _uiState.value = _uiState.value.copy(
-            baseUrl = authTokenStore.getBaseUrl() ?: "",
+            baseUrl = authRepository.getBaseUrl() ?: "",
             isLoggedIn = loggedIn,
-            userEmail = if (loggedIn) authTokenStore.getUserEmail() else null,
+            userEmail = if (loggedIn) authRepository.getUserEmail() else null,
             isPumpPaired = pumpCredentialStore.isPaired(),
             pairedPumpAddress = pumpCredentialStore.getPairedAddress(),
             backendSyncEnabled = appSettingsStore.backendSyncEnabled,
@@ -126,12 +136,9 @@ class SettingsViewModel @Inject constructor(
         // Start services on app startup if conditions are met
         if (loggedIn) {
             AlertStreamService.start(appContext)
-            viewModelScope.launch {
-                deviceRepository.registerDevice()
-                    .onFailure { e -> Timber.w(e, "Device re-registration failed") }
-            }
+            viewModelScope.launch { authRepository.reRegisterDevice() }
             if (glucoseRangeStore.isStale()) {
-                viewModelScope.launch { fetchGlucoseRange() }
+                viewModelScope.launch { authRepository.refreshGlucoseRange() }
             }
         }
         if (pumpCredentialStore.isPaired()) {
@@ -145,13 +152,13 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(baseUrl = trimmed, connectionTestResult = null)
             return
         }
-        if (!isValidUrl(trimmed)) {
+        if (!authRepository.isValidUrl(trimmed)) {
             _uiState.value = _uiState.value.copy(
                 connectionTestResult = "Invalid URL. HTTPS required.",
             )
             return
         }
-        authTokenStore.saveBaseUrl(trimmed)
+        authRepository.saveBaseUrl(trimmed)
         _uiState.value = _uiState.value.copy(
             baseUrl = trimmed,
             connectionTestResult = null,
@@ -172,21 +179,13 @@ class SettingsViewModel @Inject constructor(
                 isTestingConnection = true,
                 connectionTestResult = null,
             )
-            try {
-                val response = api.healthCheck()
-                if (response.isSuccessful) {
-                    _uiState.value = _uiState.value.copy(
-                        isTestingConnection = false,
-                        connectionTestResult = "Connected successfully",
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isTestingConnection = false,
-                        connectionTestResult = "Server responded with HTTP ${response.code()}",
-                    )
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "Connection test failed")
+            val result = authRepository.testConnection()
+            result.onSuccess { message ->
+                _uiState.value = _uiState.value.copy(
+                    isTestingConnection = false,
+                    connectionTestResult = message,
+                )
+            }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(
                     isTestingConnection = false,
                     connectionTestResult = "Connection failed: ${e.message}",
@@ -207,47 +206,17 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoggingIn = true, loginError = null)
-            try {
-                val response = api.login(LoginRequest(email = email, password = password))
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    if (body == null) {
-                        _uiState.value = _uiState.value.copy(
-                            isLoggingIn = false,
-                            loginError = "Login failed: empty response from server",
-                        )
-                        return@launch
-                    }
-                    val expiresAtMs = System.currentTimeMillis() + (body.expiresIn * 1000L)
-                    authTokenStore.saveCredentials(url, body.accessToken, expiresAtMs, body.user.email)
-                    authTokenStore.saveRefreshToken(body.refreshToken)
-                    authManager.onLoginSuccess(viewModelScope)
-                    _uiState.value = _uiState.value.copy(
-                        isLoggingIn = false,
-                        isLoggedIn = true,
-                        userEmail = body.user.email,
-                    )
-                    // Register device, fetch settings, and start alert stream
-                    launch {
-                        deviceRepository.registerDevice()
-                            .onFailure { e -> Timber.w(e, "Device registration failed") }
-                    }
-                    launch { fetchGlucoseRange() }
-                    AlertStreamService.start(appContext)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoggingIn = false,
-                        loginError = when (response.code()) {
-                            401 -> "Invalid email or password"
-                            else -> "Login failed: HTTP ${response.code()}"
-                        },
-                    )
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "Login failed")
+            val result = authRepository.login(url, email, password, viewModelScope)
+            if (result.success) {
                 _uiState.value = _uiState.value.copy(
                     isLoggingIn = false,
-                    loginError = "Network error: ${e.message}",
+                    isLoggedIn = true,
+                    userEmail = result.email,
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoggingIn = false,
+                    loginError = result.error,
                 )
             }
         }
@@ -262,20 +231,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun logout() {
-        // Stop services and unregister device
-        AlertStreamService.stop(appContext)
         PumpConnectionService.stop(appContext)
-        viewModelScope.launch {
-            deviceRepository.unregisterDevice()
-                .onFailure { e -> Timber.w(e, "Device unregistration failed") }
-        }
-        authTokenStore.clearToken()
-        authManager.onLogout()
+        authRepository.logout(viewModelScope)
+        appSettingsStore.onboardingComplete = false
         _uiState.value = _uiState.value.copy(
             isLoggedIn = false,
             userEmail = null,
             showLogoutConfirm = false,
         )
+        _navigateToOnboarding.tryEmit(Unit)
     }
 
     fun showUnpairConfirm() {
@@ -406,29 +370,5 @@ class SettingsViewModel @Inject constructor(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:${appContext.packageName}"),
         )
-    }
-
-    private suspend fun fetchGlucoseRange() {
-        try {
-            val response = api.getGlucoseRange()
-            if (response.isSuccessful) {
-                response.body()?.let { range ->
-                    val ul = range.urgentLow.toInt()
-                    val lo = range.lowTarget.toInt()
-                    val hi = range.highTarget.toInt()
-                    val uh = range.urgentHigh.toInt()
-                    glucoseRangeStore.updateAll(ul, lo, hi, uh)
-                    Timber.d("Glucose range fetched: %d/%d/%d/%d", ul, lo, hi, uh)
-                }
-            }
-        } catch (e: Exception) {
-            Timber.w(e, "Failed to fetch glucose range settings")
-        }
-    }
-
-    private fun isValidUrl(url: String): Boolean {
-        val parsed = url.toHttpUrlOrNull() ?: return false
-        if (BuildConfig.DEBUG && parsed.scheme == "http") return true
-        return parsed.scheme == "https"
     }
 }

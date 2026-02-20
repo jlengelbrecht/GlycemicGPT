@@ -220,99 +220,39 @@ private fun AccountSection(
     onClearConnectionResult: () -> Unit,
     onClearLoginError: () -> Unit,
 ) {
-    var urlInput by remember(state.baseUrl) { mutableStateOf(state.baseUrl) }
-
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Storage,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Server Connection",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = urlInput,
-                onValueChange = { urlInput = it },
-                label = { Text("Server URL") },
-                placeholder = { Text("https://your-server.com") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth().testTag("server_url_field"),
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        onSaveUrl(urlInput)
-                        onTestConnection()
-                    },
-                    enabled = !state.isTestingConnection && urlInput.isNotBlank(),
-                    modifier = Modifier.weight(1f).testTag("test_connection_button"),
-                ) {
-                    if (state.isTestingConnection) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text(if (state.isTestingConnection) "Testing..." else "Test Connection")
-                }
-            }
-
-            state.connectionTestResult?.let { result ->
-                Spacer(modifier = Modifier.height(4.dp))
-                val isSuccess = result.contains("successfully")
-                Text(
-                    text = result,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isSuccess) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.error
-                    },
-                )
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-
-            // Login / Auth section
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Authentication",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
             if (state.isLoggedIn) {
+                // Logged-in view: read-only server info + sign out
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Connected to",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (state.baseUrl.isNotBlank()) {
+                            Text(
+                                text = state.baseUrl,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -348,6 +288,92 @@ private fun AccountSection(
                     }
                 }
             } else {
+                // Not logged in: full server URL + login form
+                var urlInput by remember(state.baseUrl) { mutableStateOf(state.baseUrl) }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Storage,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Server Connection",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    label = { Text("Server URL") },
+                    placeholder = { Text("https://your-server.com") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth().testTag("server_url_field"),
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            onSaveUrl(urlInput)
+                            onTestConnection()
+                        },
+                        enabled = !state.isTestingConnection && urlInput.isNotBlank(),
+                        modifier = Modifier.weight(1f).testTag("test_connection_button"),
+                    ) {
+                        if (state.isTestingConnection) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        Text(if (state.isTestingConnection) "Testing..." else "Test Connection")
+                    }
+                }
+
+                state.connectionTestResult?.let { result ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val isSuccess = result.contains("successfully")
+                    Text(
+                        text = result,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isSuccess) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Authentication",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 var email by remember { mutableStateOf("") }
                 var password by remember { mutableStateOf("") }
 

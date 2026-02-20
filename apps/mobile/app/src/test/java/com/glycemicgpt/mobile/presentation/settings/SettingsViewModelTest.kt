@@ -5,15 +5,10 @@ import android.os.PowerManager
 import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
-import com.glycemicgpt.mobile.data.local.AuthTokenStore
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
-import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
-import com.glycemicgpt.mobile.data.remote.dto.HealthResponse
-import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
-import com.glycemicgpt.mobile.data.remote.dto.LoginResponse
-import com.glycemicgpt.mobile.data.remote.dto.UserDto
-import com.glycemicgpt.mobile.data.repository.DeviceRepository
+import com.glycemicgpt.mobile.data.repository.AuthRepository
+import com.glycemicgpt.mobile.data.repository.LoginResult
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
@@ -35,21 +30,14 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Before
 import org.junit.Test
-import retrofit2.Response
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val authTokenStore = mockk<AuthTokenStore>(relaxed = true) {
-        every { getBaseUrl() } returns "https://test.example.com"
-        every { isLoggedIn() } returns false
-        every { getUserEmail() } returns null
-    }
     private val pumpCredentialStore = mockk<PumpCredentialStore>(relaxed = true) {
         every { isPaired() } returns false
         every { getPairedAddress() } returns null
@@ -64,8 +52,11 @@ class SettingsViewModelTest {
     private val appContext = mockk<Context>(relaxed = true) {
         every { getSystemService(Context.POWER_SERVICE) } returns powerManager
     }
-    private val api = mockk<GlycemicGptApi>()
-    private val deviceRepository = mockk<DeviceRepository>(relaxed = true)
+    private val authRepository = mockk<AuthRepository>(relaxed = true) {
+        every { getBaseUrl() } returns "https://test.example.com"
+        every { isLoggedIn() } returns false
+        every { getUserEmail() } returns null
+    }
     private val glucoseRangeStore = mockk<GlucoseRangeStore>(relaxed = true) {
         every { isStale(any()) } returns false
     }
@@ -85,7 +76,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(appContext, authTokenStore, pumpCredentialStore, appSettingsStore, glucoseRangeStore, api, deviceRepository, appUpdateChecker, authManager)
+        SettingsViewModel(appContext, pumpCredentialStore, appSettingsStore, glucoseRangeStore, authRepository, appUpdateChecker, authManager)
 
     @Test
     fun `loadState initializes from stores`() {
@@ -101,8 +92,8 @@ class SettingsViewModelTest {
 
     @Test
     fun `loadState restores user email when logged in`() {
-        every { authTokenStore.isLoggedIn() } returns true
-        every { authTokenStore.getUserEmail() } returns "saved@test.com"
+        every { authRepository.isLoggedIn() } returns true
+        every { authRepository.getUserEmail() } returns "saved@test.com"
         val vm = createViewModel()
 
         assertTrue(vm.uiState.value.isLoggedIn)
@@ -110,40 +101,41 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `saveBaseUrl validates HTTPS in release builds`() {
-        // In test (non-debug), HTTP should fail validation
-        // Note: BuildConfig.DEBUG is true in test, so HTTP is allowed
+    fun `saveBaseUrl validates HTTPS via AuthRepository`() {
+        every { authRepository.isValidUrl("https://valid.example.com") } returns true
         val vm = createViewModel()
         vm.saveBaseUrl("https://valid.example.com")
         assertEquals("https://valid.example.com", vm.uiState.value.baseUrl)
-        verify { authTokenStore.saveBaseUrl("https://valid.example.com") }
+        verify { authRepository.saveBaseUrl("https://valid.example.com") }
     }
 
     @Test
     fun `saveBaseUrl trims input`() {
+        every { authRepository.isValidUrl("https://example.com") } returns true
         val vm = createViewModel()
         vm.saveBaseUrl("  https://example.com  ")
-        verify { authTokenStore.saveBaseUrl("https://example.com") }
+        verify { authRepository.saveBaseUrl("https://example.com") }
     }
 
     @Test
     fun `saveBaseUrl does not persist empty string`() {
         val vm = createViewModel()
         vm.saveBaseUrl("")
-        verify(exactly = 0) { authTokenStore.saveBaseUrl("") }
+        verify(exactly = 0) { authRepository.saveBaseUrl(any()) }
     }
 
     @Test
     fun `saveBaseUrl rejects malformed URL`() {
+        every { authRepository.isValidUrl("not-a-url") } returns false
         val vm = createViewModel()
         vm.saveBaseUrl("not-a-url")
         assertEquals("Invalid URL. HTTPS required.", vm.uiState.value.connectionTestResult)
-        verify(exactly = 0) { authTokenStore.saveBaseUrl("not-a-url") }
+        verify(exactly = 0) { authRepository.saveBaseUrl(any()) }
     }
 
     @Test
-    fun `testConnection shows success on 200`() = runTest {
-        coEvery { api.healthCheck() } returns Response.success(HealthResponse(status = "ok"))
+    fun `testConnection shows success via AuthRepository`() = runTest {
+        coEvery { authRepository.testConnection() } returns Result.success("Connected successfully")
         val vm = createViewModel()
 
         vm.testConnection()
@@ -153,31 +145,18 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `testConnection shows error on HTTP error`() = runTest {
-        coEvery { api.healthCheck() } returns Response.error(
-            500,
-            "error".toResponseBody(),
-        )
+    fun `testConnection shows error on failure`() = runTest {
+        coEvery { authRepository.testConnection() } returns Result.failure(Exception("Connection refused"))
         val vm = createViewModel()
 
         vm.testConnection()
 
-        assertTrue(vm.uiState.value.connectionTestResult!!.contains("500"))
-    }
-
-    @Test
-    fun `testConnection shows error on network failure`() = runTest {
-        coEvery { api.healthCheck() } throws java.io.IOException("No route to host")
-        val vm = createViewModel()
-
-        vm.testConnection()
-
-        assertTrue(vm.uiState.value.connectionTestResult!!.contains("No route to host"))
+        assertTrue(vm.uiState.value.connectionTestResult!!.contains("Connection refused"))
     }
 
     @Test
     fun `testConnection requires URL`() {
-        every { authTokenStore.getBaseUrl() } returns ""
+        every { authRepository.getBaseUrl() } returns ""
         val vm = createViewModel()
 
         vm.testConnection()
@@ -186,15 +165,9 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `login succeeds and saves credentials`() = runTest {
-        coEvery { api.login(any()) } returns Response.success(
-            LoginResponse(
-                accessToken = "jwt123",
-                refreshToken = "refresh123",
-                tokenType = "bearer",
-                expiresIn = 3600,
-                user = UserDto(id = "1", email = "user@test.com", role = "user"),
-            ),
+    fun `login succeeds via AuthRepository`() = runTest {
+        coEvery { authRepository.login(any(), any(), any(), any()) } returns LoginResult(
+            success = true, email = "user@test.com",
         )
         val vm = createViewModel()
 
@@ -204,27 +177,12 @@ class SettingsViewModelTest {
         assertEquals("user@test.com", vm.uiState.value.userEmail)
         assertFalse(vm.uiState.value.isLoggingIn)
         assertNull(vm.uiState.value.loginError)
-        verify { authTokenStore.saveCredentials(any(), "jwt123", any(), "user@test.com") }
-        verify { authTokenStore.saveRefreshToken("refresh123") }
-        verify { authManager.onLoginSuccess(any()) }
     }
 
     @Test
-    fun `login handles null response body`() = runTest {
-        coEvery { api.login(any()) } returns Response.success(null)
-        val vm = createViewModel()
-
-        vm.login("user@test.com", "password123")
-
-        assertFalse(vm.uiState.value.isLoggedIn)
-        assertEquals("Login failed: empty response from server", vm.uiState.value.loginError)
-    }
-
-    @Test
-    fun `login shows error on 401`() = runTest {
-        coEvery { api.login(any()) } returns Response.error(
-            401,
-            "unauthorized".toResponseBody(),
+    fun `login shows error on failure`() = runTest {
+        coEvery { authRepository.login(any(), any(), any(), any()) } returns LoginResult(
+            success = false, error = "Invalid email or password",
         )
         val vm = createViewModel()
 
@@ -236,7 +194,7 @@ class SettingsViewModelTest {
 
     @Test
     fun `login requires URL`() {
-        every { authTokenStore.getBaseUrl() } returns ""
+        every { authRepository.getBaseUrl() } returns ""
         val vm = createViewModel()
 
         vm.login("user@test.com", "password")
@@ -256,16 +214,16 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `logout clears token and notifies AuthManager`() {
-        every { authTokenStore.isLoggedIn() } returns true
+    fun `logout delegates to AuthRepository and resets onboarding`() {
+        every { authRepository.isLoggedIn() } returns true
         val vm = createViewModel()
 
         vm.logout()
 
         assertFalse(vm.uiState.value.isLoggedIn)
         assertNull(vm.uiState.value.userEmail)
-        verify { authTokenStore.clearToken() }
-        verify { authManager.onLogout() }
+        verify { authRepository.logout(any()) }
+        verify { appSettingsStore.onboardingComplete = false }
     }
 
     @Test
