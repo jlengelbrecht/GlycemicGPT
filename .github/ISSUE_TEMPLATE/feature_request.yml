@@ -1,65 +1,69 @@
-name: Feature Request
-description: Suggest an idea for this project
+name: "✨ Feature Request"
+description: Suggest a new feature or enhancement
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature!
+        ## 💡 Got an idea for GlycemicGPT?
+
+        We'd love to hear it! Before submitting, please search [existing issues](https://github.com/jlengelbrecht/GlycemicGPT/issues?q=is%3Aissue+label%3Aenhancement) to check if this has already been suggested.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 🧩 Component
+      description: Which part of the system would this affect?
+      options:
+        - Web UI (Frontend)
+        - API (Backend)
+        - Mobile App (Android)
+        - Wear OS Companion
+        - AI / Analysis
+        - Integrations (Dexcom, Tandem, Telegram)
+        - Infrastructure / DevOps
+        - Other
+    validations:
+      required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: Problem Statement
-      description: Is your feature request related to a problem? Please describe.
-      placeholder: A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+      label: 😤 Problem Statement
+      description: Is this related to a problem? Describe the pain point.
+      placeholder: "I'm frustrated when [...] because [...]"
     validations:
       required: true
 
   - type: textarea
     id: solution
     attributes:
-      label: Proposed Solution
-      description: Describe the solution you'd like.
-      placeholder: A clear and concise description of what you want to happen.
+      label: 🌟 Proposed Solution
+      description: Describe the feature or change you'd like to see.
+      placeholder: A clear description of what you want to happen.
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives Considered
-      description: Describe any alternative solutions or features you've considered.
-
-  - type: dropdown
-    id: component
-    attributes:
-      label: Component
-      description: Which component would this affect?
-      options:
-        - API (Backend)
-        - Web (Frontend)
-        - AI/ML
-        - Integrations
-        - Infrastructure
-        - Other
-    validations:
-      required: true
+      label: 🔄 Alternatives Considered
+      description: Have you considered other approaches or workarounds?
 
   - type: dropdown
     id: priority
     attributes:
-      label: Priority
+      label: 📊 Priority
       description: How important is this feature to you?
       options:
         - Nice to have
         - Would be helpful
         - Important
-        - Critical
+        - Critical for my use case
 
   - type: textarea
     id: context
     attributes:
-      label: Additional Context
-      description: Add any other context or screenshots about the feature request here.
+      label: 🖼️ Additional Context
+      description: Mockups, screenshots, links to similar features in other apps, or any other context.

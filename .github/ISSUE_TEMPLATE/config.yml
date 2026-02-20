@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Discussions
-    url: https://github.com/jlengelbrecht/GlycemicGPT/discussions
-    about: Ask questions or discuss ideas in GitHub Discussions
+  - name: 🙏 Questions & Help
+    url: https://github.com/jlengelbrecht/GlycemicGPT/discussions/categories/q-a
+    about: For questions, support, or troubleshooting -- please use Discussions instead of opening an issue.
+  - name: 💡 Feature Ideas
+    url: https://github.com/jlengelbrecht/GlycemicGPT/discussions/categories/ideas
+    about: Have a rough idea that isn't a formal feature request yet? Start a discussion!
