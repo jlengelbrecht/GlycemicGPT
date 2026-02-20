@@ -2,7 +2,7 @@ name: Docker Integration Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
@@ -12,7 +12,7 @@ on:
       - 'scripts/docker-integration-test.sh'
       - '.github/workflows/docker-integration.yml'
   pull_request:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'apps/api/**'
       - 'apps/web/**'

@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.data.update
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
+import com.glycemicgpt.mobile.BuildConfig
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Moshi
@@ -68,8 +69,12 @@ class AppUpdateChecker @Inject constructor(
     suspend fun check(currentVersionCode: Int): UpdateCheckResult =
         withContext(Dispatchers.IO) {
             try {
+                val channel = BuildConfig.UPDATE_CHANNEL
+                val releasesUrl = if (channel == "dev") DEV_RELEASES_URL else STABLE_RELEASES_URL
+                val apkSuffix = if (channel == "dev") "-debug.apk" else "-release.apk"
+
                 val request = Request.Builder()
-                    .url(RELEASES_URL)
+                    .url(releasesUrl)
                     .header("Accept", "application/vnd.github+json")
                     .build()
 
@@ -77,6 +82,8 @@ class AppUpdateChecker @Inject constructor(
                     if (!response.isSuccessful) {
                         val message = if (response.code == 403) {
                             "Rate limit exceeded. Try again later."
+                        } else if (response.code == 404 && channel == "dev") {
+                            "No dev release available yet."
                         } else {
                             "GitHub API returned ${response.code}"
                         }
@@ -91,24 +98,44 @@ class AppUpdateChecker @Inject constructor(
                         ?: return@withContext UpdateCheckResult.Error("Failed to parse release")
 
                     val apkAsset = release.assets.firstOrNull {
-                        it.name.startsWith(APK_PREFIX) && it.name.endsWith(APK_SUFFIX)
+                        it.name.startsWith(APK_PREFIX) && it.name.endsWith(apkSuffix)
                     } ?: return@withContext UpdateCheckResult.Error("No APK found in release")
 
-                    val version = release.tagName.removePrefix("v")
-                    val remoteVersionCode = parseVersionCode(version)
-
-                    if (remoteVersionCode > currentVersionCode) {
-                        UpdateCheckResult.UpdateAvailable(
-                            UpdateInfo(
-                                latestVersion = version,
-                                latestVersionCode = remoteVersionCode,
-                                downloadUrl = apkAsset.browserDownloadUrl,
-                                releaseNotes = release.body,
-                                apkSizeBytes = apkAsset.size,
-                            ),
-                        )
+                    if (channel == "dev") {
+                        val remoteRunNumber = parseDevRunNumber(apkAsset.name)
+                        val localRunNumber = BuildConfig.DEV_BUILD_NUMBER
+                        if (remoteRunNumber > localRunNumber) {
+                            val version = release.tagName.removePrefix("v")
+                                .ifEmpty { "dev" }
+                            UpdateCheckResult.UpdateAvailable(
+                                UpdateInfo(
+                                    latestVersion = version,
+                                    latestVersionCode = remoteRunNumber,
+                                    downloadUrl = apkAsset.browserDownloadUrl,
+                                    releaseNotes = release.body,
+                                    apkSizeBytes = apkAsset.size,
+                                ),
+                            )
+                        } else {
+                            UpdateCheckResult.UpToDate
+                        }
                     } else {
-                        UpdateCheckResult.UpToDate
+                        val version = release.tagName.removePrefix("v")
+                        val remoteVersionCode = parseVersionCode(version)
+
+                        if (remoteVersionCode > currentVersionCode) {
+                            UpdateCheckResult.UpdateAvailable(
+                                UpdateInfo(
+                                    latestVersion = version,
+                                    latestVersionCode = remoteVersionCode,
+                                    downloadUrl = apkAsset.browserDownloadUrl,
+                                    releaseNotes = release.body,
+                                    apkSizeBytes = apkAsset.size,
+                                ),
+                            )
+                        } else {
+                            UpdateCheckResult.UpToDate
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -177,16 +204,19 @@ class AppUpdateChecker @Inject constructor(
     }
 
     companion object {
-        private const val RELEASES_URL =
+        private const val STABLE_RELEASES_URL =
             "https://api.github.com/repos/jlengelbrecht/GlycemicGPT/releases/latest"
+        private const val DEV_RELEASES_URL =
+            "https://api.github.com/repos/jlengelbrecht/GlycemicGPT/releases/tags/dev-latest"
         private const val APK_PREFIX = "GlycemicGPT-"
-        private const val APK_SUFFIX = "-release.apk"
         private const val APK_SUBDIR = "apk_updates"
 
         private val ALLOWED_DOWNLOAD_HOSTS = setOf(
             "github.com",
             "objects.githubusercontent.com",
         )
+
+        private val DEV_RUN_NUMBER_REGEX = Regex("""-dev\.(\d+)-""")
 
         fun isAllowedDownloadHost(url: String): Boolean {
             val host = try {
@@ -211,6 +241,16 @@ class AppUpdateChecker @Inject constructor(
             val minor = parts.getOrElse(1) { "0" }.toIntOrNull() ?: 0
             val patch = parts.getOrElse(2) { "0" }.toIntOrNull() ?: 0
             return major * 1_000_000 + minor * 10_000 + patch
+        }
+
+        /**
+         * Extracts the dev run number from a dev APK filename.
+         * Pattern: GlycemicGPT-{version}-dev.{runNumber}-debug.apk
+         * Returns 0 if the pattern doesn't match.
+         */
+        fun parseDevRunNumber(fileName: String): Int {
+            val match = DEV_RUN_NUMBER_REGEX.find(fileName)
+            return match?.groupValues?.get(1)?.toIntOrNull() ?: 0
         }
     }
 }

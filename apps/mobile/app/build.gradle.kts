@@ -44,6 +44,9 @@ android {
             isDebuggable = true
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            buildConfigField("String", "UPDATE_CHANNEL", "\"dev\"")
+            val devBuildNumber = (project.findProperty("devBuildNumber") as? String)?.toIntOrNull() ?: 0
+            buildConfigField("int", "DEV_BUILD_NUMBER", devBuildNumber.toString())
         }
         release {
             isMinifyEnabled = true
@@ -58,6 +61,7 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
         }
     }
 
