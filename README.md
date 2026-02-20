@@ -13,6 +13,7 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#development">Development</a> •
+  <a href="#contributing">Contributing</a> •
   <a href="#disclaimer">Disclaimer</a>
 </p>
 
@@ -24,24 +25,38 @@
 
 ---
 
-> **🚧 DEVELOPMENT STATUS: NOT FUNCTIONAL**
->
-> This project is currently in **active development** and is **not yet functional**. What you see here is the foundational framework of the application - it does not connect to real CGM/pump data or provide actual AI analysis yet.
->
-> **Do not attempt to deploy this for actual diabetes management.** We are building in public, but the software is not ready for any real-world use. Check back for updates as we progress toward a functional release.
+> **ALPHA SOFTWARE** -- This project is under active development. It is functional and in daily use by the developer, but has not been broadly tested. Use at your own risk and always consult your healthcare provider.
 
 ---
 
 ## Overview
 
-GlycemicGPT bridges the gap between diabetes device data (Dexcom G7 CGM, Tandem t:slim pump) and actionable AI-powered insights.
+GlycemicGPT bridges the gap between diabetes device data and actionable AI-powered insights. It connects to your Dexcom G7 CGM and Tandem t:slim insulin pump via BLE, displays real-time glucose trends, and provides AI-generated analysis of your diabetes data.
+
+**Currently supported devices:**
+
+| Device | Type | Connection |
+|--------|------|------------|
+| Dexcom G7 | CGM | Cloud API |
+| Tandem t:slim X2 | Insulin Pump | BLE (direct) + Cloud API |
+
+> Support for additional pumps and CGMs is planned for future releases. The architecture is designed to be extensible -- see [CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to help add support for your device.
+
+**What it does:**
+
+- Real-time glucose monitoring with trend charts and Time in Range tracking
+- BLE connectivity to Tandem t:slim pumps (basal, bolus, IoB, reservoir, battery)
+- AI-powered daily briefs, meal analysis, and pattern recognition (BYOAI -- bring your own AI key)
+- Configurable alerts with Telegram delivery and caregiver escalation
+- Android phone app + Wear OS companion with watch face complications
+- Self-hosted Docker stack with web dashboard and REST API
 
 **Key Principles:**
 
-- **Suggestions only** - never controls medical devices
-- **BYOAI architecture** - users bring their own AI (Claude/OpenAI)
-- **Self-hosted** - Docker/Kubernetes deployment
-- **Safety-first** - pre-validation layer, emergency escalation
+- **Suggestions only** -- does not control medical devices
+- **BYOAI architecture** -- bring your own AI provider (Claude, OpenAI, Ollama, or any OpenAI-compatible endpoint)
+- **Self-hosted** -- your data stays on your infrastructure (Docker or Kubernetes)
+- **Safety-first** -- pre-validation layer, emergency escalation, medical disclaimers
 
 ## Quick Start
 
@@ -54,7 +69,7 @@ cd GlycemicGPT
 cp .env.example .env
 
 # Start all services
-docker compose up
+docker compose up --build -d
 ```
 
 Services will be available at:
@@ -69,18 +84,34 @@ Services will be available at:
 |-----------|------------|
 | Frontend | Next.js 15, React 19, Tailwind CSS, shadcn/ui |
 | Backend | FastAPI, Python 3.12 |
+| Mobile | Kotlin, Jetpack Compose, BLE |
+| Wear OS | Kotlin, Wear Compose, Watch Face |
+| AI Sidecar | TypeScript, Express, multi-provider proxy |
 | Database | PostgreSQL 16, SQLAlchemy 2.0 |
 | Cache | Redis 7 |
 
 ## Development
 
 ```bash
-# Start development environment
-./scripts/dev.sh
+# Start the full stack
+docker compose up --build -d
 
-# Or with docker compose directly
-docker compose up --build
+# Verify services
+curl localhost:8000/health   # API
+curl localhost:3456/health   # AI sidecar
+# Web UI at http://localhost:3000
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full development setup, branching strategy, and code style guidelines.
+
+## Contributing
+
+We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
+
+- [Bug Reports](https://github.com/jlengelbrecht/GlycemicGPT/issues/new?template=bug_report.yml)
+- [Feature Requests](https://github.com/jlengelbrecht/GlycemicGPT/issues/new?template=feature_request.yml)
+- [Mobile App Issues](https://github.com/jlengelbrecht/GlycemicGPT/issues/new?template=mobile_report.yml)
+- [Discussions](https://github.com/jlengelbrecht/GlycemicGPT/discussions) (questions, ideas, show & tell)
 
 ## License
 

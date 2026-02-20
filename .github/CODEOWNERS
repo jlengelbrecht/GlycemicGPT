@@ -1,0 +1,10 @@
+# GlycemicGPT Code Owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# These owners will be automatically requested for review
+# when a pull request modifies files matching the patterns below.
+#
+# Order matters -- later rules take precedence over earlier ones.
+
+# Default: project maintainer owns everything
+* @jlengelbrecht

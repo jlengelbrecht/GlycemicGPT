@@ -1,66 +1,89 @@
-name: Bug Report
-description: Report a bug or unexpected behavior
+name: "🐛 Bug Report"
+description: Report a bug or unexpected behavior in the web app, API, or backend services
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        ## 🔍 Before Submitting
+
+        - Search [existing issues](https://github.com/jlengelbrecht/GlycemicGPT/issues?q=is%3Aissue) to check if this has already been reported.
+        - For **mobile app** (Android/Wear OS) issues, please use the **📱 Mobile App Issue** template instead.
+
+        Thanks for helping make GlycemicGPT better! 💙
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 🧩 Component
+      description: Which part of the system is affected?
+      options:
+        - Web UI (Frontend)
+        - API (Backend)
+        - AI Sidecar
+        - Database / Migrations
+        - Docker / Infrastructure
+        - CI/CD / Workflows
+        - Other
+    validations:
+      required: true
 
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: A clear and concise description of what the bug is.
-      placeholder: Tell us what you see!
+      label: 📝 Description
+      description: A clear and concise description of the bug.
+      placeholder: What happened? What did you expect to happen?
     validations:
       required: true
 
   - type: textarea
     id: reproduction
     attributes:
-      label: Steps to Reproduce
-      description: Steps to reproduce the behavior.
+      label: 🔄 Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
       placeholder: |
-        1. Go to '...'
-        2. Click on '....'
-        3. Scroll down to '....'
-        4. See error
+        1. Navigate to '...'
+        2. Click on '...'
+        3. Observe error
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: Expected Behavior
-      description: A clear and concise description of what you expected to happen.
+      label: ✅ Expected Behavior
+      description: What should have happened instead?
     validations:
       required: true
 
-  - type: dropdown
-    id: component
+  - type: input
+    id: version
     attributes:
-      label: Component
-      description: Which component is affected?
+      label: 📌 Version
+      description: Which version are you running? (check API /health endpoint or Docker image tag)
+      placeholder: "e.g., 0.1.96"
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 🖥️ Deployment Method
       options:
-        - API (Backend)
-        - Web (Frontend)
-        - Database
-        - Kubernetes/Docker
+        - Docker Compose
+        - Kubernetes
+        - Manual / Development
         - Other
-    validations:
-      required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: Relevant Log Output
-      description: Please copy and paste any relevant log output.
+      label: 📋 Relevant Log Output
+      description: Paste any relevant logs from the browser console, API logs, or Docker logs.
       render: shell
 
   - type: textarea
     id: context
     attributes:
-      label: Additional Context
-      description: Add any other context about the problem here.
+      label: 🖼️ Additional Context
+      description: Screenshots, configuration details, or any other relevant information.
