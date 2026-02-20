@@ -14,6 +14,13 @@
 
 ---
 
+## [0.1.97](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.96...v0.1.97) (2026-02-20)
+
+
+### 📚 Documentation
+
+* add contributing guide, improve issue templates, update README ([#256](https://github.com/jlengelbrecht/GlycemicGPT/issues/256)) ([a33651a](https://github.com/jlengelbrecht/GlycemicGPT/commit/a33651afa5180bd9a778e81522e0d66b15c5abba))
+
 ## [0.1.96](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.95...v0.1.96) (2026-02-20)
 
 
