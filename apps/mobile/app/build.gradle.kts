@@ -62,6 +62,7 @@ android {
                 signingConfigs.getByName("debug")
             }
             buildConfigField("String", "UPDATE_CHANNEL", "\"stable\"")
+            buildConfigField("int", "DEV_BUILD_NUMBER", "0")
         }
     }
 

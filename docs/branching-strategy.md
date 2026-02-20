@@ -51,21 +51,27 @@ After the promotion PR merges:
 - homebot auto-merges the version bump PR
 - A GitHub Release is created with signed APKs and versioned Docker images
 
-### Post-release develop sync
+### Post-merge: restore develop branch
 
-The version bump commit exists on main but not develop. Sync them:
+The repo has "auto-delete head branches" enabled, which is great for cleaning up feature branches but will also delete `develop` after a promotion PR merges (since `develop` is the head branch). Recreate it immediately:
+
+```bash
+# Recreate develop from main via API
+gh api repos/jlengelbrecht/GlycemicGPT/git/refs \
+  -f ref="refs/heads/develop" \
+  -f sha="$(gh api repos/jlengelbrecht/GlycemicGPT/git/ref/heads/main --jq '.object.sha')"
+```
+
+This also handles the post-release sync since `develop` is recreated from `main` (which includes the version bump commit).
+
+If develop was NOT auto-deleted (e.g., the setting changes in the future), manually sync instead:
 
 ```bash
 git fetch origin
 git checkout develop
 git rebase origin/main
-```
-
-To push: temporarily disable the `non_fast_forward` rule on the develop ruleset, then:
-```bash
 git push origin develop --force-with-lease
 ```
-Re-enable the rule immediately after.
 
 ## Release Channels
 
