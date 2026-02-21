@@ -90,7 +90,9 @@ class OnboardingViewModel @Inject constructor(
                     connectionTestSuccess = false,
                 )
             }
-            // Save URL temporarily so BaseUrlInterceptor routes to it for the test
+            // Save URL temporarily so BaseUrlInterceptor routes to it for the test;
+            // preserve the previous URL so we can restore it on failure.
+            val previousUrl = authRepository.getBaseUrl()
             authRepository.saveBaseUrl(url)
             val result = authRepository.testConnection()
             result.onSuccess { message ->
@@ -103,10 +105,14 @@ class OnboardingViewModel @Inject constructor(
                     )
                 }
             }.onFailure { e ->
+                // Restore previous known-good URL on failure
+                if (!previousUrl.isNullOrBlank()) {
+                    authRepository.saveBaseUrl(previousUrl)
+                }
                 _uiState.update {
                     it.copy(
                         isTestingConnection = false,
-                        connectionTestResult = "Connection failed: ${e.message}",
+                        connectionTestResult = "Connection failed: ${e.message ?: "Unknown error"}",
                         connectionTestSuccess = false,
                     )
                 }

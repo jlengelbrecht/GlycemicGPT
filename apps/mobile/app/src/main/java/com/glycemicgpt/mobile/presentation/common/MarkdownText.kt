@@ -23,7 +23,6 @@ fun AppMarkdownText(
     val sanitized = markdown
         .replace(Regex("""!\[[^\]]*]\([^)]*\)"""), "")
         .replace(Regex("""!\[[^\]]*]\[[^\]]*]"""), "")
-        .replace(Regex("""^\s*\[[^\]]*]:\s*\S+.*$""", RegexOption.MULTILINE), "")
         .replace(Regex("""<img[^>]*>""", RegexOption.IGNORE_CASE), "")
 
     MarkdownText(

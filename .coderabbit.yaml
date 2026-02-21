@@ -176,7 +176,7 @@ reviews:
       instructions: |
         Review GitHub Actions workflows for:
         - No hardcoded secrets (use GitHub secrets/vars).
-        - Pinned action versions (use SHA, not floating tags).
+        - Prefer pinned action versions (SHA or explicit version tags like v4).
         - Proper permissions (least privilege).
         - No command injection via untrusted input in run steps.
 
@@ -232,7 +232,7 @@ reviews:
           hostnames. This is a medical/health-tech application -- credential
           leaks are critical severity.
       - name: "Medical Safety Review"
-        mode: "warning"
+        mode: "error"
         instructions: |
           If the PR modifies code that handles glucose values, insulin doses,
           bolus calculations, or pump commands:
@@ -242,7 +242,7 @@ reviews:
           - Verify AI-generated suggestions include safety disclaimers.
           Pass if the PR does not touch medical data handling code.
       - name: "BLE Protocol Safety"
-        mode: "warning"
+        mode: "error"
         instructions: |
           If the PR modifies BLE communication code:
           - Verify GATT operations have timeouts.
