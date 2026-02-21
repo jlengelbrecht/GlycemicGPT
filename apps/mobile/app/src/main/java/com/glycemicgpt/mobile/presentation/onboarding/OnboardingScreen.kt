@@ -58,12 +58,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 
-private const val PAGE_COUNT = 5
-private const val PAGE_WELCOME = 0
-private const val PAGE_FEATURES = 1
-private const val PAGE_DISCLAIMER = 2
-private const val PAGE_SERVER = 3
-private const val PAGE_LOGIN = 4
+private const val PAGE_COUNT = OnboardingPages.COUNT
+private const val PAGE_WELCOME = OnboardingPages.WELCOME
+private const val PAGE_FEATURES = OnboardingPages.FEATURES
+private const val PAGE_DISCLAIMER = OnboardingPages.DISCLAIMER
+private const val PAGE_SERVER = OnboardingPages.SERVER
+private const val PAGE_LOGIN = OnboardingPages.LOGIN
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -92,7 +92,7 @@ fun OnboardingScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
-            userScrollEnabled = pagerState.currentPage < PAGE_SERVER,
+            userScrollEnabled = pagerState.currentPage < PAGE_DISCLAIMER,
         ) { page ->
             when (page) {
                 PAGE_WELCOME -> WelcomePage()
@@ -619,7 +619,7 @@ private fun LoginPage(
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
-                autoCorrect = false,
+                autoCorrectEnabled = false,
             ),
             modifier = Modifier
                 .fillMaxWidth()

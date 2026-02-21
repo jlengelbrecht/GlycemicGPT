@@ -68,19 +68,19 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun `getStartPage returns 0 for fresh install`() {
+    fun `getStartPage returns WELCOME for fresh install`() {
         every { authRepository.getBaseUrl() } returns null
         val vm = createViewModel()
 
-        assertEquals(0, vm.getStartPage())
+        assertEquals(OnboardingPages.WELCOME, vm.getStartPage())
     }
 
     @Test
-    fun `getStartPage returns 3 for returning user`() {
+    fun `getStartPage returns SERVER for returning user`() {
         every { authRepository.getBaseUrl() } returns "https://saved.example.com"
         val vm = createViewModel()
 
-        assertEquals(3, vm.getStartPage())
+        assertEquals(OnboardingPages.SERVER, vm.getStartPage())
     }
 
     @Test
@@ -118,6 +118,7 @@ class OnboardingViewModelTest {
 
         assertFalse(vm.uiState.value.connectionTestSuccess)
         assertTrue(vm.uiState.value.connectionTestResult!!.contains("Connection refused"))
+        assertFalse(vm.uiState.value.isTestingConnection)
     }
 
     @Test

@@ -131,9 +131,9 @@ class OnboardingViewModel @Inject constructor(
         }
     }
 
-    /** Returns the starting page index: 0 for fresh install, 3 for returning after logout. */
+    /** Returns the starting page index for fresh install vs returning after logout. */
     fun getStartPage(): Int {
         val savedUrl = authRepository.getBaseUrl()
-        return if (!savedUrl.isNullOrBlank()) 3 else 0
+        return if (!savedUrl.isNullOrBlank()) OnboardingPages.SERVER else OnboardingPages.WELCOME
     }
 }

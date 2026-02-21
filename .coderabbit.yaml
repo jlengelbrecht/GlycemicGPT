@@ -262,7 +262,7 @@ reviews:
       enabled: true
     biome:
       enabled: false
-    oxlint:
+    oxc:
       enabled: false
     detekt:
       enabled: true
