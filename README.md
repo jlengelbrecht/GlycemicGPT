@@ -9,6 +9,25 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/ci.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=CI&logo=githubactions&logoColor=white" alt="CI"></a>
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/container-build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/container-build.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=Containers&logo=docker&logoColor=white" alt="Container Build"></a>
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/android.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/android.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=Android&logo=android&logoColor=white" alt="Android Build"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/releases/tag/dev-latest"><img src="https://img.shields.io/badge/Dev_Build-latest-f59e0b?style=for-the-badge&labelColor=1e293b&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyMnM4LTQgOC0xMFY1bC04LTMtOCAzdjdjMCA2IDggMTAgOCAxMCIvPjwvc3ZnPg==&logoColor=white" alt="Dev Build"></a>
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/releases/latest"><img src="https://img.shields.io/github/v/release/jlengelbrecht/GlycemicGPT?style=for-the-badge&labelColor=1e293b&label=Stable&color=22c55e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Im0xMiAyLTMuMDQgNi4zNkg3LjUyTDEyIDE0bDQuNDgtNS42NEgxNC4zTDEyIDJ6Ii8+PHBhdGggZD0iTTE1LjUgMTQgMTkgMjBINWw0LTYiLz48L3N2Zz4=&logoColor=white" alt="Stable Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/jlengelbrecht/GlycemicGPT?style=for-the-badge&labelColor=1e293b&color=6366f1" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/issues"><img src="https://img.shields.io/github/issues/jlengelbrecht/GlycemicGPT?style=for-the-badge&labelColor=1e293b&color=64748b&logo=github&logoColor=white" alt="Issues"></a>
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/pulls"><img src="https://img.shields.io/github/issues-pr/jlengelbrecht/GlycemicGPT?style=for-the-badge&labelColor=1e293b&color=64748b&logo=github&logoColor=white&label=PRs" alt="Pull Requests"></a>
+  <a href="https://docs.renovatebot.com" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Renovate-enabled-0ea5e9?style=for-the-badge&labelColor=1e293b&logo=renovate&logoColor=white" alt="Renovate"></a>
+  <a href="https://www.coderabbit.ai" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/CodeRabbit-review-7c3aed?style=for-the-badge&labelColor=1e293b&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PHBhdGggZD0iTTggOWg4TTkgMTVjLjkuNiAxLjkgMSAzIDFzMi4xLS40IDMtMSIvPjxjaXJjbGUgY3g9IjkiIGN5PSIxMiIgcj0iMSIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSIxNSIgY3k9IjEyIiByPSIxIiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==&logoColor=white" alt="CodeRabbit"></a>
+</p>
+
+<p align="center">
   <a href="#overview">Overview</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#architecture">Architecture</a> •

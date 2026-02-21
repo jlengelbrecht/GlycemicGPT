@@ -12,6 +12,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageSquare, Send, AlertTriangle, Settings, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { sendAIChat, getAIProvider } from "@/lib/api";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 
 interface ChatMessage {
   id: string;
@@ -262,9 +263,13 @@ export default function AIChatPage() {
                   : "bg-slate-800 text-slate-200"
               }`}
             >
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                {msg.content}
-              </div>
+              {msg.role === "assistant" ? (
+                <MarkdownContent content={msg.content} />
+              ) : (
+                <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {msg.content}
+                </div>
+              )}
               {msg.disclaimer && (
                 <p className="mt-2 pt-2 border-t border-slate-700 text-xs text-slate-400 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />

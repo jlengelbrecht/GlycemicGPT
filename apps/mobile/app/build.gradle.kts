@@ -134,6 +134,9 @@ dependencies {
     implementation(libs.moshi)
     ksp(libs.moshi.codegen)
 
+    // Markdown rendering
+    implementation(libs.compose.markdown)
+
     // Security
     implementation(libs.security.crypto)
     implementation(libs.bouncycastle)

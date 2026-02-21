@@ -24,8 +24,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,11 +40,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.glycemicgpt.mobile.data.auth.AuthState
+import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.presentation.alerts.AlertsScreen
 import com.glycemicgpt.mobile.presentation.chat.AiChatScreen
 import com.glycemicgpt.mobile.presentation.home.HomeScreen
 import com.glycemicgpt.mobile.BuildConfig
 import com.glycemicgpt.mobile.presentation.debug.BleDebugScreen
+import com.glycemicgpt.mobile.presentation.onboarding.OnboardingScreen
 import com.glycemicgpt.mobile.presentation.pairing.PairingScreen
 import com.glycemicgpt.mobile.presentation.settings.SettingsScreen
 import com.glycemicgpt.mobile.presentation.settings.SettingsViewModel
@@ -54,65 +58,99 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     data object Settings : Screen("settings", "Settings", Icons.Default.Settings)
     data object Pairing : Screen("pairing", "Pairing", Icons.Default.Bluetooth)
     data object BleDebug : Screen("ble_debug", "BLE Debug", Icons.Default.BugReport)
+    data object Onboarding : Screen("onboarding", "Onboarding", Icons.Default.Home)
 }
 
 private val bottomNavItems = listOf(Screen.Home, Screen.AiChat, Screen.Alerts, Screen.Settings)
 
 @Composable
-fun GlycemicGptNavHost() {
+fun GlycemicGptNavHost(appSettingsStore: AppSettingsStore) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val authState by settingsViewModel.authState.collectAsState()
 
+    val startDestination = remember {
+        if (appSettingsStore.onboardingComplete && settingsViewModel.uiState.value.isLoggedIn) {
+            Screen.Home.route
+        } else {
+            Screen.Onboarding.route
+        }
+    }
+
+    val isOnboarding = currentDestination?.route == Screen.Onboarding.route
+
+    // Observe logout -> onboarding navigation event
+    LaunchedEffect(Unit) {
+        settingsViewModel.navigateToOnboarding.collect {
+            navController.navigate(Screen.Onboarding.route) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                bottomNavItems.forEach { screen ->
-                    NavigationBarItem(
-                        icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) },
-                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+            if (!isOnboarding) {
+                NavigationBar {
+                    bottomNavItems.forEach { screen ->
+                        NavigationBarItem(
+                            icon = { Icon(screen.icon, contentDescription = screen.label) },
+                            label = { Text(screen.label) },
+                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                            onClick = {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
             }
         },
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
-            // Session expired banner
-            (authState as? AuthState.Expired)?.let { expired ->
-                SessionExpiredBanner(
-                    message = expired.message,
-                    onClick = {
-                        navController.navigate(Screen.Settings.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
+            // Session expired banner (not shown during onboarding)
+            if (!isOnboarding) {
+                (authState as? AuthState.Expired)?.let { expired ->
+                    SessionExpiredBanner(
+                        message = expired.message,
+                        onClick = {
+                            navController.navigate(Screen.Settings.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
                             }
-                            launchSingleTop = true
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
 
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route,
+                startDestination = startDestination,
             ) {
+                composable(Screen.Onboarding.route) {
+                    OnboardingScreen(
+                        onOnboardingComplete = {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Onboarding.route) { inclusive = true }
+                            }
+                        },
+                    )
+                }
                 composable(Screen.Home.route) { HomeScreen() }
                 composable(Screen.AiChat.route) { AiChatScreen() }
                 composable(Screen.Alerts.route) { AlertsScreen() }
                 composable(Screen.Settings.route) {
                     SettingsScreen(
+                        settingsViewModel = settingsViewModel,
                         onNavigateToPairing = {
                             navController.navigate(Screen.Pairing.route)
                         },

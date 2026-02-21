@@ -19,6 +19,12 @@ class AppSettingsStore @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences("app_settings", Context.MODE_PRIVATE)
 
+    var onboardingComplete: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETE, value).apply()
+        }
+
     var backendSyncEnabled: Boolean
         get() = prefs.getBoolean(KEY_BACKEND_SYNC_ENABLED, true)
         set(value) {
@@ -42,6 +48,7 @@ class AppSettingsStore @Inject constructor(
         }
 
     companion object {
+        private const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
         private const val KEY_BACKEND_SYNC_ENABLED = "backend_sync_enabled"
         private const val KEY_DATA_RETENTION_DAYS = "data_retention_days"
         private const val KEY_DEVICE_TOKEN = "device_token"
