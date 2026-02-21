@@ -37,6 +37,7 @@ import {
   type CaregiverPatientStatus,
   type CaregiverChatResponse,
 } from "@/lib/api";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 import { useUserContext } from "@/providers";
 
 const REFRESH_INTERVAL_MS = 60_000;
@@ -637,9 +638,7 @@ export default function CaregiverDashboardPage() {
                 <div aria-live="polite" aria-atomic="true">
                   {chatResponse && (
                     <div className="bg-slate-800/50 rounded-lg p-4 space-y-3">
-                      <p className="text-sm text-slate-200 whitespace-pre-wrap">
-                        {chatResponse.response}
-                      </p>
+                      <MarkdownContent content={chatResponse.response} className="text-slate-200" />
                       <p className="text-xs text-amber-400/70 italic">
                         {chatResponse.disclaimer}
                       </p>

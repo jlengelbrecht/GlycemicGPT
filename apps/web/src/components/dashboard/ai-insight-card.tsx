@@ -35,6 +35,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { InsightDetail } from "@/lib/api";
+import { MarkdownContent } from "@/components/ui/markdown-content";
 
 // Analysis type configuration
 const ANALYSIS_CONFIG = {
@@ -195,12 +196,23 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
   const config = ANALYSIS_CONFIG[insight.analysis_type];
   const Icon = config.icon;
 
-  // Truncate content for collapsed view
+  // Strip markdown syntax for clean plain-text preview in collapsed view
+  const plainText = insight.content
+    .replace(/#{1,6}\s+/g, "")        // headings
+    .replace(/\*\*(.+?)\*\*/g, "$1")  // bold
+    .replace(/\*(.+?)\*/g, "$1")      // italic
+    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, "")) // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
+    .replace(/^[-*+]\s+/gm, "")       // unordered list markers
+    .replace(/^\d+\.\s+/gm, "")       // ordered list markers
+    .replace(/^>\s+/gm, "")           // blockquotes
+    .replace(/\n{2,}/g, " ")          // collapse multiple newlines
+    .trim();
   const maxPreviewLength = 200;
-  const needsTruncation = insight.content.length > maxPreviewLength;
+  const needsTruncation = plainText.length > maxPreviewLength;
   const previewContent = needsTruncation
-    ? insight.content.slice(0, maxPreviewLength) + "..."
-    : insight.content;
+    ? plainText.slice(0, maxPreviewLength) + "..."
+    : plainText;
 
   const handleRespond = async (response: "acknowledged" | "dismissed") => {
     if (!onRespond || isResponding) return;
@@ -318,9 +330,13 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
       </div>
 
       {/* Content */}
-      <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-        {isExpanded ? insight.content : previewContent}
-      </div>
+      {isExpanded ? (
+        <MarkdownContent content={insight.content} className="text-slate-300" />
+      ) : (
+        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+          {previewContent}
+        </div>
+      )}
 
       {/* Expand/collapse toggle */}
       {needsTruncation && (

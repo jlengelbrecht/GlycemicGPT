@@ -1,0 +1,109 @@
+"use client";
+
+import { memo } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import clsx from "clsx";
+import type { Components, ExtraProps } from "react-markdown";
+
+const components: Components = {
+  strong: ({ children }) => (
+    <strong className="font-semibold text-white">{children}</strong>
+  ),
+  ul: ({ children }) => (
+    <ul className="pl-4 mb-2 space-y-1 list-disc">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="pl-4 mb-2 space-y-1 list-decimal">{children}</ol>
+  ),
+  li: ({ children }) => <li className="text-slate-200">{children}</li>,
+  code: ({ className, children, node }: React.ComponentPropsWithoutRef<"code"> & ExtraProps) => {
+    // Block code: wrapped in <pre> by react-markdown, or has a language class
+    const isBlock =
+      (node?.position && node.position.start.line !== node.position.end.line) ||
+      className?.includes("language-");
+    if (isBlock) {
+      return (
+        <code className="block bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2">
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className="bg-slate-700 text-emerald-300 px-1.5 py-0.5 rounded text-xs font-mono">
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }) => <pre className="my-2">{children}</pre>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400">
+      {children}
+    </blockquote>
+  ),
+  a: ({ href, children }) => {
+    const safeHref =
+      href && (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
+        ? href
+        : undefined;
+    return (
+      <a
+        href={safeHref}
+        className="text-blue-400 hover:text-blue-300 underline"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    );
+  },
+  // Suppress images to prevent tracking pixel / IP exfiltration from AI responses
+  img: () => null,
+  h1: ({ children }) => (
+    <h1 className="text-lg font-bold text-white mt-3 mb-1">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-base font-bold text-white mt-3 mb-1">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-sm font-bold text-white mt-2 mb-1">{children}</h3>
+  ),
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  hr: () => <hr className="border-slate-700 my-3" />,
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full text-xs border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-slate-700 px-2 py-1 text-left font-semibold text-slate-200 bg-slate-800">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-slate-700 px-2 py-1 text-slate-300">
+      {children}
+    </td>
+  ),
+};
+
+interface MarkdownContentProps {
+  content: string;
+  className?: string;
+}
+
+export const MarkdownContent = memo(function MarkdownContent({
+  content,
+  className,
+}: MarkdownContentProps) {
+  if (!content) {
+    return null;
+  }
+  return (
+    <div className={clsx("text-sm leading-relaxed", className)}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
