@@ -4,12 +4,13 @@
     "config:recommended",
     "docker:enableMajor",
     ":dependencyDashboard",
-    ":semanticCommits",
-    ":automergeDigest"
+    ":semanticCommits"
   ],
   // Target develop as the integration branch -- all dependency
   // updates land here first so we can test before promoting to main.
   "baseBranches": ["develop"],
+  // Squash-merge auto-merged PRs for clean commit history on develop
+  "automergeStrategy": "squash",
   // Branch naming
   "branchPrefix": "renovate/",
   // Commit message format (semantic commits)
