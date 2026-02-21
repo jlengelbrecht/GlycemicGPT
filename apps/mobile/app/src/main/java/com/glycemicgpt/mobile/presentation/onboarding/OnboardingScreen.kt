@@ -50,6 +50,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,17 +161,22 @@ private fun OnboardingControls(
             modifier = Modifier.padding(bottom = 16.dp),
         ) {
             repeat(pageCount) { index ->
+                val selected = index == currentPage
                 Box(
                     modifier = Modifier
-                        .size(if (index == currentPage) 10.dp else 8.dp)
+                        .size(if (selected) 10.dp else 8.dp)
                         .clip(CircleShape)
                         .background(
-                            if (index == currentPage) {
+                            if (selected) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.outlineVariant
                             },
                         )
+                        .semantics {
+                            contentDescription = "Page ${index + 1} of $pageCount" +
+                                if (selected) ", current" else ""
+                        }
                         .testTag("page_indicator_$index"),
                 )
             }

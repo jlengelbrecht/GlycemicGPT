@@ -44,9 +44,9 @@ const components: Components = {
     </blockquote>
   ),
   a: ({ href, children }) => {
+    const lower = href?.toLowerCase() ?? "";
     if (
-      href &&
-      (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
+      lower.startsWith("https://") || lower.startsWith("http://") || lower.startsWith("mailto:")
     ) {
       return (
         <a

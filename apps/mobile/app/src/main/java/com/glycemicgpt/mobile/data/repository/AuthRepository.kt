@@ -64,6 +64,9 @@ class AuthRepository @Inject constructor(
         if (baseUrl.isBlank()) {
             return LoginResult(success = false, error = "Configure server URL first")
         }
+        if (!isValidUrl(baseUrl)) {
+            return LoginResult(success = false, error = "Invalid server URL. HTTPS required.")
+        }
         if (email.isBlank() || password.isBlank()) {
             return LoginResult(success = false, error = "Email and password are required")
         }
@@ -150,6 +153,11 @@ class AuthRepository @Inject constructor(
                     val lo = range.lowTarget.roundToInt()
                     val hi = range.highTarget.roundToInt()
                     val uh = range.urgentHigh.roundToInt()
+                    val allInRange = listOf(ul, lo, hi, uh).all { it in 20..500 }
+                    if (!allInRange) {
+                        Timber.w("Glucose range out of bounds: %d/%d/%d/%d -- ignoring", ul, lo, hi, uh)
+                        return
+                    }
                     glucoseRangeStore.updateAll(ul, lo, hi, uh)
                     Timber.d("Glucose range fetched: %d/%d/%d/%d", ul, lo, hi, uh)
                 }
