@@ -278,7 +278,7 @@ reviews:
       enabled: true
     semgrep:
       enabled: true
-    osv-scanner:
+    osvScanner:
       enabled: true
     checkov:
       enabled: true

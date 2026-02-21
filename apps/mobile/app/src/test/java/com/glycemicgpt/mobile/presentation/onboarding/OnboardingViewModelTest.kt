@@ -157,6 +157,7 @@ class OnboardingViewModelTest {
         assertTrue(vm.uiState.value.onboardingComplete)
         assertFalse(vm.uiState.value.isLoggingIn)
         assertNull(vm.uiState.value.loginError)
+        assertEquals("", vm.uiState.value.password)
         verify { appSettingsStore.onboardingComplete = true }
     }
 
@@ -174,6 +175,7 @@ class OnboardingViewModelTest {
 
         assertFalse(vm.uiState.value.onboardingComplete)
         assertEquals("Invalid email or password", vm.uiState.value.loginError)
+        assertEquals("", vm.uiState.value.password)
     }
 
     @Test

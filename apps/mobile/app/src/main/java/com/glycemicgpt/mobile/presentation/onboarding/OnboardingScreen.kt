@@ -124,7 +124,7 @@ fun OnboardingScreen(
             pageCount = PAGE_COUNT,
             connectionTestSuccess = state.connectionTestSuccess,
             onSkip = {
-                coroutineScope.launch { pagerState.animateScrollToPage(PAGE_SERVER) }
+                coroutineScope.launch { pagerState.animateScrollToPage(PAGE_DISCLAIMER) }
             },
             onBack = {
                 coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }

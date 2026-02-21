@@ -9,6 +9,8 @@ import com.glycemicgpt.mobile.data.remote.GlycemicGptApi
 import com.glycemicgpt.mobile.data.remote.dto.LoginRequest
 import com.glycemicgpt.mobile.service.AlertStreamService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -40,6 +42,8 @@ class AuthRepository @Inject constructor(
             } else {
                 Result.failure(Exception("Server responded with HTTP ${response.code()}"))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.w(e, "Connection test failed")
             Result.failure(e)
@@ -92,6 +96,8 @@ class AuthRepository @Inject constructor(
                     },
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.w(e, "Login failed")
             LoginResult(success = false, error = "Network error: ${e.message}")
@@ -100,12 +106,14 @@ class AuthRepository @Inject constructor(
 
     fun logout(scope: CoroutineScope) {
         AlertStreamService.stop(appContext)
+        // Clear token before async unregisterDevice -- unregistration is best-effort.
+        // Server-side cleanup handles orphaned device registrations.
+        authTokenStore.clearToken()
+        authManager.onLogout()
         scope.launch {
             deviceRepository.unregisterDevice()
                 .onFailure { e -> Timber.w(e, "Device unregistration failed") }
         }
-        authTokenStore.clearToken()
-        authManager.onLogout()
     }
 
     fun isValidUrl(url: String): Boolean {
@@ -138,14 +146,16 @@ class AuthRepository @Inject constructor(
             val response = api.getGlucoseRange()
             if (response.isSuccessful) {
                 response.body()?.let { range ->
-                    val ul = range.urgentLow.toInt()
-                    val lo = range.lowTarget.toInt()
-                    val hi = range.highTarget.toInt()
-                    val uh = range.urgentHigh.toInt()
+                    val ul = range.urgentLow.roundToInt()
+                    val lo = range.lowTarget.roundToInt()
+                    val hi = range.highTarget.roundToInt()
+                    val uh = range.urgentHigh.roundToInt()
                     glucoseRangeStore.updateAll(ul, lo, hi, uh)
                     Timber.d("Glucose range fetched: %d/%d/%d/%d", ul, lo, hi, uh)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.w(e, "Failed to fetch glucose range settings")
         }
