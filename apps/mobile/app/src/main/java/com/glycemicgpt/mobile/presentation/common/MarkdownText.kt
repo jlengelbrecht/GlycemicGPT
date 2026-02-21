@@ -22,6 +22,8 @@ fun AppMarkdownText(
     // from AI-generated content (mirrors web MarkdownContent image suppression)
     val sanitized = markdown
         .replace(Regex("""!\[[^\]]*]\([^)]*\)"""), "")
+        .replace(Regex("""!\[[^\]]*]\[[^\]]*]"""), "")
+        .replace(Regex("""^\s*\[[^\]]*]:\s*\S+.*$""", RegexOption.MULTILINE), "")
         .replace(Regex("""<img[^>]*>""", RegexOption.IGNORE_CASE), "")
 
     MarkdownText(
@@ -35,6 +37,8 @@ fun AppMarkdownText(
                     uriHandler.openUri(url)
                 } catch (e: ActivityNotFoundException) {
                     Timber.w(e, "No activity found to handle URL")
+                } catch (e: SecurityException) {
+                    Timber.w(e, "Security exception opening URL")
                 }
             }
         },

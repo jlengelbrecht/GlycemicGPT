@@ -57,11 +57,6 @@ class OnboardingViewModel @Inject constructor(
     fun testConnection() {
         if (_uiState.value.isTestingConnection) return
 
-        // Debounce: minimum 1 second between connection tests
-        val now = System.currentTimeMillis()
-        if (now - lastConnectionTestMs < 1_000L) return
-        lastConnectionTestMs = now
-
         val url = _uiState.value.baseUrl.trim()
         if (url.isBlank()) {
             _uiState.update {
@@ -81,6 +76,11 @@ class OnboardingViewModel @Inject constructor(
             }
             return
         }
+
+        // Debounce: minimum 1 second between connection tests (after validation)
+        val now = System.currentTimeMillis()
+        if (now - lastConnectionTestMs < 1_000L) return
+        lastConnectionTestMs = now
 
         viewModelScope.launch {
             _uiState.update {
