@@ -92,6 +92,8 @@ fun OnboardingScreen(
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
+            // Swiping is disabled once the user reaches the disclaimer page to
+            // enforce the safety acknowledgement gate ("I Understand" button).
             userScrollEnabled = pagerState.currentPage < PAGE_DISCLAIMER,
         ) { page ->
             when (page) {
@@ -348,7 +350,7 @@ private fun FeatureCard(icon: ImageVector, title: String, description: String) {
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = title,
                 modifier = Modifier.size(32.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -447,7 +449,7 @@ private fun DisclaimerCard(icon: ImageVector, title: String, description: String
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = title,
                 modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.error,
             )

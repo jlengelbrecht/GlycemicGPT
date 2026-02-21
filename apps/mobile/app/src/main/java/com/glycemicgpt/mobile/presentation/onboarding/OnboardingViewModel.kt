@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -32,83 +33,105 @@ class OnboardingViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(OnboardingUiState())
     val uiState: StateFlow<OnboardingUiState> = _uiState.asStateFlow()
 
+    /** Minimum interval between connection tests to prevent server hammering. */
+    private var lastConnectionTestMs = 0L
+
     init {
         // Pre-fill server URL if returning after logout
         val savedUrl = authRepository.getBaseUrl()
         if (!savedUrl.isNullOrBlank()) {
-            _uiState.value = _uiState.value.copy(baseUrl = savedUrl)
+            _uiState.update { it.copy(baseUrl = savedUrl) }
         }
     }
 
     fun updateBaseUrl(url: String) {
-        _uiState.value = _uiState.value.copy(
-            baseUrl = url,
-            connectionTestResult = null,
-            connectionTestSuccess = false,
-        )
+        _uiState.update {
+            it.copy(
+                baseUrl = url,
+                connectionTestResult = null,
+                connectionTestSuccess = false,
+            )
+        }
     }
 
     fun testConnection() {
         if (_uiState.value.isTestingConnection) return
+
+        // Debounce: minimum 1 second between connection tests
+        val now = System.currentTimeMillis()
+        if (now - lastConnectionTestMs < 1_000L) return
+        lastConnectionTestMs = now
+
         val url = _uiState.value.baseUrl.trim()
         if (url.isBlank()) {
-            _uiState.value = _uiState.value.copy(
-                connectionTestResult = "Enter a server URL first",
-                connectionTestSuccess = false,
-            )
+            _uiState.update {
+                it.copy(
+                    connectionTestResult = "Enter a server URL first",
+                    connectionTestSuccess = false,
+                )
+            }
             return
         }
         if (!authRepository.isValidUrl(url)) {
-            _uiState.value = _uiState.value.copy(
-                connectionTestResult = "Invalid URL. HTTPS required.",
-                connectionTestSuccess = false,
-            )
+            _uiState.update {
+                it.copy(
+                    connectionTestResult = "Invalid URL. HTTPS required.",
+                    connectionTestSuccess = false,
+                )
+            }
             return
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isTestingConnection = true,
-                connectionTestResult = null,
-                connectionTestSuccess = false,
-            )
+            _uiState.update {
+                it.copy(
+                    isTestingConnection = true,
+                    connectionTestResult = null,
+                    connectionTestSuccess = false,
+                )
+            }
+            // Save URL temporarily so BaseUrlInterceptor routes to it for the test
             authRepository.saveBaseUrl(url)
             val result = authRepository.testConnection()
             result.onSuccess { message ->
-                _uiState.value = _uiState.value.copy(
-                    isTestingConnection = false,
-                    connectionTestResult = message,
-                    connectionTestSuccess = true,
-                )
+                // URL already saved above; connection confirmed
+                _uiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        connectionTestResult = message,
+                        connectionTestSuccess = true,
+                    )
+                }
             }.onFailure { e ->
-                _uiState.value = _uiState.value.copy(
-                    isTestingConnection = false,
-                    connectionTestResult = "Connection failed: ${e.message}",
-                    connectionTestSuccess = false,
-                )
+                _uiState.update {
+                    it.copy(
+                        isTestingConnection = false,
+                        connectionTestResult = "Connection failed: ${e.message}",
+                        connectionTestSuccess = false,
+                    )
+                }
             }
         }
     }
 
     fun updateEmail(email: String) {
-        _uiState.value = _uiState.value.copy(email = email, loginError = null)
+        _uiState.update { it.copy(email = email, loginError = null) }
     }
 
     fun updatePassword(password: String) {
-        _uiState.value = _uiState.value.copy(password = password, loginError = null)
+        _uiState.update { it.copy(password = password, loginError = null) }
     }
 
     fun login() {
         val snapshot = _uiState.value
         if (snapshot.isLoggingIn) return
         if (snapshot.email.isBlank() || snapshot.password.isBlank()) {
-            _uiState.value = snapshot.copy(loginError = "Email and password are required")
+            _uiState.update { it.copy(loginError = "Email and password are required") }
             return
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoggingIn = true, loginError = null)
-            // Read latest state inside coroutine to avoid stale captures
+            _uiState.update { it.copy(isLoggingIn = true, loginError = null) }
             val current = _uiState.value
             val result = authRepository.login(
                 current.baseUrl.trim(),
@@ -118,24 +141,37 @@ class OnboardingViewModel @Inject constructor(
             )
             if (result.success) {
                 appSettingsStore.onboardingComplete = true
-                _uiState.value = _uiState.value.copy(
-                    isLoggingIn = false,
-                    onboardingComplete = true,
-                    password = "",
-                )
+                _uiState.update {
+                    it.copy(
+                        isLoggingIn = false,
+                        onboardingComplete = true,
+                        password = "",
+                    )
+                }
             } else {
-                _uiState.value = _uiState.value.copy(
-                    isLoggingIn = false,
-                    loginError = result.error,
-                    password = "",
-                )
+                _uiState.update {
+                    it.copy(
+                        isLoggingIn = false,
+                        loginError = result.error,
+                        password = "",
+                    )
+                }
             }
         }
     }
 
-    /** Returns the starting page index for fresh install vs returning after logout. */
+    /**
+     * Returns the starting page index for fresh install vs returning after logout.
+     * Returning users (have a saved URL) skip to the server page, but only if they
+     * previously completed onboarding (ensuring they saw the safety disclaimer).
+     */
     fun getStartPage(): Int {
         val savedUrl = authRepository.getBaseUrl()
-        return if (!savedUrl.isNullOrBlank()) OnboardingPages.SERVER else OnboardingPages.WELCOME
+        val completedBefore = appSettingsStore.onboardingComplete
+        return if (!savedUrl.isNullOrBlank() && completedBefore) {
+            OnboardingPages.SERVER
+        } else {
+            OnboardingPages.WELCOME
+        }
     }
 }
