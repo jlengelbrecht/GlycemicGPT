@@ -20,10 +20,11 @@ const components: Components = {
   ),
   li: ({ children }) => <li className="text-slate-200">{children}</li>,
   code: ({ className, children, node }: React.ComponentPropsWithoutRef<"code"> & ExtraProps) => {
-    // Block code: wrapped in <pre> by react-markdown, or has a language class
+    // Block code: has a language class, spans multiple lines, or is a child of <pre>
     const isBlock =
+      className?.includes("language-") ||
       (node?.position && node.position.start.line !== node.position.end.line) ||
-      className?.includes("language-");
+      node?.properties?.className;
     if (isBlock) {
       return (
         <code className="block bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs font-mono overflow-x-auto my-2">
