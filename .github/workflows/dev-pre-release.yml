@@ -80,7 +80,7 @@ jobs:
           # Delete existing release+tag, then immediately recreate (single step to reduce window)
           gh release delete dev-latest --yes --cleanup-tag 2>/dev/null || true
           gh release create dev-latest \
-            --title "Dev Build ${VERSION}-dev.${RUN}" \
+            --title "${VERSION}-dev.${RUN}" \
             --notes "Development build from \`develop\` branch.
 
           **Version:** ${VERSION}-dev.${RUN}
