@@ -76,11 +76,21 @@ class OnboardingViewModelTest {
     }
 
     @Test
-    fun `getStartPage returns SERVER for returning user`() {
+    fun `getStartPage returns SERVER for returning user who completed onboarding`() {
         every { authRepository.getBaseUrl() } returns "https://saved.example.com"
+        every { appSettingsStore.onboardingComplete } returns true
         val vm = createViewModel()
 
         assertEquals(OnboardingPages.SERVER, vm.getStartPage())
+    }
+
+    @Test
+    fun `getStartPage returns WELCOME when saved URL exists but onboarding not completed`() {
+        every { authRepository.getBaseUrl() } returns "https://saved.example.com"
+        every { appSettingsStore.onboardingComplete } returns false
+        val vm = createViewModel()
+
+        assertEquals(OnboardingPages.WELCOME, vm.getStartPage())
     }
 
     @Test

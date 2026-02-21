@@ -33,6 +33,9 @@
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
 
+# Compose Markdown (JitPack library uses reflection for text span handling)
+-keep class dev.jeziellago.compose.markdowntext.** { *; }
+
 # Strip debug logs in release builds
 -assumenosideeffects class timber.log.Timber {
     public static void d(...);

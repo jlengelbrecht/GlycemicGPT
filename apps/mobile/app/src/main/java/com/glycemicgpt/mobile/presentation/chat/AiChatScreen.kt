@@ -49,6 +49,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.glycemicgpt.mobile.presentation.common.AppMarkdownText
 
 @Composable
 fun AiChatScreen(
@@ -333,16 +334,19 @@ private fun MessageBubble(message: ChatMessage) {
                 },
             ),
         ) {
-            Text(
-                text = message.content,
-                modifier = Modifier.padding(12.dp),
-                color = if (isUser) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            if (isUser) {
+                Text(
+                    text = message.content,
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                AppMarkdownText(
+                    markdown = message.content,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
         }
 
         if (!isUser && message.disclaimer != null) {
