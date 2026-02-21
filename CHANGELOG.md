@@ -14,6 +14,28 @@
 
 ---
 
+## [0.1.99](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.98...v0.1.99) (2026-02-21)
+
+
+### ✨ Features
+
+* add guided onboarding flow and CodeRabbit configuration ([#268](https://github.com/jlengelbrecht/GlycemicGPT/issues/268)) ([f7eed66](https://github.com/jlengelbrecht/GlycemicGPT/commit/f7eed66e506dba2c5cdac334c7a2cabb73d72a6b))
+
+
+### 🐛 Bug Fixes
+
+* address second-pass CodeRabbit review findings ([cfbcfbc](https://github.com/jlengelbrecht/GlycemicGPT/commit/cfbcfbc7d6b9c35bb8c2ffd5a7be7034d7d77bb3))
+* address third-pass CodeRabbit review findings ([43bf4dc](https://github.com/jlengelbrecht/GlycemicGPT/commit/43bf4dc032d3ae2258dda8cf4435ddc388dc0b15))
+* apply CodeRabbit review hardening fixes ([346d863](https://github.com/jlengelbrecht/GlycemicGPT/commit/346d863c4b4325ce826d50b5281615a2d18d9978))
+* bypass broken paths-filter for develop branch container builds ([#269](https://github.com/jlengelbrecht/GlycemicGPT/issues/269)) ([a163a34](https://github.com/jlengelbrecht/GlycemicGPT/commit/a163a348f37fcb06324b1b5a683fa368035b3aed))
+* harden onboarding flow and add markdown rendering for AI responses ([#270](https://github.com/jlengelbrecht/GlycemicGPT/issues/270)) ([19c29a3](https://github.com/jlengelbrecht/GlycemicGPT/commit/19c29a36ec62a5db74b8a528667ce788da9864db))
+* make Dev Build badge dynamic and show CodeRabbit review count ([34af278](https://github.com/jlengelbrecht/GlycemicGPT/commit/34af278dff19e6333fac0cd18e3521d0f736dd9f))
+
+
+### 📚 Documentation
+
+* add shields.io status badges to README ([b4acfb2](https://github.com/jlengelbrecht/GlycemicGPT/commit/b4acfb2fa4830eb8050c1057f99cad6a13016d88))
+
 ## [0.1.98](https://github.com/jlengelbrecht/GlycemicGPT/compare/v0.1.97...v0.1.98) (2026-02-20)
 
 
