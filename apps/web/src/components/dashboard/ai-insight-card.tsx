@@ -16,7 +16,7 @@
  * - Respects reduced motion preferences
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import clsx from "clsx";
 import {
@@ -197,17 +197,21 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
   const Icon = config.icon;
 
   // Strip markdown syntax for clean plain-text preview in collapsed view
-  const plainText = insight.content
-    .replace(/#{1,6}\s+/g, "")        // headings
-    .replace(/\*\*(.+?)\*\*/g, "$1")  // bold
-    .replace(/\*(.+?)\*/g, "$1")      // italic
-    .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, "")) // code
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
-    .replace(/^[-*+]\s+/gm, "")       // unordered list markers
-    .replace(/^\d+\.\s+/gm, "")       // ordered list markers
-    .replace(/^>\s+/gm, "")           // blockquotes
-    .replace(/\n{2,}/g, " ")          // collapse multiple newlines
-    .trim();
+  const plainText = useMemo(
+    () =>
+      insight.content
+        .replace(/#{1,6}\s+/g, "")        // headings
+        .replace(/\*\*(.+?)\*\*/g, "$1")  // bold
+        .replace(/\*(.+?)\*/g, "$1")      // italic
+        .replace(/`{1,3}[^`]*`{1,3}/g, (m) => m.replace(/`/g, "")) // code
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
+        .replace(/^[-*+]\s+/gm, "")       // unordered list markers
+        .replace(/^\d+\.\s+/gm, "")       // ordered list markers
+        .replace(/^>\s+/gm, "")           // blockquotes
+        .replace(/\n{2,}/g, " ")          // collapse multiple newlines
+        .trim(),
+    [insight.content],
+  );
   const maxPreviewLength = 200;
   const needsTruncation = plainText.length > maxPreviewLength;
   const previewContent = needsTruncation
@@ -330,7 +334,7 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
       </div>
 
       {/* Content */}
-      {isExpanded ? (
+      {isExpanded || !needsTruncation ? (
         <MarkdownContent content={insight.content} className="text-slate-300" />
       ) : (
         <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">

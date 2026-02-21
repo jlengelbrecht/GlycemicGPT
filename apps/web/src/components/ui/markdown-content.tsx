@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm";
 import clsx from "clsx";
 import type { Components, ExtraProps } from "react-markdown";
 
+const REMARK_PLUGINS = [remarkGfm];
+
 const components: Components = {
   strong: ({ children }) => (
     <strong className="font-semibold text-white">{children}</strong>
@@ -42,20 +44,23 @@ const components: Components = {
     </blockquote>
   ),
   a: ({ href, children }) => {
-    const safeHref =
-      href && (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
-        ? href
-        : undefined;
-    return (
-      <a
-        href={safeHref}
-        className="text-blue-400 hover:text-blue-300 underline"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        {children}
-      </a>
-    );
+    if (
+      href &&
+      (href.startsWith("https://") || href.startsWith("http://") || href.startsWith("mailto:"))
+    ) {
+      return (
+        <a
+          href={href}
+          className="text-blue-400 hover:text-blue-300 underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {children}
+        </a>
+      );
+    }
+    // Blocked scheme (javascript:, data:, etc.) -- render as plain text
+    return <span>{children}</span>;
   },
   // Suppress images to prevent tracking pixel / IP exfiltration from AI responses
   img: () => null,
@@ -101,7 +106,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   }
   return (
     <div className={clsx("text-sm leading-relaxed", className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={components}>
         {content}
       </ReactMarkdown>
     </div>
