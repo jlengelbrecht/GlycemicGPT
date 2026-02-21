@@ -132,11 +132,10 @@ class OnboardingViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoggingIn = true, loginError = null) }
-            val current = _uiState.value
             val result = authRepository.login(
-                current.baseUrl.trim(),
-                current.email.trim(),
-                current.password,
+                snapshot.baseUrl.trim(),
+                snapshot.email.trim(),
+                snapshot.password,
                 viewModelScope,
             )
             if (result.success) {

@@ -18,8 +18,14 @@ fun AppMarkdownText(
     val uriHandler = LocalUriHandler.current
     val textColor = MaterialTheme.colorScheme.onSurface
 
+    // Strip image markdown and HTML img tags to prevent outbound image fetches
+    // from AI-generated content (mirrors web MarkdownContent image suppression)
+    val sanitized = markdown
+        .replace(Regex("""!\[[^\]]*]\([^)]*\)"""), "")
+        .replace(Regex("""<img[^>]*>""", RegexOption.IGNORE_CASE), "")
+
     MarkdownText(
-        markdown = markdown,
+        markdown = sanitized,
         modifier = modifier,
         style = MaterialTheme.typography.bodyMedium.copy(color = textColor),
         onLinkClicked = { url ->
