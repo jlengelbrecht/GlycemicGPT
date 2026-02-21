@@ -49,6 +49,7 @@ class OnboardingViewModel @Inject constructor(
     }
 
     fun testConnection() {
+        if (_uiState.value.isTestingConnection) return
         val url = _uiState.value.baseUrl.trim()
         if (url.isBlank()) {
             _uiState.value = _uiState.value.copy(
@@ -99,6 +100,7 @@ class OnboardingViewModel @Inject constructor(
 
     fun login() {
         val snapshot = _uiState.value
+        if (snapshot.isLoggingIn) return
         if (snapshot.email.isBlank() || snapshot.password.isBlank()) {
             _uiState.value = snapshot.copy(loginError = "Email and password are required")
             return

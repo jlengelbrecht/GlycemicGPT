@@ -160,7 +160,7 @@ reviews:
     - path: "apps/mobile/**/test*/**"
       instructions: |
         Review test files for:
-        - JUnit 5 + MockK best practices.
+        - JUnit 4 + MockK best practices.
         - Coroutine test dispatchers for async code.
         - BLE mock setup for connection state testing.
 
@@ -350,4 +350,4 @@ code_generation:
       - path: "apps/web/**/*.tsx"
         instructions: "Generate Jest + React Testing Library tests. Test user interactions."
       - path: "apps/mobile/**/*.kt"
-        instructions: "Generate JUnit 5 + MockK tests. Use coroutine test dispatchers for async code."
+        instructions: "Generate JUnit 4 + MockK tests. Use coroutine test dispatchers for async code."
