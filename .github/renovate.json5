@@ -5,10 +5,10 @@
     "docker:enableMajor",
     ":dependencyDashboard",
     ":semanticCommits",
-    ":automergeDigest",
-    ":automergeBranch"
+    ":automergeDigest"
   ],
-  // Target develop as the integration branch
+  // Target develop as the integration branch -- all dependency
+  // updates land here first so we can test before promoting to main.
   "baseBranches": ["develop"],
   // Branch naming
   "branchPrefix": "renovate/",
@@ -43,64 +43,36 @@
   },
   // Package rules
   "packageRules": [
-    // Auto-merge patch updates for production dependencies
+    // Auto-merge patch and minor updates into develop via PR.
+    // Branch protection requires PRs, so automergeType must be "pr".
+    // develop is the testing ground -- we verify before promoting to main.
     {
-      "description": "Auto-merge patch updates",
-      "matchUpdateTypes": ["patch"],
+      "description": "Auto-merge patch and minor updates",
+      "matchUpdateTypes": ["patch", "minor"],
       "automerge": true,
-      "automergeType": "branch",
+      "automergeType": "pr",
       "matchPackagePatterns": ["*"]
-    },
-    // Auto-merge minor updates for dev dependencies
-    {
-      "description": "Auto-merge minor dev dependency updates",
-      "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["devDependencies"],
-      "automerge": true,
-      "automergeType": "branch"
     },
     // Auto-merge digest updates (container images)
     {
       "description": "Auto-merge digest updates",
       "matchUpdateTypes": ["digest"],
       "automerge": true,
-      "automergeType": "branch"
+      "automergeType": "pr"
     },
     // Auto-merge lockfile maintenance
     {
       "description": "Auto-merge lockfile maintenance",
       "matchUpdateTypes": ["lockFileMaintenance"],
       "automerge": true,
-      "automergeType": "branch"
+      "automergeType": "pr"
     },
-    // Require PR approval for major updates
+    // Require manual review for major updates (can be breaking)
     {
-      "description": "Require PR for major updates",
+      "description": "Require manual review for major updates",
       "matchUpdateTypes": ["major"],
       "automerge": false,
       "labels": ["dependencies", "major"]
-    },
-    // Trusted packages can auto-merge minors
-    {
-      "description": "Auto-merge trusted packages (minor)",
-      "matchPackageNames": [
-        "fastapi",
-        "pydantic",
-        "httpx",
-        "pytest",
-        "ruff",
-        "mypy",
-        "react",
-        "next",
-        "typescript",
-        "eslint",
-        "prettier",
-        "tailwindcss"
-      ],
-      "matchPackagePatterns": ["@types/*"],
-      "matchUpdateTypes": ["minor"],
-      "automerge": true,
-      "automergeType": "branch"
     },
     // Group Python dependencies
     {
