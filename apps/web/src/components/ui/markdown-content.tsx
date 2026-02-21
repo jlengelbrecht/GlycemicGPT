@@ -73,6 +73,15 @@ const components: Components = {
   h3: ({ children }) => (
     <h3 className="text-sm font-bold text-white mt-2 mb-1">{children}</h3>
   ),
+  h4: ({ children }) => (
+    <h4 className="text-sm font-semibold text-white mt-2 mb-1">{children}</h4>
+  ),
+  h5: ({ children }) => (
+    <h5 className="text-xs font-semibold text-white mt-2 mb-1">{children}</h5>
+  ),
+  h6: ({ children }) => (
+    <h6 className="text-xs font-medium text-slate-200 mt-2 mb-1">{children}</h6>
+  ),
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
   hr: () => <hr className="border-slate-700 my-3" />,
   table: ({ children }) => (

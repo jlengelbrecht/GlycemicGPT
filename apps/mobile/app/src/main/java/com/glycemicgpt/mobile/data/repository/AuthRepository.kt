@@ -103,7 +103,7 @@ class AuthRepository @Inject constructor(
             throw e
         } catch (e: Exception) {
             Timber.w(e, "Login failed")
-            LoginResult(success = false, error = "Network error: ${e.message}")
+            LoginResult(success = false, error = "Network error: ${e.message ?: "Unknown error"}")
         }
     }
 
@@ -154,8 +154,8 @@ class AuthRepository @Inject constructor(
                     val hi = range.highTarget.roundToInt()
                     val uh = range.urgentHigh.roundToInt()
                     val allInRange = listOf(ul, lo, hi, uh).all { it in 20..500 }
-                    if (!allInRange) {
-                        Timber.w("Glucose range out of bounds: %d/%d/%d/%d -- ignoring", ul, lo, hi, uh)
+                    if (!allInRange || !(ul < lo && lo < hi && hi < uh)) {
+                        Timber.w("Glucose range invalid: %d/%d/%d/%d -- ignoring", ul, lo, hi, uh)
                         return
                     }
                     glucoseRangeStore.updateAll(ul, lo, hi, uh)
