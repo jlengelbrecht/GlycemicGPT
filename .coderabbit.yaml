@@ -1,0 +1,353 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+tone_instructions: "Be direct, technically precise, and concise. Focus on correctness and safety."
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  high_level_summary_in_walkthrough: false
+  auto_title_placeholder: "@coderabbitai"
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  poem: false
+  in_progress_fortune: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+  disable_cache: false
+
+  labeling_instructions:
+    - label: "api"
+      instructions: "Apply when PR modifies files under apps/api/"
+    - label: "web"
+      instructions: "Apply when PR modifies files under apps/web/"
+    - label: "mobile"
+      instructions: "Apply when PR modifies files under apps/mobile/"
+    - label: "infra"
+      instructions: >
+        Apply when PR modifies Docker, CI/CD, GitHub Actions, or
+        infrastructure configuration files
+    - label: "security"
+      instructions: >
+        Apply when PR touches authentication, authorization, encryption,
+        secret handling, or BLE security code
+    - label: "ble"
+      instructions: >
+        Apply when PR modifies Bluetooth Low Energy code under
+        apps/mobile/**/ble/**
+
+  path_filters:
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.svg"
+    - "!**/*.ico"
+    - "!**/*.webp"
+    - "!**/node_modules/**"
+    - "!**/build/**"
+    - "!**/.gradle/**"
+    - "!**/.android/**"
+    - "!**/dist/**"
+    - "!**/.next/**"
+    - "!**/pnpm-lock.yaml"
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!**/uv.lock"
+    - "!**/gradle.lockfile"
+    - "!**/*.tsbuildinfo"
+    - "!**/schemas/**/*.json"
+    - "!**/_bmad-output/**"
+    - "!**/.playwright-mcp/**"
+    - "!**/ui-dump*.xml"
+
+  path_instructions:
+    - path: "apps/api/**/*.py"
+      instructions: |
+        Python FastAPI backend for a medical/health-tech application managing
+        glucose data, insulin pump telemetry, and AI-driven diabetes insights.
+
+        Review focus:
+        - FastAPI patterns: proper Depends(), async endpoints, Pydantic validation,
+          correct HTTP status codes.
+        - Security: no hardcoded secrets, auth checks on all endpoints, input
+          validation, SSRF prevention on user-supplied URLs.
+        - Data integrity: database transactions, proper error handling, safe type
+          conversions for medical data (glucose values, insulin doses).
+        - Safety: AI-generated insulin suggestions must include disclaimers and
+          never auto-execute dosing actions.
+        - Ruff compliance: code should pass ruff check and ruff format.
+
+    - path: "apps/api/**/test*/**"
+      instructions: |
+        Review test files for:
+        - Proper pytest patterns: fixtures, parametrize, clear arrange/act/assert.
+        - Mock isolation: external services (Dexcom, Tandem, AI providers) must
+          be mocked, never called in tests.
+        - Edge cases: empty data, null values, boundary glucose values (40-400 mg/dL).
+
+    - path: "apps/web/**/*.{ts,tsx}"
+      instructions: |
+        Next.js 15 App Router frontend with TypeScript, Tailwind CSS, and
+        shadcn/ui components.
+
+        Review focus:
+        - Next.js 15 patterns: proper server/client components, App Router
+          conventions, metadata exports, loading/error boundaries.
+        - TypeScript: strict typing, no 'any' unless justified, proper interfaces.
+        - Accessibility: ARIA labels, keyboard navigation, color contrast for
+          medical data displays.
+        - Auth: protected routes must check session, proper redirect on 401.
+        - SSE/real-time: glucose data streams must handle reconnection gracefully.
+
+    - path: "apps/web/**/*.test.*"
+      instructions: |
+        Review test files for:
+        - Jest + React Testing Library best practices.
+        - Test user interactions, not implementation details.
+        - Mock API calls and SSE streams properly.
+
+    - path: "apps/mobile/**/*.kt"
+      instructions: |
+        Android Kotlin app using Jetpack Compose, Hilt DI, Room DB, and BLE
+        communication with Tandem insulin pumps.
+
+        Review focus:
+        - Kotlin idioms: null safety, coroutines, sealed classes, data classes.
+        - Jetpack Compose: proper state hoisting, remember/derivedStateOf usage,
+          recomposition efficiency, testTag for UI testing.
+        - Hilt: proper @Inject, @Module, @Provides, scope annotations.
+        - Room: proper DAO patterns, migration safety, type converters.
+        - BLE: proper lifecycle management, connection state handling, GATT
+          operation serialization, timeout handling.
+        - Security: encrypted SharedPreferences for tokens, no sensitive data
+          in logs.
+        - Medical safety: glucose values must be validated (range 20-500 mg/dL),
+          insulin doses must have hard caps, no auto-bolus without explicit user
+          confirmation.
+
+    - path: "apps/mobile/**/ble/**"
+      instructions: |
+        BLE code communicates with Tandem t:slim X2 insulin pumps.
+
+        Critical review points:
+        - GATT operations must be serialized (one at a time).
+        - All BLE operations must have timeouts.
+        - Connection state machine must handle all edge cases: unexpected
+          disconnect, bond loss, GATT 133 errors.
+        - Byte parsing must use Little Endian for Tandem protocol.
+        - Event type IDs must match the Tandem protocol spec.
+        - FFF8 characteristic streaming must handle multi-packet reassembly
+          with 500ms idle timeout.
+        - Never log raw pump data at INFO level (use DEBUG only).
+
+    - path: "apps/mobile/**/test*/**"
+      instructions: |
+        Review test files for:
+        - JUnit 5 + MockK best practices.
+        - Coroutine test dispatchers for async code.
+        - BLE mock setup for connection state testing.
+
+    - path: "docker-compose*.yml"
+      instructions: |
+        Review for:
+        - No hardcoded secrets or credentials in compose files.
+        - Proper health checks on all services.
+        - Network isolation between services.
+        - Volume mounts do not expose host system files.
+
+    - path: ".github/workflows/**"
+      instructions: |
+        Review GitHub Actions workflows for:
+        - No hardcoded secrets (use GitHub secrets/vars).
+        - Pinned action versions (use SHA, not floating tags).
+        - Proper permissions (least privilege).
+        - No command injection via untrusted input in run steps.
+
+    - path: "**/Dockerfile*"
+      instructions: |
+        Review Dockerfiles for:
+        - Multi-stage builds to minimize image size.
+        - Non-root user execution.
+        - No secrets baked into the image.
+        - Pinned base image versions.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 5
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "DRAFT"
+      - "[skip review]"
+    drafts: false
+    base_branches:
+      - "develop"
+    ignore_usernames:
+      - "renovate[bot]"
+      - "dependabot[bot]"
+      - "github-actions[bot]"
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+    description:
+      mode: "warning"
+    docstrings:
+      mode: "warning"
+      threshold: 60
+    issue_assessment:
+      mode: "warning"
+    custom_checks:
+      - name: "No Hardcoded Secrets"
+        mode: "error"
+        instructions: |
+          Verify that no hardcoded secrets, API keys, tokens, HMAC keys,
+          passwords, or credentials appear in the code changes. Check for
+          strings that look like API keys or tokens, base64-encoded secrets,
+          .env values committed directly, and private URLs or internal
+          hostnames. This is a medical/health-tech application -- credential
+          leaks are critical severity.
+      - name: "Medical Safety Review"
+        mode: "warning"
+        instructions: |
+          If the PR modifies code that handles glucose values, insulin doses,
+          bolus calculations, or pump commands:
+          - Verify glucose values are bounds-checked (20-500 mg/dL range).
+          - Verify insulin dose calculations have hard maximum caps.
+          - Verify no auto-bolus logic exists without explicit user confirmation.
+          - Verify AI-generated suggestions include safety disclaimers.
+          Pass if the PR does not touch medical data handling code.
+      - name: "BLE Protocol Safety"
+        mode: "warning"
+        instructions: |
+          If the PR modifies BLE communication code:
+          - Verify GATT operations have timeouts.
+          - Verify connection state transitions are handled.
+          - Verify byte parsing uses correct endianness (Little Endian for Tandem).
+          - Verify no raw pump data is logged at INFO level.
+          Pass if the PR does not touch BLE code.
+
+  tools:
+    ruff:
+      enabled: true
+    pylint:
+      enabled: false
+    flake8:
+      enabled: false
+    eslint:
+      enabled: true
+    biome:
+      enabled: false
+    oxlint:
+      enabled: false
+    detekt:
+      enabled: true
+    hadolint:
+      enabled: true
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    osv-scanner:
+      enabled: true
+    checkov:
+      enabled: true
+    markdownlint:
+      enabled: true
+    languagetool:
+      enabled: false
+    pmd:
+      enabled: false
+    swiftlint:
+      enabled: false
+    clippy:
+      enabled: false
+    rubocop:
+      enabled: false
+    brakeman:
+      enabled: false
+    phpstan:
+      enabled: false
+    phpmd:
+      enabled: false
+    phpcs:
+      enabled: false
+    golangci-lint:
+      enabled: false
+    cppcheck:
+      enabled: false
+    buf:
+      enabled: false
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "docs/branching-strategy.md"
+  learnings:
+    scope: "local"
+  issues:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+  jira:
+    usage: "disabled"
+  linear:
+    usage: "disabled"
+
+code_generation:
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "**/*.py"
+        instructions: "Use Google-style docstrings with Args, Returns, and Raises sections."
+      - path: "**/*.kt"
+        instructions: "Use KDoc format with @param, @return, and @throws tags."
+      - path: "**/*.ts"
+        instructions: "Use TSDoc format with @param and @returns tags."
+  unit_tests:
+    path_instructions:
+      - path: "apps/api/**/*.py"
+        instructions: "Generate pytest tests. Use fixtures and parametrize. Mock external services."
+      - path: "apps/web/**/*.tsx"
+        instructions: "Generate Jest + React Testing Library tests. Test user interactions."
+      - path: "apps/mobile/**/*.kt"
+        instructions: "Generate JUnit 5 + MockK tests. Use coroutine test dispatchers for async code."
