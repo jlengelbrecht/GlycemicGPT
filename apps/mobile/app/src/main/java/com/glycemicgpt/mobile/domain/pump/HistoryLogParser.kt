@@ -14,7 +14,10 @@ import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
  */
 interface HistoryLogParser {
 
-    /** Extract CGM readings from raw history log records. */
+    /**
+     * Extract CGM readings from raw history log records.
+     * Implementations must discard any reading outside the valid range (20-500 mg/dL).
+     */
     fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>): List<CgmReading>
 
     /** Extract bolus delivery events from raw history log records. */

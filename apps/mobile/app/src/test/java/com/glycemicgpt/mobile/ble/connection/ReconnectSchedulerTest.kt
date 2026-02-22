@@ -1,7 +1,6 @@
 package com.glycemicgpt.mobile.ble.connection
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -58,7 +57,7 @@ class ReconnectSchedulerTest {
         }
         // Should be: 2 + 4 + 8 + 16 + 32 + 32 + 32 + 32 + 32 + 32 = 222 seconds
         // Plus connection + auth time per attempt (~2-5s each)
-        // Should be approximately 4-6 minutes total wall clock
-        assertTrue("Fast phase total should be ~222s, was ${total / 1000}s", total in 200_000..250_000)
+        // Should be approximately 4-5 minutes total wall clock
+        assertEquals("Fast phase total should be 222s", 222_000L, total)
     }
 }
