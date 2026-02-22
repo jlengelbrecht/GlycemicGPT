@@ -10,13 +10,17 @@ import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.BuildConfig
 import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
+import com.glycemicgpt.mobile.data.local.AlertSoundCategory
+import com.glycemicgpt.mobile.data.local.AlertSoundStore
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.repository.AuthRepository
 import com.glycemicgpt.mobile.data.update.AppUpdateChecker
+import com.glycemicgpt.mobile.service.AlertNotificationManager
 import com.glycemicgpt.mobile.service.AlertStreamService
 import com.glycemicgpt.mobile.service.PumpConnectionService
+import android.media.RingtoneManager
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
 import com.glycemicgpt.mobile.wear.WearDataContract
@@ -82,6 +86,14 @@ data class SettingsUiState(
     val watchConnected: Boolean = false,
     // Battery optimization
     val isBatteryOptimized: Boolean = true,
+    // Notification sounds
+    val lowAlertSoundName: String = "Default Alarm",
+    val lowAlertSoundUri: String? = null,
+    val highAlertSoundName: String = "Default Notification",
+    val highAlertSoundUri: String? = null,
+    val aiNotificationSoundName: String = "Default Notification",
+    val aiNotificationSoundUri: String? = null,
+    val overrideSilentForLow: Boolean = true,
 )
 
 @HiltViewModel
@@ -93,6 +105,8 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val appUpdateChecker: AppUpdateChecker,
     private val authManager: AuthManager,
+    private val alertSoundStore: AlertSoundStore,
+    private val alertNotificationManager: AlertNotificationManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -128,6 +142,13 @@ class SettingsViewModel @Inject constructor(
             dataRetentionDays = appSettingsStore.dataRetentionDays,
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
+            lowAlertSoundName = alertSoundStore.lowAlertSoundName ?: "Default Alarm",
+            lowAlertSoundUri = alertSoundStore.lowAlertSoundUri,
+            highAlertSoundName = alertSoundStore.highAlertSoundName ?: "Default Notification",
+            highAlertSoundUri = alertSoundStore.highAlertSoundUri,
+            aiNotificationSoundName = alertSoundStore.aiNotificationSoundName ?: "Default Notification",
+            aiNotificationSoundUri = alertSoundStore.aiNotificationSoundUri,
+            overrideSilentForLow = alertSoundStore.overrideSilentForLowAlerts,
         )
 
         checkBatteryOptimization()
@@ -369,5 +390,66 @@ class SettingsViewModel @Inject constructor(
             Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
             Uri.parse("package:${appContext.packageName}"),
         )
+    }
+
+    fun onSoundSelected(category: AlertSoundCategory, uri: Uri?) {
+        // Validate URI is accessible before persisting
+        val validatedUri = if (uri != null) {
+            try {
+                val ringtone = RingtoneManager.getRingtone(appContext, uri)
+                if (ringtone != null) uri else null
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+
+        val uriString = validatedUri?.toString()
+        alertSoundStore.setSoundUri(category, uriString)
+
+        // Resolve display name
+        val displayName = if (validatedUri != null) {
+            try {
+                val ringtone = RingtoneManager.getRingtone(appContext, validatedUri)
+                ringtone?.getTitle(appContext) ?: "Custom Sound"
+            } catch (_: Exception) {
+                "Custom Sound"
+            }
+        } else {
+            when (category) {
+                AlertSoundCategory.LOW_ALERT -> "Default Alarm"
+                AlertSoundCategory.HIGH_ALERT, AlertSoundCategory.AI_NOTIFICATION -> "Default Notification"
+            }
+        }
+        alertSoundStore.setSoundName(category, displayName)
+
+        // Take persistable URI permission so the sound survives reboots
+        if (validatedUri != null) {
+            try {
+                appContext.contentResolver.takePersistableUriPermission(
+                    validatedUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            } catch (_: SecurityException) {
+                // Some ringtone URIs don't support persistable permissions
+            }
+        }
+
+        alertNotificationManager.recreateChannel(category)
+
+        _uiState.value = when (category) {
+            AlertSoundCategory.LOW_ALERT ->
+                _uiState.value.copy(lowAlertSoundName = displayName, lowAlertSoundUri = uriString)
+            AlertSoundCategory.HIGH_ALERT ->
+                _uiState.value.copy(highAlertSoundName = displayName, highAlertSoundUri = uriString)
+            AlertSoundCategory.AI_NOTIFICATION ->
+                _uiState.value.copy(aiNotificationSoundName = displayName, aiNotificationSoundUri = uriString)
+        }
+    }
+
+    fun setOverrideSilentForLow(enabled: Boolean) {
+        alertSoundStore.overrideSilentForLowAlerts = enabled
+        _uiState.value = _uiState.value.copy(overrideSilentForLow = enabled)
     }
 }
