@@ -48,9 +48,13 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 try {
                     Timber.d("Boot completed, starting AlertStreamService (user is logged in)")
                     AlertStreamService.start(context)
-                } catch (e: Exception) {
-                    // startForegroundService may fail on some devices during early boot
+                } catch (e: IllegalStateException) {
+                    // Covers ForegroundServiceStartNotAllowedException (API 31+) and
+                    // background-start restrictions (API 26+)
                     Timber.w(e, "Failed to start AlertStreamService on boot")
+                } catch (e: SecurityException) {
+                    // Missing FOREGROUND_SERVICE permission
+                    Timber.w(e, "Failed to start AlertStreamService on boot (missing permission)")
                 }
             } else {
                 Timber.d("Boot completed, user not logged in -- skipping AlertStreamService")

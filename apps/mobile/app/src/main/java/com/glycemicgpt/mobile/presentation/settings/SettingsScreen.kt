@@ -229,24 +229,18 @@ private fun SectionHeader(title: String) {
 private fun NotificationsSection() {
     val context = LocalContext.current
 
-    // Track permission status with a state variable that gets refreshed on ON_RESUME
-    // (e.g., when the user returns from system notification settings)
-    var isGranted by remember { mutableStateOf(true) }
-    fun checkPermission() {
-        isGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true // Pre-Android 13: no runtime permission needed
-        }
+    fun permissionGranted() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true // Pre-Android 13: no runtime permission needed
     }
-    // Check on initial composition
-    checkPermission()
+    var isGranted by remember { mutableStateOf(permissionGranted()) }
     // Re-check when returning from system settings
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        checkPermission()
+        isGranted = permissionGranted()
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {

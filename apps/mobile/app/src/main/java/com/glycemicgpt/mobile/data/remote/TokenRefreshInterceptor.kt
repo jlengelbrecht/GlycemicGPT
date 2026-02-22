@@ -143,7 +143,7 @@ class TokenRefreshInterceptor @Inject constructor(
                     null
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: java.io.IOException) {
             // Network error -- preserve tokens; connectivity will return
             Timber.w(e, "Token refresh failed due to network error, preserving session")
             null
