@@ -4,7 +4,7 @@ import com.glycemicgpt.mobile.domain.model.DiscoveredPump
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Abstract interface for pump discovery via wireless scanning.
+ * Pump discovery via wireless scanning.
  *
  * Decouples scanning from transport-specific implementation details,
  * allowing consumers to depend on this interface rather than

@@ -1309,32 +1309,32 @@ class BleConnectionManager @Inject constructor(
          *  time to process initialization before we send status requests.
          *  Keep short to avoid idle-timeout disconnects from the pump.
          */
-        const val POST_AUTH_SETTLE_MS = 500L
+        private const val POST_AUTH_SETTLE_MS = 500L
 
         /** Auth handshake timeout. JPAKE has 5 round trips; 30s is generous. */
-        const val AUTH_TIMEOUT_MS = 30_000L
+        private const val AUTH_TIMEOUT_MS = 30_000L
 
         /** Max consecutive rapid disconnections before declaring bond lost. */
-        const val MAX_RAPID_DISCONNECTS = 3
+        private const val MAX_RAPID_DISCONNECTS = 3
 
         /** Max connections with zero pump responses before giving up. */
-        const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
+        private const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
 
         /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects (during active sessions
          *  or reconnection after a prior successful session) before treating the bond
          *  as genuinely stale and removing it. */
-        const val MAX_ENCRYPTION_FAILURES = 3
+        private const val MAX_ENCRYPTION_FAILURES = 3
 
         /** Max attempts in the fast reconnection phase before transitioning to
          *  slow (patient) reconnection. With 32s max backoff, 10 attempts takes
          *  ~5 minutes. After this, reconnection continues indefinitely at a
          *  slower rate (every 2 minutes) with autoConnect=true as a supplement. */
-        const val MAX_FAST_RECONNECT_ATTEMPTS = 10
+        private const val MAX_FAST_RECONNECT_ATTEMPTS = 10
 
         /** Interval for slow-phase periodic reconnection attempts (2 minutes).
          *  Runs alongside a passive autoConnect=true GATT. The periodic timer
          *  is a fallback for devices with buggy autoConnect implementations. */
-        const val SLOW_RECONNECT_INTERVAL_MS = 120_000L
+        private const val SLOW_RECONNECT_INTERVAL_MS = 120_000L
 
         /** Cap for [consecutiveReconnectFailures] to prevent unbounded growth.
          *  Only used for logging; the slow phase reconnects indefinitely. */

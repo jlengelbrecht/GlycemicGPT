@@ -4,7 +4,7 @@ import com.glycemicgpt.mobile.domain.model.ConnectionState
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Abstract interface for pump connection lifecycle management.
+ * Pump connection lifecycle management.
  *
  * Decouples connection management from transport-specific implementation details,
  * allowing consumers (ViewModels, Services) to depend on this interface

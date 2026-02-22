@@ -6,7 +6,7 @@ import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 
 /**
- * Abstract interface for extracting typed pump events from raw history log records.
+ * Extracts typed pump events from raw history log records.
  *
  * History logs are pump-agnostic [HistoryLogRecord]s containing raw bytes.
  * Each pump implementation knows how to parse its own event format and
