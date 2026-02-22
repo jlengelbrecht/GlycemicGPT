@@ -180,7 +180,8 @@ class BleConnectionManager @Inject constructor(
      * Internal connect implementation.
      *
      * @param resetCounters If true, resets reconnect attempt and error counters.
-     *   Set to false when called from [scheduleReconnect] to preserve exponential backoff.
+     *   Set to false when called from [scheduleReconnect] or the passive autoConnect
+     *   GATT callback to preserve exponential backoff across reconnection cycles.
      */
     @SuppressLint("MissingPermission")
     private fun connectInternal(address: String, pairingCode: String?, resetCounters: Boolean) {

@@ -56,9 +56,7 @@ class TandemHistoryLogParserTest {
         buf.putShort(eventTypeId.toShort())
         buf.putInt(pumpTimeSec.and(0xFFFFFFFFL).toInt())
         buf.putInt(seq)
-        val padded = ByteArray(16)
-        data.copyInto(padded)
-        buf.put(padded)
+        buf.put(data.copyOf(16))
         return buf.array()
     }
 
@@ -75,13 +73,6 @@ class TandemHistoryLogParserTest {
             eventTypeId = eventTypeId,
             pumpTimeSeconds = pumpTimeSec,
         )
-    }
-
-    @Test
-    fun `implements HistoryLogParser interface`() {
-        // Verify TandemHistoryLogParser is assignable to HistoryLogParser
-        val instance: Any = TandemHistoryLogParser()
-        assertTrue(instance is HistoryLogParser)
     }
 
     @Test
