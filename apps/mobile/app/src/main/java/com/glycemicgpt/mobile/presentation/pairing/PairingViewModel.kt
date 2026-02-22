@@ -3,11 +3,11 @@ package com.glycemicgpt.mobile.presentation.pairing
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.glycemicgpt.mobile.ble.connection.BleConnectionManager
-import com.glycemicgpt.mobile.ble.connection.BleScanner
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.DiscoveredPump
+import com.glycemicgpt.mobile.domain.pump.PumpConnectionManager
+import com.glycemicgpt.mobile.domain.pump.PumpScanner
 import com.glycemicgpt.mobile.service.PumpConnectionService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,8 +20,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PairingViewModel @Inject constructor(
-    private val bleScanner: BleScanner,
-    private val connectionManager: BleConnectionManager,
+    private val bleScanner: PumpScanner,
+    private val connectionManager: PumpConnectionManager,
     private val credentialStore: PumpCredentialStore,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {

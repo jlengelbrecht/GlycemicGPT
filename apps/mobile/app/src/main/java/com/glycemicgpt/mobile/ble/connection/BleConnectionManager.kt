@@ -19,6 +19,7 @@ import com.glycemicgpt.mobile.data.local.BleDebugStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.local.toHexString
 import com.glycemicgpt.mobile.domain.model.ConnectionState
+import com.glycemicgpt.mobile.domain.pump.PumpConnectionManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -59,14 +60,14 @@ class BleConnectionManager @Inject constructor(
     private val jpakeAuthenticator: JpakeAuthenticator,
     private val credentialStore: PumpCredentialStore,
     private val debugStore: BleDebugStore,
-) {
+) : PumpConnectionManager {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val bluetoothManager: BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
     private var gatt: BluetoothGatt? = null
     private val gattLock = Any()
@@ -173,7 +174,7 @@ class BleConnectionManager @Inject constructor(
      *   Set to false when called from [scheduleReconnect] to preserve exponential backoff.
      */
     @SuppressLint("MissingPermission")
-    fun connect(address: String, pairingCode: String? = null, resetCounters: Boolean = true) {
+    override fun connect(address: String, pairingCode: String?, resetCounters: Boolean) {
         val adapter = bluetoothManager?.adapter ?: run {
             Timber.e("BluetoothAdapter not available")
             return
@@ -226,7 +227,7 @@ class BleConnectionManager @Inject constructor(
 
     /** Disconnect from the pump. */
     @SuppressLint("MissingPermission")
-    fun disconnect() {
+    override fun disconnect() {
         autoReconnect = false
         hadSuccessfulSession = false
         reconnectJob?.cancel()
@@ -276,7 +277,7 @@ class BleConnectionManager @Inject constructor(
 
     /** Unpair: clear credentials, remove BLE bond, and disconnect. */
     @SuppressLint("MissingPermission")
-    fun unpair() {
+    override fun unpair() {
         val address = credentialStore.getPairedAddress()
         disconnect()
         credentialStore.clearPairing()
@@ -323,7 +324,7 @@ class BleConnectionManager @Inject constructor(
     }
 
     /** Attempt auto-reconnect to the previously paired pump. */
-    fun autoReconnectIfPaired() {
+    override fun autoReconnectIfPaired() {
         val address = credentialStore.getPairedAddress() ?: return
         // Fresh reconnect: reset to fast phase (called from BT state receiver,
         // service startup, etc. -- these are all "new" reconnection attempts).

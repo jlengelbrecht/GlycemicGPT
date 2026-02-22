@@ -10,8 +10,10 @@ import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
+import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
+import com.glycemicgpt.mobile.domain.pump.HistoryLogParser
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.wear.WearDataSender
 import io.mockk.coEvery
@@ -71,6 +73,7 @@ class PumpPollingOrchestratorTest {
         every { high } returns GlucoseRangeStore.DEFAULT_HIGH
         every { urgentHigh } returns GlucoseRangeStore.DEFAULT_URGENT_HIGH
     }
+    private val historyLogParser = mockk<HistoryLogParser>(relaxed = true)
 
     /**
      * Time to advance past the fast loop's initial delay + stagger + margin.
@@ -94,7 +97,7 @@ class PumpPollingOrchestratorTest {
     /** Alias for tests that only need fast loop data. */
     private val SETTLE_TIME_MS = FAST_SETTLE_MS
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender, glucoseRangeStore)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender, glucoseRangeStore, historyLogParser)
 
     @Test
     fun `does not poll when disconnected`() = runTest {
@@ -436,6 +439,37 @@ class PumpPollingOrchestratorTest {
 
         // Should NOT send again for same type
         coVerify(exactly = 1) { wearDataSender.sendAlert(eq("high"), any(), any(), any()) }
+        orchestrator.stop()
+    }
+
+    // -- HistoryLogParser integration tests ------------------------------------
+
+    @Test
+    fun `delegates history log extraction to HistoryLogParser`() = runTest {
+        val fakeRecords = listOf(
+            HistoryLogRecord(
+                sequenceNumber = 100,
+                rawBytesB64 = "dGVzdA==",
+                eventTypeId = 399,
+                pumpTimeSeconds = 572_000_000L,
+            ),
+        )
+        coEvery { pumpDriver.getHistoryLogs(any()) } returns Result.success(fakeRecords)
+        every { historyLogParser.extractCgmFromHistoryLogs(any()) } returns emptyList()
+        every { historyLogParser.extractBolusesFromHistoryLogs(any()) } returns emptyList()
+        every { historyLogParser.extractBasalFromHistoryLogs(any()) } returns emptyList()
+
+        val orchestrator = createOrchestrator()
+        orchestrator.start(this)
+
+        connectionStateFlow.value = ConnectionState.CONNECTED
+        // Advance past slow loop initial delay so history logs get polled
+        advanceTimeBy(ALL_SETTLE_MS)
+
+        // Verify historyLogParser was called with the records from the driver
+        io.mockk.verify(atLeast = 1) { historyLogParser.extractCgmFromHistoryLogs(fakeRecords) }
+        io.mockk.verify(atLeast = 1) { historyLogParser.extractBolusesFromHistoryLogs(fakeRecords) }
+        io.mockk.verify(atLeast = 1) { historyLogParser.extractBasalFromHistoryLogs(fakeRecords) }
         orchestrator.stop()
     }
 }
