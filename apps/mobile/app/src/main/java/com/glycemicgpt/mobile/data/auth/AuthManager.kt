@@ -228,9 +228,9 @@ class AuthManager @Inject constructor(
      */
     private suspend fun performRefreshWithRetry(
         scope: CoroutineScope,
-        maxRetries: Int = 2,
+        maxAttempts: Int = 3,
     ) {
-        for (attempt in 0..maxRetries) {
+        for (attempt in 0 until maxAttempts) {
             performRefresh(scope)
 
             // Success: we obtained a valid access token
@@ -241,16 +241,16 @@ class AuthManager @Inject constructor(
             if (state is AuthState.Expired || state is AuthState.Unauthenticated) return
 
             // Transient failure (Refreshing state) -- retry with backoff
-            if (attempt < maxRetries) {
+            if (attempt < maxAttempts - 1) {
                 val backoffMs = 1000L * (1 shl attempt) // 1s, 2s
                 Timber.d("Startup refresh attempt ${attempt + 1} failed transiently, retrying in ${backoffMs}ms")
                 delay(backoffMs)
             }
         }
 
-        // All retries exhausted without obtaining a token
+        // All attempts exhausted without obtaining a token
         if (authTokenStore.getToken() == null && _authState.value !is AuthState.Expired) {
-            Timber.w("Startup refresh exhausted all retries without obtaining a token")
+            Timber.w("Startup refresh exhausted all attempts without obtaining a token")
             _authState.value = AuthState.Expired()
         }
     }

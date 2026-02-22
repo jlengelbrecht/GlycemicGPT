@@ -243,6 +243,36 @@ private fun NotificationsSection() {
         isGranted = permissionGranted()
     }
 
+    NotificationStatusCard(
+        isGranted = isGranted,
+        onEnableClicked = {
+            try {
+                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                }
+                context.startActivity(intent)
+            } catch (_: android.content.ActivityNotFoundException) {
+                Toast.makeText(
+                    context,
+                    "Please enable notifications for GlycemicGPT in your phone's Settings",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } catch (_: SecurityException) {
+                Toast.makeText(
+                    context,
+                    "Please enable notifications for GlycemicGPT in your phone's Settings",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        },
+    )
+}
+
+@Composable
+private fun NotificationStatusCard(
+    isGranted: Boolean,
+    onEnableClicked: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -278,20 +308,7 @@ private fun NotificationsSection() {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Button(
-                    onClick = {
-                        try {
-                            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            }
-                            context.startActivity(intent)
-                        } catch (_: android.content.ActivityNotFoundException) {
-                            Toast.makeText(
-                                context,
-                                "Please enable notifications for GlycemicGPT in your phone's Settings",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    },
+                    onClick = onEnableClicked,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("enable_notifications_button"),
