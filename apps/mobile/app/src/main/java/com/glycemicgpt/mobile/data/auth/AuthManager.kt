@@ -77,9 +77,10 @@ class AuthManager @Inject constructor(
             return
         }
 
-        // Access token expired but refresh token is valid -- attempt refresh
+        // Access token expired but refresh token is valid -- attempt refresh with retry
+        _authState.value = AuthState.Refreshing
         scope.launch {
-            performRefresh(scope)
+            performRefreshWithRetry(scope)
         }
     }
 
@@ -182,10 +183,23 @@ class AuthManager @Inject constructor(
                         Timber.d("Proactive token refresh succeeded")
                         _authState.value = AuthState.Authenticated
                         scheduleProactiveRefresh(scope)
-                    } else {
-                        Timber.w("Proactive token refresh failed with HTTP ${resp.code}")
+                    } else if (resp.code == 401 || resp.code == 403) {
+                        // Definitive auth rejection -- refresh token is invalid/revoked
+                        Timber.w("Token refresh rejected with HTTP ${resp.code}, clearing session")
                         authTokenStore.clearToken()
                         _authState.value = AuthState.Expired()
+                    } else {
+                        // Transient server error (5xx, etc.) -- preserve tokens for retry
+                        Timber.w("Token refresh got HTTP ${resp.code}, preserving session for retry")
+                        val currentToken = authTokenStore.getRawToken()
+                        if (currentToken != null) {
+                            // We still have a (possibly expired) access token -- mark authenticated
+                            // so the app can function, and schedule proactive retry
+                            _authState.value = AuthState.Authenticated
+                            scheduleProactiveRefresh(scope)
+                        }
+                        // If no access token, leave state as Refreshing so
+                        // performRefreshWithRetry can attempt again on startup
                     }
                 }
             } catch (e: CancellationException) {
@@ -202,6 +216,42 @@ class AuthManager @Inject constructor(
                     _authState.value = AuthState.Expired()
                 }
             }
+        }
+    }
+
+    /**
+     * Attempts refresh with retry for startup scenarios where a transient network
+     * failure shouldn't immediately destroy the session.
+     *
+     * Checks for actual token acquisition (not just auth state) to determine
+     * whether to retry, since transient 5xx errors leave state as [AuthState.Refreshing].
+     */
+    private suspend fun performRefreshWithRetry(
+        scope: CoroutineScope,
+        maxRetries: Int = 2,
+    ) {
+        for (attempt in 0..maxRetries) {
+            performRefresh(scope)
+
+            // Success: we obtained a valid access token
+            if (authTokenStore.getToken() != null) return
+
+            // Definitive failure: no point retrying
+            val state = _authState.value
+            if (state is AuthState.Expired || state is AuthState.Unauthenticated) return
+
+            // Transient failure (Refreshing state) -- retry with backoff
+            if (attempt < maxRetries) {
+                val backoffMs = 1000L * (1 shl attempt) // 1s, 2s
+                Timber.d("Startup refresh attempt ${attempt + 1} failed transiently, retrying in ${backoffMs}ms")
+                delay(backoffMs)
+            }
+        }
+
+        // All retries exhausted without obtaining a token
+        if (authTokenStore.getToken() == null && _authState.value !is AuthState.Expired) {
+            Timber.w("Startup refresh exhausted all retries without obtaining a token")
+            _authState.value = AuthState.Expired()
         }
     }
 
