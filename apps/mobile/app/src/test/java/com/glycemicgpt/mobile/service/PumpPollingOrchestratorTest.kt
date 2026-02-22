@@ -20,6 +20,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -467,9 +468,9 @@ class PumpPollingOrchestratorTest {
         advanceTimeBy(ALL_SETTLE_MS)
 
         // Verify historyLogParser was called with the records from the driver
-        io.mockk.verify(atLeast = 1) { historyLogParser.extractCgmFromHistoryLogs(fakeRecords) }
-        io.mockk.verify(atLeast = 1) { historyLogParser.extractBolusesFromHistoryLogs(fakeRecords) }
-        io.mockk.verify(atLeast = 1) { historyLogParser.extractBasalFromHistoryLogs(fakeRecords) }
+        verify(atLeast = 1) { historyLogParser.extractCgmFromHistoryLogs(fakeRecords) }
+        verify(atLeast = 1) { historyLogParser.extractBolusesFromHistoryLogs(fakeRecords) }
+        verify(atLeast = 1) { historyLogParser.extractBasalFromHistoryLogs(fakeRecords) }
         orchestrator.stop()
     }
 }

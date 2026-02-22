@@ -8,6 +8,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -53,7 +54,7 @@ class TandemHistoryLogParserTest {
     ): ByteArray {
         val buf = ByteBuffer.allocate(26).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(eventTypeId.toShort())
-        buf.putInt(pumpTimeSec.toInt())
+        buf.putInt(pumpTimeSec.and(0xFFFFFFFFL).toInt())
         buf.putInt(seq)
         val padded = ByteArray(16)
         data.copyInto(padded)
@@ -161,7 +162,24 @@ class TandemHistoryLogParserTest {
         assertEquals(1, result.size)
         assertEquals(0.8f, result[0].rate, 0.01f)
         // sourceRaw=1 is not in AUTOMATED_BASAL_SOURCES (0,3,4)
-        assertTrue(!result[0].isAutomated)
+        assertFalse(result[0].isAutomated)
+    }
+
+    @Test
+    fun `extractBolusesFromHistoryLogs rejects zero deliveredTotal`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1) // bolusId
+        data[2] = 0x00 // deliveryStatus = Completed
+        data[3] = 0x01 // bolusTypeRaw
+        data[4] = 0x01 // bolusSourceRaw
+        buf.putShort(14, 0) // deliveredTotal = 0 milliunits (should be rejected)
+
+        val pumpTime = 572_000_000L
+        val record = recordFromStream(280, pumpTime, 5000, data)
+
+        val result = parser.extractBolusesFromHistoryLogs(listOf(record))
+        assertTrue(result.isEmpty())
     }
 
     @Test

@@ -26,9 +26,8 @@ interface PumpConnectionManager {
      * Connect to a pump at the given address.
      * @param address device address in a format specific to the transport (e.g., MAC address)
      * @param pairingCode optional pairing code for initial pairing
-     * @param resetCounters whether to reset error counters on connect
      */
-    fun connect(address: String, pairingCode: String? = null, resetCounters: Boolean = true)
+    fun connect(address: String, pairingCode: String? = null)
 
     /** Disconnect from the pump and stop auto-reconnect. */
     fun disconnect()

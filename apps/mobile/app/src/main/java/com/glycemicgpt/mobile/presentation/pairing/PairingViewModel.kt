@@ -20,7 +20,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PairingViewModel @Inject constructor(
-    private val bleScanner: PumpScanner,
+    private val pumpScanner: PumpScanner,
     private val connectionManager: PumpConnectionManager,
     private val credentialStore: PumpCredentialStore,
     @ApplicationContext private val appContext: Context,
@@ -52,7 +52,7 @@ class PairingViewModel @Inject constructor(
 
         scanJob = viewModelScope.launch {
             try {
-                bleScanner.scan().collect { pump ->
+                pumpScanner.scan().collect { pump ->
                     _discoveredPumps.value = _discoveredPumps.value + pump
                 }
             } finally {

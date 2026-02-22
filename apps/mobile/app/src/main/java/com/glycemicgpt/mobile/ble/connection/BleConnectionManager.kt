@@ -170,11 +170,21 @@ class BleConnectionManager @Inject constructor(
     /**
      * Connect to the pump at [address].
      *
-     * @param resetCounters If true (default), resets reconnect attempt and error counters.
+     * Resets reconnect attempt and error counters so the connection starts fresh.
+     */
+    @SuppressLint("MissingPermission")
+    override fun connect(address: String, pairingCode: String?) {
+        connectInternal(address, pairingCode, resetCounters = true)
+    }
+
+    /**
+     * Internal connect implementation.
+     *
+     * @param resetCounters If true, resets reconnect attempt and error counters.
      *   Set to false when called from [scheduleReconnect] to preserve exponential backoff.
      */
     @SuppressLint("MissingPermission")
-    override fun connect(address: String, pairingCode: String?, resetCounters: Boolean) {
+    private fun connectInternal(address: String, pairingCode: String?, resetCounters: Boolean) {
         val adapter = bluetoothManager?.adapter ?: run {
             Timber.e("BluetoothAdapter not available")
             return
@@ -603,7 +613,7 @@ class BleConnectionManager @Inject constructor(
         reconnectJob = scope.launch {
             delay(delayMs)
             if (autoReconnect && _connectionState.value == ConnectionState.RECONNECTING) {
-                connect(address, pairingCode = null, resetCounters = false)
+                connectInternal(address, pairingCode = null, resetCounters = false)
             } else if (_connectionState.value == ConnectionState.RECONNECTING) {
                 _connectionState.value = ConnectionState.DISCONNECTED
             }
@@ -654,7 +664,7 @@ class BleConnectionManager @Inject constructor(
                 scope.launch {
                     reconnectJob?.cancel()
                     val address = credentialStore.getPairedAddress() ?: return@launch
-                    connect(address, pairingCode = null, resetCounters = false)
+                    connectInternal(address, pairingCode = null, resetCounters = false)
                 }
             } else if (newState == BluetoothProfile.STATE_CONNECTED) {
                 // Connected but with non-success status -- close and let autoConnect retry
