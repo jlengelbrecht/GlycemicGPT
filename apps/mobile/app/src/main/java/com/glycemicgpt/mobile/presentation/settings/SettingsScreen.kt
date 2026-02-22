@@ -900,10 +900,7 @@ private fun SoundPickerRow(
                     putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, showSilent)
                     putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
                     val existingUri = currentSoundUri?.let { Uri.parse(it) }
-                        ?: RingtoneManager.getDefaultUri(
-                            if (ringtoneType == RingtoneManager.TYPE_ALARM) RingtoneManager.TYPE_ALARM
-                            else RingtoneManager.TYPE_NOTIFICATION,
-                        )
+                        ?: RingtoneManager.getDefaultUri(ringtoneType)
                     putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existingUri)
                 }
                 launcher.launch(intent)

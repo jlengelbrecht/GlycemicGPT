@@ -154,13 +154,13 @@ class AlertNotificationManager @Inject constructor(
         manager.createNotificationChannel(channel)
     }
 
+    /** Lock to prevent channel recreation racing with notification posting. */
+    private val channelLock = Any()
+
     /**
      * Deletes the old versioned channel and creates a new one with the
      * next version number and the current sound URI from [AlertSoundStore].
      */
-    /** Lock to prevent channel recreation racing with notification posting. */
-    private val channelLock = Any()
-
     fun recreateChannel(category: AlertSoundCategory) = synchronized(channelLock) {
         val oldVersion = alertSoundStore.getChannelVersion(category)
         val oldChannelId = when (category) {
@@ -233,8 +233,6 @@ class AlertNotificationManager @Inject constructor(
         }
 
         val isLow = alert.alertType in LOW_ALERT_TYPES
-        val isHigh = alert.alertType in HIGH_ALERT_TYPES
-        val channelId = resolveChannelId(alert)
 
         // Supplementary volume boost for low alerts (like FreeStyle Libre)
         if (isLow && alertSoundStore.overrideSilentForLowAlerts) {
@@ -270,29 +268,34 @@ class AlertNotificationManager @Inject constructor(
         val title = buildTitle(alert)
         val isUrgent = alert.severity in listOf("urgent", "emergency")
 
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle(title)
-            .setContentText(alert.message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(alert.message))
-            .setPriority(
-                if (isUrgent) NotificationCompat.PRIORITY_HIGH
-                else NotificationCompat.PRIORITY_DEFAULT,
-            )
-            .setContentIntent(contentPendingIntent)
-            .setAutoCancel(true)
-            .setGroup(GROUP_KEY)
-            // Lows are life-threatening: re-fire sound on each update.
-            // Highs/IoB: alert once, then silent updates only.
-            .setOnlyAlertOnce(!isLow)
-            .addAction(
-                android.R.drawable.ic_menu_close_clear_cancel,
-                "Got It",
-                ackPendingIntent,
-            )
-            .build()
+        // Resolve channel ID and post notification under channelLock so that
+        // recreateChannel() cannot delete the channel between resolve and notify.
+        synchronized(channelLock) {
+            val channelId = resolveChannelIdLocked(alert)
+            val notification = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle(title)
+                .setContentText(alert.message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(alert.message))
+                .setPriority(
+                    if (isUrgent) NotificationCompat.PRIORITY_HIGH
+                    else NotificationCompat.PRIORITY_DEFAULT,
+                )
+                .setContentIntent(contentPendingIntent)
+                .setAutoCancel(true)
+                .setGroup(GROUP_KEY)
+                // Lows are life-threatening: re-fire sound on each update.
+                // Highs/IoB: alert once, then silent updates only.
+                .setOnlyAlertOnce(!isLow)
+                .addAction(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    "Got It",
+                    ackPendingIntent,
+                )
+                .build()
 
-        manager.notify(notificationId, notification)
+            manager.notify(notificationId, notification)
+        }
     }
 
     fun cancelNotification(notificationId: Int) {
@@ -316,9 +319,14 @@ class AlertNotificationManager @Inject constructor(
     }
 
     internal fun resolveChannelId(alert: AlertEntity): String = synchronized(channelLock) {
+        resolveChannelIdLocked(alert)
+    }
+
+    /** Must be called while holding [channelLock]. */
+    private fun resolveChannelIdLocked(alert: AlertEntity): String {
         val isLow = alert.alertType in LOW_ALERT_TYPES
         val isHigh = alert.alertType in HIGH_ALERT_TYPES
-        when {
+        return when {
             isLow -> lowChannelId(alertSoundStore.lowChannelVersion)
             isHigh -> highChannelId(alertSoundStore.highChannelVersion)
             else -> aiChannelId(alertSoundStore.aiChannelVersion)
@@ -335,7 +343,7 @@ class AlertNotificationManager @Inject constructor(
                 audioManager.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
                 Timber.d("Boosted alarm volume from %d to %d", current, max)
             }
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
             Timber.w(e, "Cannot modify alarm volume")
         }
     }

@@ -41,6 +41,9 @@ import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
 
+private const val DEFAULT_ALARM_NAME = "Default Alarm"
+private const val DEFAULT_NOTIFICATION_NAME = "Default Notification"
+
 sealed class UpdateUiState {
     object Idle : UpdateUiState()
     object Checking : UpdateUiState()
@@ -87,11 +90,11 @@ data class SettingsUiState(
     // Battery optimization
     val isBatteryOptimized: Boolean = true,
     // Notification sounds
-    val lowAlertSoundName: String = "Default Alarm",
+    val lowAlertSoundName: String = DEFAULT_ALARM_NAME,
     val lowAlertSoundUri: String? = null,
-    val highAlertSoundName: String = "Default Notification",
+    val highAlertSoundName: String = DEFAULT_NOTIFICATION_NAME,
     val highAlertSoundUri: String? = null,
-    val aiNotificationSoundName: String = "Default Notification",
+    val aiNotificationSoundName: String = DEFAULT_NOTIFICATION_NAME,
     val aiNotificationSoundUri: String? = null,
     val overrideSilentForLow: Boolean = true,
 )
@@ -142,11 +145,11 @@ class SettingsViewModel @Inject constructor(
             dataRetentionDays = appSettingsStore.dataRetentionDays,
             appVersion = BuildConfig.VERSION_NAME,
             buildType = BuildConfig.BUILD_TYPE,
-            lowAlertSoundName = alertSoundStore.lowAlertSoundName ?: "Default Alarm",
+            lowAlertSoundName = alertSoundStore.lowAlertSoundName ?: DEFAULT_ALARM_NAME,
             lowAlertSoundUri = alertSoundStore.lowAlertSoundUri,
-            highAlertSoundName = alertSoundStore.highAlertSoundName ?: "Default Notification",
+            highAlertSoundName = alertSoundStore.highAlertSoundName ?: DEFAULT_NOTIFICATION_NAME,
             highAlertSoundUri = alertSoundStore.highAlertSoundUri,
-            aiNotificationSoundName = alertSoundStore.aiNotificationSoundName ?: "Default Notification",
+            aiNotificationSoundName = alertSoundStore.aiNotificationSoundName ?: DEFAULT_NOTIFICATION_NAME,
             aiNotificationSoundUri = alertSoundStore.aiNotificationSoundUri,
             overrideSilentForLow = alertSoundStore.overrideSilentForLowAlerts,
         )
@@ -393,35 +396,26 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onSoundSelected(category: AlertSoundCategory, uri: Uri?) {
-        // Validate URI is accessible before persisting
-        val validatedUri = if (uri != null) {
+        // Validate URI and resolve display name in a single Ringtone allocation
+        val (validatedUri, displayName) = if (uri != null) {
             try {
                 val ringtone = RingtoneManager.getRingtone(appContext, uri)
-                if (ringtone != null) uri else null
+                if (ringtone != null) {
+                    val title = ringtone.getTitle(appContext) ?: DEFAULT_NOTIFICATION_NAME
+                    ringtone.stop()
+                    uri to title
+                } else {
+                    null to defaultSoundName(category)
+                }
             } catch (_: Exception) {
-                null
+                null to defaultSoundName(category)
             }
         } else {
-            null
+            null to defaultSoundName(category)
         }
 
         val uriString = validatedUri?.toString()
         alertSoundStore.setSoundUri(category, uriString)
-
-        // Resolve display name
-        val displayName = if (validatedUri != null) {
-            try {
-                val ringtone = RingtoneManager.getRingtone(appContext, validatedUri)
-                ringtone?.getTitle(appContext) ?: "Custom Sound"
-            } catch (_: Exception) {
-                "Custom Sound"
-            }
-        } else {
-            when (category) {
-                AlertSoundCategory.LOW_ALERT -> "Default Alarm"
-                AlertSoundCategory.HIGH_ALERT, AlertSoundCategory.AI_NOTIFICATION -> "Default Notification"
-            }
-        }
         alertSoundStore.setSoundName(category, displayName)
 
         // Take persistable URI permission so the sound survives reboots
@@ -446,6 +440,11 @@ class SettingsViewModel @Inject constructor(
             AlertSoundCategory.AI_NOTIFICATION ->
                 _uiState.value.copy(aiNotificationSoundName = displayName, aiNotificationSoundUri = uriString)
         }
+    }
+
+    private fun defaultSoundName(category: AlertSoundCategory): String = when (category) {
+        AlertSoundCategory.LOW_ALERT -> DEFAULT_ALARM_NAME
+        AlertSoundCategory.HIGH_ALERT, AlertSoundCategory.AI_NOTIFICATION -> DEFAULT_NOTIFICATION_NAME
     }
 
     fun setOverrideSilentForLow(enabled: Boolean) {
