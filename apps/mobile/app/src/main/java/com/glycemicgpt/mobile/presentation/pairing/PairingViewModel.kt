@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -53,7 +54,7 @@ class PairingViewModel @Inject constructor(
         scanJob = viewModelScope.launch {
             try {
                 pumpScanner.scan().collect { pump ->
-                    _discoveredPumps.value = _discoveredPumps.value + pump
+                    _discoveredPumps.update { it + pump }
                 }
             } finally {
                 _isScanning.value = false

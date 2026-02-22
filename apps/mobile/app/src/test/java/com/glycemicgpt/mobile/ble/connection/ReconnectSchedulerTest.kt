@@ -50,7 +50,7 @@ class ReconnectSchedulerTest {
     }
 
     @Test
-    fun `total fast phase duration is approximately 4 minutes of delay`() {
+    fun `total fast phase delay is approximately 222 seconds`() {
         // Sum of all fast-phase delays for attempts 1..10
         var total = 0L
         for (attempt in 1..10) {
