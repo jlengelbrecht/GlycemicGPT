@@ -129,6 +129,13 @@ class AlertSoundStore @Inject constructor(
         AlertSoundCategory.AI_NOTIFICATION -> aiChannelVersion
     }
 
+    /**
+     * Increments and returns the new channel version for [category].
+     *
+     * **Threading**: This performs a non-atomic read-modify-write on SharedPreferences.
+     * Callers must hold `AlertNotificationManager.channelLock` to prevent concurrent
+     * increments from producing duplicate version numbers.
+     */
     fun incrementChannelVersion(category: AlertSoundCategory): Int {
         val newVersion = getChannelVersion(category) + 1
         when (category) {
@@ -140,6 +147,13 @@ class AlertSoundStore @Inject constructor(
     }
 
     companion object {
+        /**
+         * Sentinel value stored in SharedPreferences to indicate the user explicitly
+         * chose "Silent" from the ringtone picker. Distinguishes from `null` which
+         * means "no preference set, use system default".
+         */
+        const val SILENT_URI = "silent"
+
         private const val KEY_LOW_SOUND_URI = "low_alert_sound_uri"
         private const val KEY_HIGH_SOUND_URI = "high_alert_sound_uri"
         private const val KEY_AI_SOUND_URI = "ai_notification_sound_uri"

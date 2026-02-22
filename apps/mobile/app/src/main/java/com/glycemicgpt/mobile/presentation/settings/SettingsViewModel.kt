@@ -35,8 +35,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -396,49 +398,65 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onSoundSelected(category: AlertSoundCategory, uri: Uri?) {
-        // Validate URI and resolve display name in a single Ringtone allocation
-        val (validatedUri, displayName) = if (uri != null) {
-            try {
-                val ringtone = RingtoneManager.getRingtone(appContext, uri)
-                if (ringtone != null) {
-                    val title = ringtone.getTitle(appContext) ?: DEFAULT_NOTIFICATION_NAME
-                    ringtone.stop()
-                    uri to title
+        viewModelScope.launch {
+            // null URI from the ringtone picker means "Silent" was selected.
+            // For AI notifications (which offer a silent option), store the sentinel;
+            // for low/high alerts, null means "reset to default".
+            val isSilent = uri == null && category == AlertSoundCategory.AI_NOTIFICATION
+
+            val (validatedUri, displayName) = withContext(Dispatchers.IO) {
+                if (isSilent) {
+                    null to "Silent"
+                } else if (uri != null) {
+                    try {
+                        val ringtone = RingtoneManager.getRingtone(appContext, uri)
+                        if (ringtone != null) {
+                            val title = ringtone.getTitle(appContext) ?: defaultSoundName(category)
+                            ringtone.stop()
+                            uri to title
+                        } else {
+                            null to defaultSoundName(category)
+                        }
+                    } catch (_: Exception) {
+                        null to defaultSoundName(category)
+                    }
                 } else {
                     null to defaultSoundName(category)
                 }
-            } catch (_: Exception) {
-                null to defaultSoundName(category)
             }
-        } else {
-            null to defaultSoundName(category)
-        }
 
-        val uriString = validatedUri?.toString()
-        alertSoundStore.setSoundUri(category, uriString)
-        alertSoundStore.setSoundName(category, displayName)
-
-        // Take persistable URI permission so the sound survives reboots
-        if (validatedUri != null) {
-            try {
-                appContext.contentResolver.takePersistableUriPermission(
-                    validatedUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            } catch (_: SecurityException) {
-                // Some ringtone URIs don't support persistable permissions
+            val uriString = when {
+                isSilent -> AlertSoundStore.SILENT_URI
+                else -> validatedUri?.toString()
             }
-        }
 
-        alertNotificationManager.recreateChannel(category)
+            withContext(Dispatchers.IO) {
+                alertSoundStore.setSoundUri(category, uriString)
+                alertSoundStore.setSoundName(category, displayName)
 
-        _uiState.value = when (category) {
-            AlertSoundCategory.LOW_ALERT ->
-                _uiState.value.copy(lowAlertSoundName = displayName, lowAlertSoundUri = uriString)
-            AlertSoundCategory.HIGH_ALERT ->
-                _uiState.value.copy(highAlertSoundName = displayName, highAlertSoundUri = uriString)
-            AlertSoundCategory.AI_NOTIFICATION ->
-                _uiState.value.copy(aiNotificationSoundName = displayName, aiNotificationSoundUri = uriString)
+                // Take persistable URI permission so the sound survives reboots
+                if (validatedUri != null) {
+                    try {
+                        appContext.contentResolver.takePersistableUriPermission(
+                            validatedUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    } catch (_: SecurityException) {
+                        // Some ringtone URIs don't support persistable permissions
+                    }
+                }
+
+                alertNotificationManager.recreateChannel(category)
+            }
+
+            _uiState.value = when (category) {
+                AlertSoundCategory.LOW_ALERT ->
+                    _uiState.value.copy(lowAlertSoundName = displayName, lowAlertSoundUri = uriString)
+                AlertSoundCategory.HIGH_ALERT ->
+                    _uiState.value.copy(highAlertSoundName = displayName, highAlertSoundUri = uriString)
+                AlertSoundCategory.AI_NOTIFICATION ->
+                    _uiState.value.copy(aiNotificationSoundName = displayName, aiNotificationSoundUri = uriString)
+            }
         }
     }
 

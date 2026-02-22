@@ -830,7 +830,7 @@ private fun AlertSoundsSection(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Text(
-                            text = "Raise alarm volume to max for low glucose alerts. Alerts always bypass DND.",
+                            text = "Raise alarm volume to max for low glucose alerts. Low and high alerts always bypass DND regardless of this setting.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

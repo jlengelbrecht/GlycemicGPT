@@ -80,17 +80,31 @@ class AlertNotificationManager @Inject constructor(
     private fun createChannels() {
         createLowChannel(
             alertSoundStore.lowChannelVersion,
-            alertSoundStore.lowAlertSoundUri?.let(Uri::parse),
+            parseSoundUri(alertSoundStore.lowAlertSoundUri),
         )
         createHighChannel(
             alertSoundStore.highChannelVersion,
-            alertSoundStore.highAlertSoundUri?.let(Uri::parse),
+            parseSoundUri(alertSoundStore.highAlertSoundUri),
         )
         createAiChannel(
             alertSoundStore.aiChannelVersion,
-            alertSoundStore.aiNotificationSoundUri?.let(Uri::parse),
+            parseSoundUri(alertSoundStore.aiNotificationSoundUri),
+            silent = isSilent(alertSoundStore.aiNotificationSoundUri),
         )
     }
+
+    /**
+     * Parses a stored sound URI string. Returns `null` for both unset (`null`)
+     * and explicitly silent ([AlertSoundStore.SILENT_URI]) -- the caller
+     * distinguishes them via the [isSilent] flag on the channel creation method.
+     */
+    private fun parseSoundUri(stored: String?): Uri? = when (stored) {
+        null, AlertSoundStore.SILENT_URI -> null
+        else -> Uri.parse(stored)
+    }
+
+    /** Returns true if the stored URI represents explicit silence. */
+    private fun isSilent(stored: String?): Boolean = stored == AlertSoundStore.SILENT_URI
 
     private fun createLowChannel(version: Int, soundUri: Uri?) {
         val channelId = lowChannelId(version)
@@ -135,7 +149,7 @@ class AlertNotificationManager @Inject constructor(
         manager.createNotificationChannel(channel)
     }
 
-    private fun createAiChannel(version: Int, soundUri: Uri?) {
+    private fun createAiChannel(version: Int, soundUri: Uri?, silent: Boolean = false) {
         val channelId = aiChannelId(version)
         val channel = NotificationChannel(
             channelId,
@@ -143,13 +157,17 @@ class AlertNotificationManager @Inject constructor(
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
             description = "AI analysis insights and daily briefs"
-            setSound(
-                soundUri ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
+            if (silent) {
+                setSound(null, null)
+            } else {
+                setSound(
+                    soundUri ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+            }
         }
         manager.createNotificationChannel(channel)
     }
@@ -171,12 +189,13 @@ class AlertNotificationManager @Inject constructor(
         manager.deleteNotificationChannel(oldChannelId)
 
         val newVersion = alertSoundStore.incrementChannelVersion(category)
-        val soundUri = alertSoundStore.getSoundUri(category)?.let(Uri::parse)
+        val storedUri = alertSoundStore.getSoundUri(category)
+        val soundUri = parseSoundUri(storedUri)
 
         when (category) {
             AlertSoundCategory.LOW_ALERT -> createLowChannel(newVersion, soundUri)
             AlertSoundCategory.HIGH_ALERT -> createHighChannel(newVersion, soundUri)
-            AlertSoundCategory.AI_NOTIFICATION -> createAiChannel(newVersion, soundUri)
+            AlertSoundCategory.AI_NOTIFICATION -> createAiChannel(newVersion, soundUri, silent = isSilent(storedUri))
         }
         Timber.d("Recreated channel %s -> v%d", category.name, newVersion)
     }
@@ -312,9 +331,10 @@ class AlertNotificationManager @Inject constructor(
         try {
             val audioManager = context.getSystemService(AudioManager::class.java)
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
+            savedAlarmVolume = -1 // Only clear after successful restore
             Timber.d("Restored alarm volume to %d", saved)
-        } finally {
-            savedAlarmVolume = -1
+        } catch (e: Exception) {
+            Timber.w(e, "Cannot restore alarm volume to %d; will retry", saved)
         }
     }
 
