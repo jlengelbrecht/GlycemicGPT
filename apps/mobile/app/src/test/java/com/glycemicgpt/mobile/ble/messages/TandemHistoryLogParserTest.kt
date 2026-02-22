@@ -166,6 +166,27 @@ class TandemHistoryLogParserTest {
     }
 
     @Test
+    fun `extractBolusesFromHistoryLogs detects automated bolus`() {
+        // bolusSourceRaw = 7 (Algorithm/Control-IQ) means automated
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1) // bolusId
+        data[2] = 0x00 // deliveryStatus = Completed
+        data[3] = 0x08 // bolusTypeRaw = CORRECTION
+        data[4] = 0x07 // bolusSourceRaw = Algorithm (automated)
+        buf.putShort(14, 1500) // deliveredTotal = 1500 milliunits = 1.5u
+
+        val pumpTime = 572_000_000L
+        val record = recordFromStream(280, pumpTime, 6000, data)
+
+        val result = parser.extractBolusesFromHistoryLogs(listOf(record))
+        assertEquals(1, result.size)
+        assertEquals(1.5f, result[0].units, 0.01f)
+        assertTrue(result[0].isAutomated)
+        assertTrue(result[0].isCorrection)
+    }
+
+    @Test
     fun `extractBolusesFromHistoryLogs rejects zero deliveredTotal`() {
         val data = ByteArray(16)
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)

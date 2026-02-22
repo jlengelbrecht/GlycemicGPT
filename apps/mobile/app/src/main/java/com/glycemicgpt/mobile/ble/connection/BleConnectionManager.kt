@@ -172,7 +172,6 @@ class BleConnectionManager @Inject constructor(
      *
      * Resets reconnect attempt and error counters so the connection starts fresh.
      */
-    @SuppressLint("MissingPermission")
     override fun connect(address: String, pairingCode: String?) {
         connectInternal(address, pairingCode, resetCounters = true)
     }
