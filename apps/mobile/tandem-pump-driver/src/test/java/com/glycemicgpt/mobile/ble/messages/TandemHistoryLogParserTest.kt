@@ -330,6 +330,63 @@ class TandemHistoryLogParserTest {
         assertTrue(parser.extractBasalFromHistoryLogs(listOf(recordHigh), customLimits).isEmpty())
     }
 
+    // -- Bolus dose cap tests ---------------------------------------------------
+
+    @Test
+    fun `extractBolusesFromHistoryLogs accepts bolus at default cap`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1) // bolusId
+        data[2] = 0x00 // deliveryStatus = Completed
+        data[3] = 0x01
+        data[4] = 0x01
+        buf.putShort(14, 25000.toShort()) // 25000mu = 25u (default cap)
+        val record = recordFromStream(280, 572_000_000L, 5200, data)
+        val result = parser.extractBolusesFromHistoryLogs(listOf(record))
+        assertEquals(1, result.size)
+        assertEquals(25.0f, result[0].units, 0.01f)
+    }
+
+    @Test
+    fun `extractBolusesFromHistoryLogs rejects bolus above default cap`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1)
+        data[2] = 0x00
+        data[3] = 0x01
+        data[4] = 0x01
+        buf.putShort(14, 25001.toShort()) // 25001mu > 25000mu cap
+        val record = recordFromStream(280, 572_000_000L, 5201, data)
+        assertTrue(parser.extractBolusesFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
+    @Test
+    fun `extractBolusesFromHistoryLogs uses custom max bolus dose`() {
+        val customLimits = SafetyLimits(maxBolusDoseMilliunits = 10_000) // 10u cap
+
+        // 8u should pass
+        val dataOk = ByteArray(16)
+        val bufOk = ByteBuffer.wrap(dataOk).order(ByteOrder.LITTLE_ENDIAN)
+        bufOk.putShort(0, 1)
+        dataOk[2] = 0x00
+        dataOk[3] = 0x01
+        dataOk[4] = 0x01
+        bufOk.putShort(14, 8000.toShort())
+        val recordOk = recordFromStream(280, 572_000_000L, 5300, dataOk)
+        assertEquals(1, parser.extractBolusesFromHistoryLogs(listOf(recordOk), customLimits).size)
+
+        // 12u should be rejected (above custom 10u cap)
+        val dataHigh = ByteArray(16)
+        val bufHigh = ByteBuffer.wrap(dataHigh).order(ByteOrder.LITTLE_ENDIAN)
+        bufHigh.putShort(0, 1)
+        dataHigh[2] = 0x00
+        dataHigh[3] = 0x01
+        dataHigh[4] = 0x01
+        bufHigh.putShort(14, 12000.toShort())
+        val recordHigh = recordFromStream(280, 572_000_000L, 5301, dataHigh)
+        assertTrue(parser.extractBolusesFromHistoryLogs(listOf(recordHigh), customLimits).isEmpty())
+    }
+
     // -- Bolus started-event rejection test -----------------------------------
 
     @Test

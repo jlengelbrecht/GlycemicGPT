@@ -703,7 +703,7 @@ object StatusResponseParser {
      * @param pumpTimeSec raw pump timestamp (seconds since Tandem epoch)
      * @return BolusEvent or null if status is not Completed or data is invalid
      */
-    fun parseBolusDeliveryPayload(data: ByteArray, pumpTimeSec: Long): BolusEvent? {
+    fun parseBolusDeliveryPayload(data: ByteArray, pumpTimeSec: Long, limits: SafetyLimits = SafetyLimits()): BolusEvent? {
         if (data.size < 16) return null
 
         val deliveryStatus = data[2].toInt() and 0xFF
@@ -711,7 +711,8 @@ object StatusResponseParser {
 
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         val deliveredTotalMu = buf.getShort(14).toInt() and 0xFFFF
-        if (deliveredTotalMu == 0) return null // uint16 field; max 65535mu = 65.5u, always within pump limits
+        if (deliveredTotalMu == 0) return null
+        if (deliveredTotalMu > limits.maxBolusDoseMilliunits) return null
 
         val bolusTypeRaw = data[3].toInt() and 0xFF
         val bolusSourceRaw = data[4].toInt() and 0xFF
@@ -745,7 +746,7 @@ object StatusResponseParser {
                 val rawBytes = Base64.decode(record.rawBytesB64, Base64.NO_WRAP)
                 if (rawBytes.size < STREAM_RECORD_SIZE) return@mapNotNull null
                 val payload = rawBytes.copyOfRange(10, 26)
-                parseBolusDeliveryPayload(payload, record.pumpTimeSeconds)
+                parseBolusDeliveryPayload(payload, record.pumpTimeSeconds, limits)
             }
             .sortedBy { it.timestamp }
     }

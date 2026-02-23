@@ -16,4 +16,6 @@ android {
 
 dependencies {
     api(libs.coroutines.core)
+
+    testImplementation(libs.junit)
 }

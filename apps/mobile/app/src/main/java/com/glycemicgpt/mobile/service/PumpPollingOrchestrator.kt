@@ -374,11 +374,11 @@ class PumpPollingOrchestrator @Inject constructor(
                     backendSyncManager?.triggerSync()
                     Timber.d("Saved %d raw history log records", records.size)
 
-                    // Build safety limits from user's configured glucose range
-                    val limits = SafetyLimits(
-                        minGlucoseMgDl = glucoseRangeStore.urgentLow,
-                        maxGlucoseMgDl = glucoseRangeStore.urgentHigh,
-                    )
+                    // Use default SafetyLimits for data validity (sensor range 20-500 mg/dL).
+                    // Do NOT use alert thresholds (urgentLow/urgentHigh) here -- those are
+                    // user alert preferences (e.g., urgentHigh=250), not sensor validity
+                    // bounds. Using them would silently drop real readings above 250 mg/dL.
+                    val limits = SafetyLimits()
 
                     // Extract CGM readings from history logs to fill chart gaps
                     val cgmReadings = historyLogParser.extractCgmFromHistoryLogs(records, limits)

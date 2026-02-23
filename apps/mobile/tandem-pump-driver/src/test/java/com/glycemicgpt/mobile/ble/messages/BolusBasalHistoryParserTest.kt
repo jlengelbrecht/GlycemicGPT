@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.ble.messages
 import android.util.Base64
 import com.glycemicgpt.mobile.domain.model.ControlIqMode
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
+import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
@@ -160,13 +161,21 @@ class BolusBasalHistoryParserTest {
     }
 
     @Test
-    fun `parseBolusDeliveryPayload with large deliveredTotal accepted`() {
-        // uint16 field: max is 65535 milliunits = 65.535 units
-        // Large but valid -- uint16 naturally bounds the value
+    fun `parseBolusDeliveryPayload with large deliveredTotal rejected by default cap`() {
+        // 60000mu = 60u exceeds default cap of 25000mu (25u)
         val data = buildBolusData(deliveredTotal = 60000)
         val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseBolusDeliveryPayload accepts bolus at absolute ceiling`() {
+        // Absolute max bolus is 50000mu (50u) -- verify a 50u dose is accepted
+        val permissive = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
+        val data = buildBolusData(deliveredTotal = 50000)
+        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, permissive)
         assertNotNull(result)
-        assertEquals(60.0f, result!!.units, 0.001f)
+        assertEquals(50.0f, result!!.units, 0.001f)
     }
 
     @Test
@@ -374,12 +383,20 @@ class BolusBasalHistoryParserTest {
     // =======================================================================
 
     @Test
-    fun `parseBolusDeliveryPayload accepts max uint16 value`() {
-        // uint16 max is 65535 milliunits = 65.535u, well below 250u safety limit
+    fun `parseBolusDeliveryPayload rejects max uint16 value with default limits`() {
+        // uint16 max is 65535mu = 65.535u, exceeds default cap of 25u
         val data = buildBolusData(deliveredTotal = 65535)
         val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime)
-        assertNotNull(result)
-        assertEquals(65.535f, result!!.units, 0.001f)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseBolusDeliveryPayload rejects uint16 max even with permissive limits`() {
+        // uint16 max is 65535mu = 65.535u, exceeds absolute ceiling of 50u
+        val permissive = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
+        val data = buildBolusData(deliveredTotal = 65535)
+        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, permissive)
+        assertNull(result)
     }
 
     @Test

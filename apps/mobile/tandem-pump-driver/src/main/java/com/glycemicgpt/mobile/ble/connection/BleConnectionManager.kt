@@ -1123,8 +1123,8 @@ class BleConnectionManager @Inject constructor(
         val nonce = jpakeAuthenticator.getServerNonce()
         if (secret != null && nonce != null) {
             credentialStore.saveJpakeCredentials(
-                derivedSecretHex = secret.joinToString("") { "%02x".format(it) },
-                serverNonceHex = nonce.joinToString("") { "%02x".format(it) },
+                derivedSecretHex = secret.joinToString("") { "%02x".format(it.toInt() and 0xFF) },
+                serverNonceHex = nonce.joinToString("") { "%02x".format(it.toInt() and 0xFF) },
             )
             Timber.d("JPAKE credentials saved for confirmation mode reconnect")
         }
