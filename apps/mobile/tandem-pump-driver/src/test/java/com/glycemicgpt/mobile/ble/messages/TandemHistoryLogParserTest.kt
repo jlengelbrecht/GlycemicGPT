@@ -194,6 +194,105 @@ class TandemHistoryLogParserTest {
         assertTrue(result.isEmpty())
     }
 
+    // -- CGM glucose range boundary tests (medical safety: 20-500 mg/dL) ----
+
+    @Test
+    fun `extractCgmFromHistoryLogs accepts glucose at lower bound 20`() {
+        val data = ByteArray(16)
+        data[2] = 0x01
+        val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(20).array()
+        data[6] = glucoseBytes[0]; data[7] = glucoseBytes[1]
+        val record = recordFromStream(399, 572_000_000L, 1100, data)
+        val result = parser.extractCgmFromHistoryLogs(listOf(record))
+        assertEquals(1, result.size)
+        assertEquals(20, result[0].glucoseMgDl)
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs accepts glucose at upper bound 500`() {
+        val data = ByteArray(16)
+        data[2] = 0x01
+        val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(500).array()
+        data[6] = glucoseBytes[0]; data[7] = glucoseBytes[1]
+        val record = recordFromStream(399, 572_000_000L, 1101, data)
+        val result = parser.extractCgmFromHistoryLogs(listOf(record))
+        assertEquals(1, result.size)
+        assertEquals(500, result[0].glucoseMgDl)
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs rejects glucose below lower bound`() {
+        val data = ByteArray(16)
+        data[2] = 0x01
+        val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(19).array()
+        data[6] = glucoseBytes[0]; data[7] = glucoseBytes[1]
+        val record = recordFromStream(399, 572_000_000L, 1102, data)
+        assertTrue(parser.extractCgmFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs rejects glucose above upper bound`() {
+        val data = ByteArray(16)
+        data[2] = 0x01
+        val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(501).array()
+        data[6] = glucoseBytes[0]; data[7] = glucoseBytes[1]
+        val record = recordFromStream(399, 572_000_000L, 1103, data)
+        assertTrue(parser.extractCgmFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
+    @Test
+    fun `extractCgmFromHistoryLogs rejects glucose of zero`() {
+        val data = ByteArray(16)
+        data[2] = 0x01
+        val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(0).array()
+        data[6] = glucoseBytes[0]; data[7] = glucoseBytes[1]
+        val record = recordFromStream(399, 572_000_000L, 1104, data)
+        assertTrue(parser.extractCgmFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
+    // -- Basal rate hard cap boundary test (medical safety: max 25 u/hr) ------
+
+    @Test
+    fun `extractBasalFromHistoryLogs rejects rate above hard cap`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1)
+        buf.putShort(4, 800)
+        // 25001 milliunits/hr = 25.001 u/hr -- exceeds 25 u/hr cap
+        buf.putShort(6, 25001.toShort())
+        val record = recordFromStream(279, 572_000_000L, 3100, data)
+        assertTrue(parser.extractBasalFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
+    @Test
+    fun `extractBasalFromHistoryLogs accepts rate at hard cap`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1)
+        buf.putShort(4, 800)
+        // 25000 milliunits/hr = 25.0 u/hr -- exactly at cap
+        buf.putShort(6, 25000.toShort())
+        val record = recordFromStream(279, 572_000_000L, 3101, data)
+        val result = parser.extractBasalFromHistoryLogs(listOf(record))
+        assertEquals(1, result.size)
+        assertEquals(25.0f, result[0].rate, 0.01f)
+    }
+
+    // -- Bolus started-event rejection test -----------------------------------
+
+    @Test
+    fun `extractBolusesFromHistoryLogs rejects Started status`() {
+        val data = ByteArray(16)
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putShort(0, 1)
+        data[2] = 0x01 // deliveryStatus = Started (not Completed)
+        data[3] = 0x01
+        data[4] = 0x01
+        buf.putShort(14, 2500)
+        val record = recordFromStream(280, 572_000_000L, 5100, data)
+        assertTrue(parser.extractBolusesFromHistoryLogs(listOf(record)).isEmpty())
+    }
+
     @Test
     fun `ignores unknown event types`() {
         val data = ByteArray(16)
