@@ -34,7 +34,6 @@ class SafetyLimits(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
-        index=True,
     )
 
     min_glucose_mgdl: Mapped[int] = mapped_column(

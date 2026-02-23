@@ -42,11 +42,14 @@ class SafetyLimitsStore @Inject constructor(
      * single SharedPreferences transaction. Only called from backend sync.
      */
     fun updateAll(min: Int, max: Int, basal: Int, bolus: Int) {
+        // Clamp to absolute hardware bounds before persisting so all access
+        // paths (including direct property reads) return safe values.
+        val clamped = SafetyLimits.safeOf(min, max, basal, bolus)
         prefs.edit()
-            .putInt(KEY_MIN_GLUCOSE, min)
-            .putInt(KEY_MAX_GLUCOSE, max)
-            .putInt(KEY_MAX_BASAL, basal)
-            .putInt(KEY_MAX_BOLUS, bolus)
+            .putInt(KEY_MIN_GLUCOSE, clamped.minGlucoseMgDl)
+            .putInt(KEY_MAX_GLUCOSE, clamped.maxGlucoseMgDl)
+            .putInt(KEY_MAX_BASAL, clamped.maxBasalRateMilliunits)
+            .putInt(KEY_MAX_BOLUS, clamped.maxBolusDoseMilliunits)
             .putLong(KEY_LAST_FETCHED, System.currentTimeMillis())
             .commit()
     }

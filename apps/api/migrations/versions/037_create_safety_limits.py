@@ -24,6 +24,7 @@ def upgrade() -> None:
             "id",
             postgresql.UUID(as_uuid=True),
             primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
             "user_id",

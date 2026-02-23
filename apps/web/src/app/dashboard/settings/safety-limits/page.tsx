@@ -99,6 +99,10 @@ export default function SafetyLimitsPage() {
         max_bolus_dose_milliunits: FALLBACK_DEFAULTS.max_bolus_dose_milliunits,
         updated_at: "",
       });
+      setMinGlucose(String(FALLBACK_DEFAULTS.min_glucose_mgdl));
+      setMaxGlucose(String(FALLBACK_DEFAULTS.max_glucose_mgdl));
+      setMaxBasal(milliunitsToUnits(FALLBACK_DEFAULTS.max_basal_rate_milliunits));
+      setMaxBolus(milliunitsToUnits(FALLBACK_DEFAULTS.max_bolus_dose_milliunits));
     } finally {
       setIsLoading(false);
     }
@@ -114,6 +118,11 @@ export default function SafetyLimitsPage() {
     return () => clearTimeout(timer);
   }, [success]);
 
+  const cancelAction = useCallback(() => {
+    setShowConfirm(false);
+    setPendingAction(null);
+  }, []);
+
   // Dismiss confirmation dialog on Escape key
   useEffect(() => {
     if (!showConfirm) return;
@@ -122,7 +131,7 @@ export default function SafetyLimitsPage() {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [showConfirm]);
+  }, [showConfirm, cancelAction]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,6 +154,14 @@ export default function SafetyLimitsPage() {
 
     if (minG >= maxG) {
       setError("Minimum glucose must be less than maximum glucose");
+      return;
+    }
+
+    const basalMu = unitsToMilliunits(basalU);
+    const bolusMu = unitsToMilliunits(bolusU);
+    if (minG < 20 || minG > 499 || maxG < 21 || maxG > 500 ||
+        basalMu < 1 || basalMu > 15000 || bolusMu < 1 || bolusMu > 25000) {
+      setError("One or more values are outside the allowed range");
       return;
     }
 
@@ -173,6 +190,8 @@ export default function SafetyLimitsPage() {
         max_bolus_dose_milliunits: bolusMu,
       });
       setLimits(updated);
+      setMinGlucose(String(updated.min_glucose_mgdl));
+      setMaxGlucose(String(updated.max_glucose_mgdl));
       setMaxBasal(milliunitsToUnits(updated.max_basal_rate_milliunits));
       setMaxBolus(milliunitsToUnits(updated.max_bolus_dose_milliunits));
       setSuccess("Safety limits updated successfully");
@@ -228,11 +247,6 @@ export default function SafetyLimitsPage() {
     setPendingAction(null);
   };
 
-  const cancelAction = () => {
-    setShowConfirm(false);
-    setPendingAction(null);
-  };
-
   const minGNum = parseInt(minGlucose, 10);
   const maxGNum = parseInt(maxGlucose, 10);
   const basalNum = parseFloat(maxBasal);
@@ -261,8 +275,11 @@ export default function SafetyLimitsPage() {
     bolusMuNum >= 1 &&
     bolusMuNum <= 25000;
 
+  // Auth guard: wait for user context to resolve
+  if (!user) return null;
+
   // Role guard: only diabetic users and admins should access this page
-  if (user?.role === "caregiver") {
+  if (user.role === "caregiver") {
     return (
       <div className="space-y-6">
         <div>
@@ -366,6 +383,7 @@ export default function SafetyLimitsPage() {
         <div
           className="bg-amber-500/10 rounded-xl p-4 border border-amber-500/30"
           role="alertdialog"
+          aria-modal="true"
           aria-label="Confirm safety limits change"
         >
           <div className="flex items-start gap-3">
