@@ -5,6 +5,7 @@ import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.pump.HistoryLogParser
+import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,12 +18,12 @@ import javax.inject.Singleton
 @Singleton
 class TandemHistoryLogParser @Inject constructor() : HistoryLogParser {
 
-    override fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>): List<CgmReading> =
-        StatusResponseParser.extractCgmFromHistoryLogs(records)
+    override fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>, limits: SafetyLimits): List<CgmReading> =
+        StatusResponseParser.extractCgmFromHistoryLogs(records, limits)
 
-    override fun extractBolusesFromHistoryLogs(records: List<HistoryLogRecord>): List<BolusEvent> =
-        StatusResponseParser.extractBolusesFromHistoryLogs(records)
+    override fun extractBolusesFromHistoryLogs(records: List<HistoryLogRecord>, limits: SafetyLimits): List<BolusEvent> =
+        StatusResponseParser.extractBolusesFromHistoryLogs(records, limits)
 
-    override fun extractBasalFromHistoryLogs(records: List<HistoryLogRecord>): List<BasalReading> =
-        StatusResponseParser.extractBasalFromHistoryLogs(records)
+    override fun extractBasalFromHistoryLogs(records: List<HistoryLogRecord>, limits: SafetyLimits): List<BasalReading> =
+        StatusResponseParser.extractBasalFromHistoryLogs(records, limits)
 }

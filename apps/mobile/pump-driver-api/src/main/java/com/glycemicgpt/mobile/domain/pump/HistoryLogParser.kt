@@ -11,18 +11,32 @@ import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
  * History logs are pump-agnostic [HistoryLogRecord]s containing raw bytes.
  * Each pump implementation knows how to parse its own event format and
  * extract domain-level CGM readings, bolus events, and basal readings.
+ *
+ * All extraction methods accept [SafetyLimits] from the user's configured
+ * settings. Implementations must use these limits to reject out-of-range
+ * values rather than relying on hardcoded constants.
  */
 interface HistoryLogParser {
 
     /**
      * Extract CGM readings from raw history log records.
-     * Implementations must discard any reading outside the valid range (20-500 mg/dL).
+     * Implementations must discard any reading outside the glucose range
+     * defined by [limits].
      */
-    fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>): List<CgmReading>
+    fun extractCgmFromHistoryLogs(
+        records: List<HistoryLogRecord>,
+        limits: SafetyLimits = SafetyLimits(),
+    ): List<CgmReading>
 
     /** Extract bolus delivery events from raw history log records. */
-    fun extractBolusesFromHistoryLogs(records: List<HistoryLogRecord>): List<BolusEvent>
+    fun extractBolusesFromHistoryLogs(
+        records: List<HistoryLogRecord>,
+        limits: SafetyLimits = SafetyLimits(),
+    ): List<BolusEvent>
 
     /** Extract basal delivery events from raw history log records. */
-    fun extractBasalFromHistoryLogs(records: List<HistoryLogRecord>): List<BasalReading>
+    fun extractBasalFromHistoryLogs(
+        records: List<HistoryLogRecord>,
+        limits: SafetyLimits = SafetyLimits(),
+    ): List<BasalReading>
 }

@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
 import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.pump.HistoryLogParser
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
+import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import com.glycemicgpt.mobile.wear.WearDataSender
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -373,15 +374,21 @@ class PumpPollingOrchestrator @Inject constructor(
                     backendSyncManager?.triggerSync()
                     Timber.d("Saved %d raw history log records", records.size)
 
+                    // Build safety limits from user's configured glucose range
+                    val limits = SafetyLimits(
+                        minGlucoseMgDl = glucoseRangeStore.urgentLow,
+                        maxGlucoseMgDl = glucoseRangeStore.urgentHigh,
+                    )
+
                     // Extract CGM readings from history logs to fill chart gaps
-                    val cgmReadings = historyLogParser.extractCgmFromHistoryLogs(records)
+                    val cgmReadings = historyLogParser.extractCgmFromHistoryLogs(records, limits)
                     if (cgmReadings.isNotEmpty()) {
                         repository.saveCgmBatch(cgmReadings)
                         Timber.d("Backfilled %d CGM readings from history logs", cgmReadings.size)
                     }
 
                     // Extract bolus events from history logs
-                    val bolusEvents = historyLogParser.extractBolusesFromHistoryLogs(records)
+                    val bolusEvents = historyLogParser.extractBolusesFromHistoryLogs(records, limits)
                     if (bolusEvents.isNotEmpty()) {
                         repository.saveBoluses(bolusEvents)
                         syncEnqueuer.enqueueBoluses(bolusEvents)
@@ -389,7 +396,7 @@ class PumpPollingOrchestrator @Inject constructor(
                     }
 
                     // Extract basal delivery events from history logs
-                    val basalReadings = historyLogParser.extractBasalFromHistoryLogs(records)
+                    val basalReadings = historyLogParser.extractBasalFromHistoryLogs(records, limits)
                     if (basalReadings.isNotEmpty()) {
                         repository.saveBasalBatch(basalReadings)
                         syncEnqueuer.enqueueBasalBatch(basalReadings)

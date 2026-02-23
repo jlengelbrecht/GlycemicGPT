@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.ble.messages
 import android.util.Base64
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.pump.HistoryLogParser
+import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
@@ -194,10 +195,10 @@ class TandemHistoryLogParserTest {
         assertTrue(result.isEmpty())
     }
 
-    // -- CGM glucose range boundary tests (medical safety: 20-500 mg/dL) ----
+    // -- SafetyLimits boundary tests ------------------------------------------
 
     @Test
-    fun `extractCgmFromHistoryLogs accepts glucose at lower bound 20`() {
+    fun `extractCgmFromHistoryLogs accepts glucose at default lower bound`() {
         val data = ByteArray(16)
         data[2] = 0x01
         val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(20).array()
@@ -209,7 +210,7 @@ class TandemHistoryLogParserTest {
     }
 
     @Test
-    fun `extractCgmFromHistoryLogs accepts glucose at upper bound 500`() {
+    fun `extractCgmFromHistoryLogs accepts glucose at default upper bound`() {
         val data = ByteArray(16)
         data[2] = 0x01
         val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(500).array()
@@ -221,7 +222,7 @@ class TandemHistoryLogParserTest {
     }
 
     @Test
-    fun `extractCgmFromHistoryLogs rejects glucose below lower bound`() {
+    fun `extractCgmFromHistoryLogs rejects glucose below default lower bound`() {
         val data = ByteArray(16)
         data[2] = 0x01
         val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(19).array()
@@ -231,7 +232,7 @@ class TandemHistoryLogParserTest {
     }
 
     @Test
-    fun `extractCgmFromHistoryLogs rejects glucose above upper bound`() {
+    fun `extractCgmFromHistoryLogs rejects glucose above default upper bound`() {
         val data = ByteArray(16)
         data[2] = 0x01
         val glucoseBytes = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(501).array()
@@ -250,32 +251,83 @@ class TandemHistoryLogParserTest {
         assertTrue(parser.extractCgmFromHistoryLogs(listOf(record)).isEmpty())
     }
 
-    // -- Basal rate hard cap boundary test (medical safety: max 25 u/hr) ------
+    @Test
+    fun `extractCgmFromHistoryLogs uses custom SafetyLimits`() {
+        // User sets a tighter range: 40-300 mg/dL
+        val customLimits = SafetyLimits(minGlucoseMgDl = 40, maxGlucoseMgDl = 300)
+
+        // 120 mg/dL should pass (within range)
+        val data120 = ByteArray(16)
+        data120[2] = 0x01
+        val g120 = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(120).array()
+        data120[6] = g120[0]; data120[7] = g120[1]
+        val record120 = recordFromStream(399, 572_000_000L, 1200, data120)
+        assertEquals(1, parser.extractCgmFromHistoryLogs(listOf(record120), customLimits).size)
+
+        // 350 mg/dL should be rejected (above custom max of 300)
+        val data350 = ByteArray(16)
+        data350[2] = 0x01
+        val g350 = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(350).array()
+        data350[6] = g350[0]; data350[7] = g350[1]
+        val record350 = recordFromStream(399, 572_000_000L, 1201, data350)
+        assertTrue(parser.extractCgmFromHistoryLogs(listOf(record350), customLimits).isEmpty())
+
+        // 30 mg/dL should be rejected (below custom min of 40)
+        val data30 = ByteArray(16)
+        data30[2] = 0x01
+        val g30 = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(30).array()
+        data30[6] = g30[0]; data30[7] = g30[1]
+        val record30 = recordFromStream(399, 572_000_000L, 1202, data30)
+        assertTrue(parser.extractCgmFromHistoryLogs(listOf(record30), customLimits).isEmpty())
+    }
+
+    // -- Basal rate boundary tests with SafetyLimits --------------------------
 
     @Test
-    fun `extractBasalFromHistoryLogs rejects rate above hard cap`() {
+    fun `extractBasalFromHistoryLogs rejects rate above default cap`() {
         val data = ByteArray(16)
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(0, 1)
         buf.putShort(4, 800)
-        // 25001 milliunits/hr = 25.001 u/hr -- exceeds 25 u/hr cap
         buf.putShort(6, 25001.toShort())
         val record = recordFromStream(279, 572_000_000L, 3100, data)
         assertTrue(parser.extractBasalFromHistoryLogs(listOf(record)).isEmpty())
     }
 
     @Test
-    fun `extractBasalFromHistoryLogs accepts rate at hard cap`() {
+    fun `extractBasalFromHistoryLogs accepts rate at default cap`() {
         val data = ByteArray(16)
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(0, 1)
         buf.putShort(4, 800)
-        // 25000 milliunits/hr = 25.0 u/hr -- exactly at cap
         buf.putShort(6, 25000.toShort())
         val record = recordFromStream(279, 572_000_000L, 3101, data)
         val result = parser.extractBasalFromHistoryLogs(listOf(record))
         assertEquals(1, result.size)
         assertEquals(25.0f, result[0].rate, 0.01f)
+    }
+
+    @Test
+    fun `extractBasalFromHistoryLogs uses custom max basal rate`() {
+        val customLimits = SafetyLimits(maxBasalRateMilliunits = 10_000) // 10 u/hr
+
+        // 8 u/hr should pass
+        val dataOk = ByteArray(16)
+        val bufOk = ByteBuffer.wrap(dataOk).order(ByteOrder.LITTLE_ENDIAN)
+        bufOk.putShort(0, 1)
+        bufOk.putShort(4, 800)
+        bufOk.putShort(6, 8000.toShort())
+        val recordOk = recordFromStream(279, 572_000_000L, 3200, dataOk)
+        assertEquals(1, parser.extractBasalFromHistoryLogs(listOf(recordOk), customLimits).size)
+
+        // 12 u/hr should be rejected (above custom max of 10)
+        val dataHigh = ByteArray(16)
+        val bufHigh = ByteBuffer.wrap(dataHigh).order(ByteOrder.LITTLE_ENDIAN)
+        bufHigh.putShort(0, 1)
+        bufHigh.putShort(4, 800)
+        bufHigh.putShort(6, 12000.toShort())
+        val recordHigh = recordFromStream(279, 572_000_000L, 3201, dataHigh)
+        assertTrue(parser.extractBasalFromHistoryLogs(listOf(recordHigh), customLimits).isEmpty())
     }
 
     // -- Bolus started-event rejection test -----------------------------------
