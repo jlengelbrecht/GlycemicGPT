@@ -628,6 +628,12 @@ private fun PluginsSection(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Community plugins coming soon. Currently only built-in plugins are available.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
