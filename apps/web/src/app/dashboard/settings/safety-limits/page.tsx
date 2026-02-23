@@ -114,6 +114,16 @@ export default function SafetyLimitsPage() {
     return () => clearTimeout(timer);
   }, [success]);
 
+  // Dismiss confirmation dialog on Escape key
+  useEffect(() => {
+    if (!showConfirm) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelAction();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [showConfirm]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
