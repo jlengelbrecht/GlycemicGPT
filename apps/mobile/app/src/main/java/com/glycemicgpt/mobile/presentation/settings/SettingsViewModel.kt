@@ -13,6 +13,8 @@ import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AlertSoundCategory
 import com.glycemicgpt.mobile.data.local.AlertSoundStore
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
+import com.glycemicgpt.mobile.domain.plugin.PluginMetadata
+import com.glycemicgpt.mobile.plugin.PluginRegistry
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
 import com.glycemicgpt.mobile.data.local.SafetyLimitsStore
@@ -70,6 +72,9 @@ data class SettingsUiState(
     // Pump
     val isPumpPaired: Boolean = false,
     val pairedPumpAddress: String? = null,
+    // Plugins
+    val availablePlugins: List<PluginMetadata> = emptyList(),
+    val activePumpPluginId: String? = null,
     // Sync
     val backendSyncEnabled: Boolean = true,
     val dataRetentionDays: Int = 7,
@@ -114,6 +119,7 @@ class SettingsViewModel @Inject constructor(
     private val authManager: AuthManager,
     private val alertSoundStore: AlertSoundStore,
     private val alertNotificationManager: AlertNotificationManager,
+    private val pluginRegistry: PluginRegistry,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -156,6 +162,8 @@ class SettingsViewModel @Inject constructor(
             aiNotificationSoundName = alertSoundStore.aiNotificationSoundName ?: DEFAULT_NOTIFICATION_NAME,
             aiNotificationSoundUri = alertSoundStore.aiNotificationSoundUri,
             overrideSilentForLow = alertSoundStore.overrideSilentForLowAlerts,
+            availablePlugins = pluginRegistry.availablePlugins.value,
+            activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
         )
 
         checkBatteryOptimization()
@@ -286,6 +294,20 @@ class SettingsViewModel @Inject constructor(
             isPumpPaired = false,
             pairedPumpAddress = null,
             showUnpairConfirm = false,
+        )
+    }
+
+    fun activatePlugin(pluginId: String) {
+        pluginRegistry.activatePlugin(pluginId)
+        _uiState.value = _uiState.value.copy(
+            activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+        )
+    }
+
+    fun deactivatePlugin(pluginId: String) {
+        pluginRegistry.deactivatePlugin(pluginId)
+        _uiState.value = _uiState.value.copy(
+            activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
         )
     }
 
