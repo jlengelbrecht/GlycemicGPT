@@ -63,6 +63,55 @@ class SafetyLimitsTest {
         SafetyLimits(maxBolusDoseMilliunits = 50_001)
     }
 
+    // -- safeOf() factory tests ------------------------------------------------
+
+    @Test
+    fun `safeOf clamps minGlucose below absolute floor`() {
+        val limits = SafetyLimits.safeOf(minGlucoseMgDl = -10)
+        assertEquals(SafetyLimits.ABSOLUTE_MIN_GLUCOSE, limits.minGlucoseMgDl)
+    }
+
+    @Test
+    fun `safeOf clamps maxGlucose above absolute ceiling`() {
+        val limits = SafetyLimits.safeOf(maxGlucoseMgDl = 2000)
+        assertEquals(SafetyLimits.ABSOLUTE_MAX_GLUCOSE, limits.maxGlucoseMgDl)
+    }
+
+    @Test
+    fun `safeOf clamps basal rate to absolute bounds`() {
+        val limits = SafetyLimits.safeOf(maxBasalRateMilliunits = 100_000)
+        assertEquals(SafetyLimits.ABSOLUTE_MAX_BASAL_MILLIUNITS, limits.maxBasalRateMilliunits)
+    }
+
+    @Test
+    fun `safeOf clamps bolus dose to absolute bounds`() {
+        val limits = SafetyLimits.safeOf(maxBolusDoseMilliunits = 0)
+        assertEquals(1, limits.maxBolusDoseMilliunits)
+    }
+
+    @Test
+    fun `safeOf ensures min is less than max glucose`() {
+        val limits = SafetyLimits.safeOf(minGlucoseMgDl = 500, maxGlucoseMgDl = 300)
+        // min gets clamped to ABSOLUTE_MAX - 1 = 998, max gets clamped to min+1 = 999
+        assert(limits.minGlucoseMgDl < limits.maxGlucoseMgDl)
+    }
+
+    @Test
+    fun `safeOf with valid values passes through unchanged`() {
+        val limits = SafetyLimits.safeOf(
+            minGlucoseMgDl = 40,
+            maxGlucoseMgDl = 400,
+            maxBasalRateMilliunits = 10_000,
+            maxBolusDoseMilliunits = 15_000,
+        )
+        assertEquals(40, limits.minGlucoseMgDl)
+        assertEquals(400, limits.maxGlucoseMgDl)
+        assertEquals(10_000, limits.maxBasalRateMilliunits)
+        assertEquals(15_000, limits.maxBolusDoseMilliunits)
+    }
+
+    // -- boundary tests -------------------------------------------------------
+
     @Test
     fun `accepts boundary values at absolute limits`() {
         val limits = SafetyLimits(

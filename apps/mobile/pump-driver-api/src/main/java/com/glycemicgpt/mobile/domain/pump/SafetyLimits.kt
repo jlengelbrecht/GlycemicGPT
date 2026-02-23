@@ -51,5 +51,26 @@ data class SafetyLimits(
         const val ABSOLUTE_MAX_GLUCOSE = 999
         const val ABSOLUTE_MAX_BASAL_MILLIUNITS = 50_000 // 50 u/hr
         const val ABSOLUTE_MAX_BOLUS_MILLIUNITS = 50_000 // 50 u single dose
+
+        /**
+         * Safe factory that clamps values to absolute bounds instead of throwing.
+         *
+         * Use this when constructing from untrusted input (e.g., backend config)
+         * where a crash would be worse than clamped values. The constructor's
+         * [require] checks are intentionally strict for programmatic callers;
+         * this factory is lenient for external data.
+         */
+        fun safeOf(
+            minGlucoseMgDl: Int = DEFAULT_MIN_GLUCOSE,
+            maxGlucoseMgDl: Int = DEFAULT_MAX_GLUCOSE,
+            maxBasalRateMilliunits: Int = DEFAULT_MAX_BASAL_MILLIUNITS,
+            maxBolusDoseMilliunits: Int = DEFAULT_MAX_BOLUS_MILLIUNITS,
+        ): SafetyLimits {
+            val clampedMin = minGlucoseMgDl.coerceIn(ABSOLUTE_MIN_GLUCOSE, ABSOLUTE_MAX_GLUCOSE - 1)
+            val clampedMax = maxGlucoseMgDl.coerceIn(clampedMin + 1, ABSOLUTE_MAX_GLUCOSE)
+            val clampedBasal = maxBasalRateMilliunits.coerceIn(1, ABSOLUTE_MAX_BASAL_MILLIUNITS)
+            val clampedBolus = maxBolusDoseMilliunits.coerceIn(1, ABSOLUTE_MAX_BOLUS_MILLIUNITS)
+            return SafetyLimits(clampedMin, clampedMax, clampedBasal, clampedBolus)
+        }
     }
 }

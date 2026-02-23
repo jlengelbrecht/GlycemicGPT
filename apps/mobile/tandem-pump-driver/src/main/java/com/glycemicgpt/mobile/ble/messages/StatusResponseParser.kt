@@ -29,7 +29,7 @@ import java.time.ZoneOffset
  * Byte layouts verified against jwoglom/pumpX2 (MIT) source and test vectors.
  * All parsers return null on malformed cargo instead of throwing.
  */
-object StatusResponseParser {
+internal object StatusResponseParser {
 
     /** Unix timestamp of January 1, 2008 00:00:00 UTC.
      *  Used as a base offset for pump timestamps. The pump counts seconds
@@ -837,7 +837,7 @@ object StatusResponseParser {
 /**
  * Parsed data from HomeScreenMirrorResponse for trend arrow and CIQ state.
  */
-data class HomeScreenMirrorData(
+internal data class HomeScreenMirrorData(
     val trendArrow: CgmTrend,
     val basalStatusIconId: Int,
     val apControlStateIconId: Int,

@@ -1,5 +1,6 @@
 package com.glycemicgpt.mobile.data.local
 
+import com.glycemicgpt.mobile.BuildConfig
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
 import java.time.Instant
 import javax.inject.Inject
@@ -8,6 +9,10 @@ import javax.inject.Singleton
 /**
  * Adapter that bridges the [DebugLogger] interface (used by the tandem-pump-driver
  * module) to the app-level [BleDebugStore] (which depends on BuildConfig.DEBUG).
+ *
+ * Both methods short-circuit in release builds to avoid allocating [BleDebugStore.Entry]
+ * objects and [Instant.now] calls on the BLE callback thread when the underlying store
+ * will discard them anyway.
  */
 @Singleton
 class BleDebugStoreAdapter @Inject constructor(
@@ -24,6 +29,7 @@ class BleDebugStoreAdapter @Inject constructor(
         parsedValue: String?,
         error: String?,
     ) {
+        if (!BuildConfig.DEBUG) return
         store.add(
             BleDebugStore.Entry(
                 timestamp = Instant.now(),
@@ -45,6 +51,7 @@ class BleDebugStoreAdapter @Inject constructor(
         parsedValue: String?,
         error: String?,
     ) {
+        if (!BuildConfig.DEBUG) return
         store.updateLast(opcode, direction.toStoreDirection(), parsedValue, error)
     }
 
