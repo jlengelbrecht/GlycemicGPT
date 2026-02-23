@@ -31,7 +31,7 @@ class SafetyLimitsTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun `rejects minGlucose below absolute floor`() {
-        SafetyLimits(minGlucoseMgDl = 0)
+        SafetyLimits(minGlucoseMgDl = 19)
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -41,7 +41,7 @@ class SafetyLimitsTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun `rejects maxGlucose above absolute ceiling`() {
-        SafetyLimits(maxGlucoseMgDl = 1000)
+        SafetyLimits(maxGlucoseMgDl = 501)
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -97,10 +97,10 @@ class SafetyLimitsTest {
 
     @Test
     fun `safeOf ensures min is less than max glucose`() {
-        val limits = SafetyLimits.safeOf(minGlucoseMgDl = 500, maxGlucoseMgDl = 300)
-        // min=500 stays at 500 (within 1..998), max=300 clamps up to min+1=501
-        assertEquals(500, limits.minGlucoseMgDl)
-        assertEquals(501, limits.maxGlucoseMgDl)
+        // Both 450 and 300 are within 20..500; min=450 stays, max=300 clamps up to min+1=451
+        val limits = SafetyLimits.safeOf(minGlucoseMgDl = 450, maxGlucoseMgDl = 300)
+        assertEquals(450, limits.minGlucoseMgDl)
+        assertEquals(451, limits.maxGlucoseMgDl)
         assertTrue(
             "minGlucoseMgDl (${limits.minGlucoseMgDl}) must be less than maxGlucoseMgDl (${limits.maxGlucoseMgDl})",
             limits.minGlucoseMgDl < limits.maxGlucoseMgDl,
@@ -131,8 +131,8 @@ class SafetyLimitsTest {
             maxBasalRateMilliunits = SafetyLimits.ABSOLUTE_MAX_BASAL_MILLIUNITS,
             maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS,
         )
-        assertEquals(1, limits.minGlucoseMgDl)
-        assertEquals(999, limits.maxGlucoseMgDl)
+        assertEquals(20, limits.minGlucoseMgDl)
+        assertEquals(500, limits.maxGlucoseMgDl)
         assertEquals(50_000, limits.maxBasalRateMilliunits)
         assertEquals(25_000, limits.maxBolusDoseMilliunits)
     }

@@ -1,9 +1,9 @@
 package com.glycemicgpt.mobile.data.local
 
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
-import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleDebugStoreAdapterTest {
@@ -32,7 +32,8 @@ class BleDebugStoreAdapterTest {
                     entry.cargoHex == "ab cd" &&
                     entry.cargoSize == 2 &&
                     entry.parsedValue == "parsed" &&
-                    entry.error == null
+                    entry.error == null &&
+                    entry.timestamp.toEpochMilli() > 0
             })
         }
     }
@@ -58,7 +59,8 @@ class BleDebugStoreAdapterTest {
                     entry.cargoHex == "ff" &&
                     entry.cargoSize == 1 &&
                     entry.parsedValue == null &&
-                    entry.error == "oops"
+                    entry.error == "oops" &&
+                    entry.timestamp.toEpochMilli() > 0
             })
         }
     }

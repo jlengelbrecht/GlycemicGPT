@@ -55,7 +55,8 @@ class PairingViewModel @Inject constructor(
             try {
                 pumpScanner.scan().collect { pump ->
                     _discoveredPumps.update { current ->
-                        if (current.none { it.address == pump.address }) current + pump else current
+                        val index = current.indexOfFirst { it.address == pump.address }
+                        if (index == -1) current + pump else current.toMutableList().apply { set(index, pump) }
                     }
                 }
             } finally {
