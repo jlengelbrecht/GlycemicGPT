@@ -42,11 +42,11 @@ function milliunitsToUnits(mu: number): string {
   return (mu / 1000).toFixed(3).replace(/\.?0+$/, "");
 }
 
-/** Format a display string for the preview (rounds to milliunit precision) */
+/** Format a display string for the preview (3 decimal places max) */
 function formatUnits(raw: string): string {
   const n = parseFloat(raw);
   if (isNaN(n)) return raw;
-  return milliunitsToUnits(Math.round(n * 1000));
+  return n.toFixed(3).replace(/\.?0+$/, "");
 }
 
 /** Convert units to milliunits for API */

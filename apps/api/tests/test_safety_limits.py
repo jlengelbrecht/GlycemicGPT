@@ -240,8 +240,8 @@ class TestUpdateSafetyLimits:
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_ordering_violation_min_ge_max(self):
-        """Should raise ValueError when min >= max after merge."""
+    async def test_ordering_near_boundary_passes(self):
+        """Should allow min < max at boundary (499 < 500)."""
         user_id = uuid.uuid4()
         existing = MagicMock()
         existing.user_id = user_id

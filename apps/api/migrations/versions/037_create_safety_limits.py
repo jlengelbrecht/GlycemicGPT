@@ -110,5 +110,5 @@ def downgrade() -> None:
     op.drop_constraint("ck_safety_limits_glucose_ordering", "safety_limits")
     op.drop_constraint("ck_safety_limits_max_glucose_range", "safety_limits")
     op.drop_constraint("ck_safety_limits_min_glucose_range", "safety_limits")
-    op.drop_index("ix_safety_limits_user_id")
+    op.drop_index("ix_safety_limits_user_id", table_name="safety_limits")
     op.drop_table("safety_limits")
