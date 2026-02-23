@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.glycemicgpt.mobile.data.local.AlertSoundCategory
+import com.glycemicgpt.mobile.domain.plugin.PluginMetadata
 import java.io.File
 import kotlin.math.roundToInt
 
@@ -115,12 +116,14 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // -- Pump Section --
-        SectionHeader(title = "Pump")
-        PumpSection(
+        // -- Plugins Section (replaces hardcoded Pump Section) --
+        SectionHeader(title = "Plugins")
+        PluginsSection(
             state = state,
             onNavigateToPairing = onNavigateToPairing,
             onShowUnpair = settingsViewModel::showUnpairConfirm,
+            onActivatePlugin = settingsViewModel::activatePlugin,
+            onDeactivatePlugin = settingsViewModel::deactivatePlugin,
         )
 
         // Battery optimization warning (between Pump and Sync)
@@ -554,6 +557,76 @@ private fun AccountSection(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Text(if (state.isLoggingIn) "Signing in..." else "Sign In")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginsSection(
+    state: SettingsUiState,
+    onNavigateToPairing: () -> Unit,
+    onShowUnpair: () -> Unit,
+    onActivatePlugin: (String) -> Unit,
+    onDeactivatePlugin: (String) -> Unit,
+) {
+    // Active pump plugin card (uses existing PumpSection layout)
+    PumpSection(
+        state = state,
+        onNavigateToPairing = onNavigateToPairing,
+        onShowUnpair = onShowUnpair,
+    )
+
+    // Available plugins list
+    if (state.availablePlugins.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = "Available Plugins",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                state.availablePlugins.forEach { plugin ->
+                    val isActive = plugin.id == state.activePumpPluginId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = plugin.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                text = "v${plugin.version}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (isActive) {
+                            OutlinedButton(
+                                onClick = { onDeactivatePlugin(plugin.id) },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                            ) {
+                                Text("Deactivate")
+                            }
+                        } else {
+                            Button(onClick = { onActivatePlugin(plugin.id) }) {
+                                Text("Activate")
+                            }
+                        }
+                    }
                 }
             }
         }

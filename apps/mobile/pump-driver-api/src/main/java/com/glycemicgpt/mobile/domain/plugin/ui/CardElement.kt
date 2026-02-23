@@ -1,0 +1,64 @@
+package com.glycemicgpt.mobile.domain.plugin.ui
+
+/**
+ * Declarative building blocks for plugin-contributed dashboard cards.
+ * The platform renders these using Material 3 components.
+ */
+sealed class CardElement {
+    data class LargeValue(
+        val value: String,
+        val unit: String = "",
+        val color: UiColor = UiColor.DEFAULT,
+    ) : CardElement()
+
+    data class Label(
+        val text: String,
+        val style: LabelStyle = LabelStyle.BODY,
+    ) : CardElement()
+
+    data class StatusBadge(
+        val text: String,
+        val color: UiColor,
+    ) : CardElement()
+
+    data class ProgressBar(
+        val value: Float,
+        val max: Float,
+        val label: String = "",
+    ) : CardElement()
+
+    data class IconValue(
+        val icon: PluginIcon,
+        val value: String,
+        val label: String = "",
+    ) : CardElement()
+
+    data class SparkLine(
+        val values: List<Float>,
+        val label: String = "",
+    ) : CardElement()
+
+    data class Row(val elements: List<CardElement>) : CardElement()
+    data class Column(val elements: List<CardElement>) : CardElement()
+    data class Spacer(val heightDp: Int = 8) : CardElement()
+}
+
+enum class UiColor { DEFAULT, SUCCESS, WARNING, ERROR, INFO, MUTED }
+
+enum class LabelStyle { TITLE, SUBTITLE, BODY, CAPTION }
+
+enum class PluginIcon {
+    BLUETOOTH,
+    BATTERY,
+    RESERVOIR,
+    INSULIN,
+    GLUCOSE,
+    HEART_RATE,
+    SYNC,
+    WARNING,
+    CHECK,
+    CLOCK,
+    SETTINGS,
+    SIGNAL,
+    THERMOMETER,
+}
