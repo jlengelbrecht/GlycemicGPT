@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.service
 
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
+import com.glycemicgpt.mobile.data.local.SafetyLimitsStore
 import com.glycemicgpt.mobile.data.local.dao.RawHistoryLogDao
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.data.repository.SyncQueueEnqueuer
@@ -74,6 +75,7 @@ class PumpPollingOrchestratorTest {
         every { high } returns GlucoseRangeStore.DEFAULT_HIGH
         every { urgentHigh } returns GlucoseRangeStore.DEFAULT_URGENT_HIGH
     }
+    private val safetyLimitsStore = mockk<SafetyLimitsStore>(relaxed = true)
     private val historyLogParser = mockk<HistoryLogParser>(relaxed = true)
 
     /**
@@ -98,7 +100,7 @@ class PumpPollingOrchestratorTest {
     /** Alias for tests that only need fast loop data. */
     private val SETTLE_TIME_MS = FAST_SETTLE_MS
 
-    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender, glucoseRangeStore, historyLogParser)
+    private fun createOrchestrator() = PumpPollingOrchestrator(pumpDriver, repository, syncEnqueuer, rawHistoryLogDao, wearDataSender, glucoseRangeStore, safetyLimitsStore, historyLogParser)
 
     @Test
     fun `does not poll when disconnected`() = runTest {
