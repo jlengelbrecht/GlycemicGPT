@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.domain.pump
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SafetyLimitsTest {
@@ -60,7 +61,7 @@ class SafetyLimitsTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun `rejects bolus above absolute ceiling`() {
-        SafetyLimits(maxBolusDoseMilliunits = 50_001)
+        SafetyLimits(maxBolusDoseMilliunits = 25_001)
     }
 
     // -- safeOf() factory tests ------------------------------------------------
@@ -93,7 +94,10 @@ class SafetyLimitsTest {
     fun `safeOf ensures min is less than max glucose`() {
         val limits = SafetyLimits.safeOf(minGlucoseMgDl = 500, maxGlucoseMgDl = 300)
         // min gets clamped to ABSOLUTE_MAX - 1 = 998, max gets clamped to min+1 = 999
-        assert(limits.minGlucoseMgDl < limits.maxGlucoseMgDl)
+        assertTrue(
+            "minGlucoseMgDl (${limits.minGlucoseMgDl}) must be less than maxGlucoseMgDl (${limits.maxGlucoseMgDl})",
+            limits.minGlucoseMgDl < limits.maxGlucoseMgDl,
+        )
     }
 
     @Test
@@ -123,6 +127,6 @@ class SafetyLimitsTest {
         assertEquals(1, limits.minGlucoseMgDl)
         assertEquals(999, limits.maxGlucoseMgDl)
         assertEquals(50_000, limits.maxBasalRateMilliunits)
-        assertEquals(50_000, limits.maxBolusDoseMilliunits)
+        assertEquals(25_000, limits.maxBolusDoseMilliunits)
     }
 }

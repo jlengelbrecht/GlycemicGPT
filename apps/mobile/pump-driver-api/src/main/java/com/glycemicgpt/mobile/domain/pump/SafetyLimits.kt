@@ -50,7 +50,7 @@ data class SafetyLimits(
         const val ABSOLUTE_MIN_GLUCOSE = 1
         const val ABSOLUTE_MAX_GLUCOSE = 999
         const val ABSOLUTE_MAX_BASAL_MILLIUNITS = 50_000 // 50 u/hr
-        const val ABSOLUTE_MAX_BOLUS_MILLIUNITS = 50_000 // 50 u single dose
+        const val ABSOLUTE_MAX_BOLUS_MILLIUNITS = 25_000 // 25 u single dose (Tandem hardware max)
 
         /**
          * Safe factory that clamps values to absolute bounds instead of throwing.

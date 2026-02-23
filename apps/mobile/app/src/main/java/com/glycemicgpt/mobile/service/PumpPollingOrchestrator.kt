@@ -284,6 +284,9 @@ class PumpPollingOrchestrator @Inject constructor(
     }
 
     companion object {
+        /** Default safety limits for data validity (sensor range 20-500 mg/dL). */
+        private val DATA_VALIDITY_LIMITS = SafetyLimits()
+
         const val INTERVAL_FAST_MS = 15_000L       // IoB + basal + CGM (keep-alive: pump drops idle connections at ~30s)
         const val INTERVAL_MEDIUM_MS = 300_000L     // bolus history (5 min)
         const val INTERVAL_SLOW_MS = 300_000L       // battery + reservoir (5 min)
@@ -378,7 +381,7 @@ class PumpPollingOrchestrator @Inject constructor(
                     // Do NOT use alert thresholds (urgentLow/urgentHigh) here -- those are
                     // user alert preferences (e.g., urgentHigh=250), not sensor validity
                     // bounds. Using them would silently drop real readings above 250 mg/dL.
-                    val limits = SafetyLimits()
+                    val limits = DATA_VALIDITY_LIMITS
 
                     // Extract CGM readings from history logs to fill chart gaps
                     val cgmReadings = historyLogParser.extractCgmFromHistoryLogs(records, limits)

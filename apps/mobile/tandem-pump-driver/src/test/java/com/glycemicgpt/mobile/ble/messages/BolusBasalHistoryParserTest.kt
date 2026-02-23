@@ -170,12 +170,12 @@ class BolusBasalHistoryParserTest {
 
     @Test
     fun `parseBolusDeliveryPayload accepts bolus at absolute ceiling`() {
-        // Absolute max bolus is 50000mu (50u) -- verify a 50u dose is accepted
+        // Absolute max bolus is 25000mu (25u) matching Tandem hardware
         val permissive = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
-        val data = buildBolusData(deliveredTotal = 50000)
+        val data = buildBolusData(deliveredTotal = 25000)
         val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, permissive)
         assertNotNull(result)
-        assertEquals(50.0f, result!!.units, 0.001f)
+        assertEquals(25.0f, result!!.units, 0.001f)
     }
 
     @Test
