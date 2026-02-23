@@ -53,6 +53,11 @@ class BleDebugStoreAdapterTest {
             store.add(match { entry ->
                 entry.direction == BleDebugStore.Direction.RX &&
                     entry.opcode == 99 &&
+                    entry.opcodeName == "RxOp" &&
+                    entry.txId == 7 &&
+                    entry.cargoHex == "ff" &&
+                    entry.cargoSize == 1 &&
+                    entry.parsedValue == null &&
                     entry.error == "oops"
             })
         }

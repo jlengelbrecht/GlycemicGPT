@@ -28,13 +28,21 @@ interface HistoryLogParser {
         limits: SafetyLimits = SafetyLimits(),
     ): List<CgmReading>
 
-    /** Extract bolus delivery events from raw history log records. */
+    /**
+     * Extract bolus delivery events from raw history log records.
+     * Implementations must discard any bolus exceeding the dose cap
+     * defined by [limits].
+     */
     fun extractBolusesFromHistoryLogs(
         records: List<HistoryLogRecord>,
         limits: SafetyLimits = SafetyLimits(),
     ): List<BolusEvent>
 
-    /** Extract basal delivery events from raw history log records. */
+    /**
+     * Extract basal delivery events from raw history log records.
+     * Implementations must discard any basal rate exceeding the cap
+     * defined by [limits].
+     */
     fun extractBasalFromHistoryLogs(
         records: List<HistoryLogRecord>,
         limits: SafetyLimits = SafetyLimits(),

@@ -171,9 +171,9 @@ class BolusBasalHistoryParserTest {
     @Test
     fun `parseBolusDeliveryPayload accepts bolus at absolute ceiling`() {
         // Absolute max bolus is 25000mu (25u) matching Tandem hardware
-        val permissive = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
+        val maxAllowed = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
         val data = buildBolusData(deliveredTotal = 25000)
-        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, permissive)
+        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, maxAllowed)
         assertNotNull(result)
         assertEquals(25.0f, result!!.units, 0.001f)
     }
@@ -391,11 +391,28 @@ class BolusBasalHistoryParserTest {
     }
 
     @Test
-    fun `parseBolusDeliveryPayload rejects uint16 max even with permissive limits`() {
-        // uint16 max is 65535mu = 65.535u, exceeds absolute ceiling of 50u
-        val permissive = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
+    fun `parseBolusDeliveryPayload rejects uint16 max even with max allowed limits`() {
+        // uint16 max is 65535mu = 65.535u, exceeds absolute ceiling of 25u
+        val maxAllowed = SafetyLimits(maxBolusDoseMilliunits = SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS)
         val data = buildBolusData(deliveredTotal = 65535)
-        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, permissive)
+        val result = StatusResponseParser.parseBolusDeliveryPayload(data, validPumpTime, maxAllowed)
+        assertNull(result)
+    }
+
+    @Test
+    fun `parseBasalDeliveryPayload accepts 10 units per hr with custom limits`() {
+        val limits = SafetyLimits(maxBasalRateMilliunits = 10_000)
+        val data = buildBasalData(commandedRate = 10_000)
+        val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime, limits)
+        assertNotNull(result)
+        assertEquals(10.0f, result!!.rate, 0.001f)
+    }
+
+    @Test
+    fun `parseBasalDeliveryPayload rejects just over custom limit`() {
+        val limits = SafetyLimits(maxBasalRateMilliunits = 10_000)
+        val data = buildBasalData(commandedRate = 10_001)
+        val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime, limits)
         assertNull(result)
     }
 
