@@ -11,7 +11,7 @@ class SafetyLimitsTest {
         val limits = SafetyLimits()
         assertEquals(20, limits.minGlucoseMgDl)
         assertEquals(500, limits.maxGlucoseMgDl)
-        assertEquals(25_000, limits.maxBasalRateMilliunits)
+        assertEquals(15_000, limits.maxBasalRateMilliunits)
         assertEquals(25_000, limits.maxBolusDoseMilliunits)
     }
 
@@ -56,7 +56,7 @@ class SafetyLimitsTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun `rejects basal above absolute ceiling`() {
-        SafetyLimits(maxBasalRateMilliunits = 50_001)
+        SafetyLimits(maxBasalRateMilliunits = 15_001)
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -90,9 +90,15 @@ class SafetyLimitsTest {
     }
 
     @Test
-    fun `safeOf clamps bolus dose to absolute bounds`() {
+    fun `safeOf clamps bolus dose below floor to 1`() {
         val limits = SafetyLimits.safeOf(maxBolusDoseMilliunits = 0)
         assertEquals(1, limits.maxBolusDoseMilliunits)
+    }
+
+    @Test
+    fun `safeOf clamps bolus dose above absolute ceiling`() {
+        val limits = SafetyLimits.safeOf(maxBolusDoseMilliunits = 100_000)
+        assertEquals(SafetyLimits.ABSOLUTE_MAX_BOLUS_MILLIUNITS, limits.maxBolusDoseMilliunits)
     }
 
     @Test
@@ -133,7 +139,7 @@ class SafetyLimitsTest {
         )
         assertEquals(20, limits.minGlucoseMgDl)
         assertEquals(500, limits.maxGlucoseMgDl)
-        assertEquals(50_000, limits.maxBasalRateMilliunits)
+        assertEquals(15_000, limits.maxBasalRateMilliunits)
         assertEquals(25_000, limits.maxBolusDoseMilliunits)
     }
 }

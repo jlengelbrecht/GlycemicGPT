@@ -289,7 +289,7 @@ class TandemHistoryLogParserTest {
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(0, 1)
         buf.putShort(4, 800)
-        buf.putShort(6, 25001.toShort())
+        buf.putShort(6, 15001.toShort()) // 15001mu > 15u/hr default cap
         val record = recordFromStream(279, 572_000_000L, 3100, data)
         assertTrue(parser.extractBasalFromHistoryLogs(listOf(record)).isEmpty())
     }
@@ -300,11 +300,11 @@ class TandemHistoryLogParserTest {
         val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         buf.putShort(0, 1)
         buf.putShort(4, 800)
-        buf.putShort(6, 25000.toShort())
+        buf.putShort(6, 15000.toShort()) // 15000mu = 15u/hr (Tandem hardware max)
         val record = recordFromStream(279, 572_000_000L, 3101, data)
         val result = parser.extractBasalFromHistoryLogs(listOf(record))
         assertEquals(1, result.size)
-        assertEquals(25.0f, result[0].rate, 0.01f)
+        assertEquals(15.0f, result[0].rate, 0.01f)
     }
 
     @Test

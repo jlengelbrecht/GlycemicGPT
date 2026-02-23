@@ -325,7 +325,7 @@ class BolusBasalHistoryParserTest {
 
     @Test
     fun `parseBasalDeliveryPayload with excessive rate returns null`() {
-        val data = buildBasalData(commandedRate = 30000) // 30 units/hr, over limit
+        val data = buildBasalData(commandedRate = 16000) // 16 units/hr, over 15u limit
         val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime)
         assertNull(result)
     }
@@ -417,16 +417,16 @@ class BolusBasalHistoryParserTest {
     }
 
     @Test
-    fun `parseBasalDeliveryPayload at MAX boundary accepts 25 units per hr`() {
-        val data = buildBasalData(commandedRate = 25000)
+    fun `parseBasalDeliveryPayload at MAX boundary accepts 15 units per hr`() {
+        val data = buildBasalData(commandedRate = 15000)
         val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime)
         assertNotNull(result)
-        assertEquals(25.0f, result!!.rate, 0.001f)
+        assertEquals(15.0f, result!!.rate, 0.001f)
     }
 
     @Test
     fun `parseBasalDeliveryPayload rejects just over MAX boundary`() {
-        val data = buildBasalData(commandedRate = 25001)
+        val data = buildBasalData(commandedRate = 15001)
         val result = StatusResponseParser.parseBasalDeliveryPayload(data, validPumpTime)
         assertNull(result)
     }
