@@ -3,9 +3,10 @@
 /**
  * Safety Limits Configuration
  *
- * Allows users to configure data validation bounds for CGM sensor readings
- * and maximum pump delivery rates. These limits are synced to the mobile
- * app where they gate data validation and (future) bolus delivery.
+ * Allows users to configure platform-enforced safety guardrails for CGM
+ * sensor data validation and extension module constraints. These limits
+ * are synced to the mobile app where they gate data processing and any
+ * installed extension modules.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -16,6 +17,7 @@ import {
   Check,
   ArrowLeft,
   RotateCcw,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -286,9 +288,36 @@ export default function SafetyLimitsPage() {
         </Link>
         <h1 className="text-2xl font-bold">Safety Limits</h1>
         <p className="text-slate-400">
-          Configure data validation bounds for sensor readings and maximum
-          pump delivery rates
+          Platform-enforced guardrails for data validation and extension module
+          constraints
         </p>
+      </div>
+
+      {/* About Safety Limits */}
+      <div className="bg-slate-900/50 rounded-xl p-5 border border-slate-800">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-200">
+              About Safety Limits
+            </h2>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Safety limits define the platform-enforced bounds that constrain
+              all data processing and any installed extension modules. These
+              guardrails operate at the platform level &mdash; sensor readings
+              outside the glucose range are flagged as implausible, and extension
+              modules cannot exceed the configured delivery rate caps.
+            </p>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              These limits apply regardless of which modules are installed. The
+              GlycemicGPT platform provides the safety infrastructure;
+              configuration of appropriate values and any use of user-compiled
+              extensions is solely the responsibility of the end user. Consult
+              your healthcare provider before adjusting these values. Changes
+              take effect across all connected devices after the next sync.
+            </p>
+          </div>
+        </div>
       </div>
 
       {isOffline && (
@@ -644,16 +673,16 @@ export default function SafetyLimitsPage() {
         </form>
       )}
 
-      {/* Info card */}
+      {/* Platform disclaimer */}
       <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-        <p className="text-xs text-slate-500">
-          Safety limits define the absolute bounds for data validation and pump
-          delivery. Glucose readings outside the min/max range are rejected as
-          sensor errors. Basal and bolus limits cap the maximum insulin
-          delivery rates the system will accept. These limits are synced to
-          the mobile app and enforced at multiple layers (application, database,
-          and device). Changes here are safety-critical -- consult your
-          healthcare provider before adjusting these values.
+        <p className="text-xs text-slate-500 leading-relaxed">
+          GlycemicGPT is an open-source data monitoring and analysis platform.
+          It does not provide medical advice, diagnosis, or treatment. Any
+          extension modules are compiled and installed by the end user at their
+          own risk. The platform enforces configured safety bounds as
+          engineering constraints but makes no clinical safety guarantees.
+          Always consult a qualified healthcare professional regarding insulin
+          dosing and diabetes management decisions.
         </p>
       </div>
     </div>

@@ -53,7 +53,7 @@ const settingsSections: SettingsSection[] = [
   },
   {
     title: "Safety Limits",
-    description: "Set data validation bounds for sensor readings and pump delivery rates",
+    description: "Configure platform-enforced safety guardrails for data validation and extension module constraints",
     icon: ShieldCheck,
     href: "/dashboard/settings/safety-limits",
   },
