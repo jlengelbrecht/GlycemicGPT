@@ -544,7 +544,7 @@ export default function SafetyLimitsPage() {
               </div>
 
               {/* Visual preview for glucose bounds */}
-              {allParsed && minGNum < maxGNum && (
+              {isValid && minGNum < maxGNum && (
                 <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
                   <p className="text-xs text-slate-500 mb-2">Valid Glucose Range</p>
                   <p className="text-lg font-semibold text-orange-400">
@@ -650,7 +650,7 @@ export default function SafetyLimitsPage() {
             </div>
 
             {/* Visual preview for insulin limits */}
-            {allParsed && (
+            {isValid && (
               <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 mt-6">
                 <p className="text-xs text-slate-500 mb-2">Active Limits</p>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6">

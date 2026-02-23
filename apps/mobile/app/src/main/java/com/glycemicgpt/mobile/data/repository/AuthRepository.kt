@@ -186,7 +186,7 @@ class AuthRepository @Inject constructor(
                     val max = limits.maxGlucoseMgDl
                     val basal = limits.maxBasalRateMilliunits
                     val bolus = limits.maxBolusDoseMilliunits
-                    if (min >= max || min < 20 || max > 500 || basal < 1 || basal > 15000 || bolus < 1 || bolus > 25000) {
+                    if (min >= max || min !in 20..499 || max !in 21..500 || basal !in 1..15000 || bolus !in 1..25000) {
                         Timber.w("Safety limits invalid: min=%d max=%d basal=%d bolus=%d -- ignoring", min, max, basal, bolus)
                         return
                     }

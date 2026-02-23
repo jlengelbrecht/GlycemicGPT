@@ -2305,7 +2305,7 @@ export async function getPumpStatus(): Promise<PumpStatusResponse> {
 }
 
 // ============================================================================
-// Time in Range Statistics
+// Safety Limits (Phase 3)
 // ============================================================================
 
 /**
@@ -2394,6 +2394,10 @@ export async function getSafetyLimitsDefaults(): Promise<SafetyLimitsDefaults> {
 
   return response.json();
 }
+
+// ============================================================================
+// Time in Range Statistics
+// ============================================================================
 
 export interface TimeInRangeStats {
   low_pct: number;

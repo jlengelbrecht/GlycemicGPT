@@ -59,7 +59,7 @@ class PumpPollingOrchestratorTest {
         coEvery { getCgmStatus() } returns Result.success(
             CgmReading(glucoseMgDl = 120, trendArrow = CgmTrend.FLAT, timestamp = Instant.now()),
         )
-        coEvery { getBolusHistory(any()) } returns Result.success(emptyList())
+        coEvery { getBolusHistory(any(), any()) } returns Result.success(emptyList())
         coEvery { getHistoryLogs(any()) } returns Result.success(emptyList())
         coEvery { getPumpHardwareInfo() } returns Result.failure(RuntimeException("not connected"))
     }
@@ -126,7 +126,7 @@ class PumpPollingOrchestratorTest {
         coVerify(exactly = 0) { pumpDriver.getCgmStatus() }
         coVerify(exactly = 0) { pumpDriver.getBatteryStatus() }
         coVerify(exactly = 0) { pumpDriver.getReservoirLevel() }
-        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any()) }
+        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any(), any()) }
         orchestrator.stop()
     }
 
@@ -143,7 +143,7 @@ class PumpPollingOrchestratorTest {
         coVerify(atLeast = 1) { pumpDriver.getBasalRate() }
         coVerify(atLeast = 1) { pumpDriver.getBatteryStatus() }
         coVerify(atLeast = 1) { pumpDriver.getReservoirLevel() }
-        coVerify(atLeast = 1) { pumpDriver.getBolusHistory(any()) }
+        coVerify(atLeast = 1) { pumpDriver.getBolusHistory(any(), any()) }
         orchestrator.stop()
     }
 
@@ -382,7 +382,7 @@ class PumpPollingOrchestratorTest {
         // not MEDIUM_LOOP_INITIAL_DELAY_MS (60s)
         connectionStateFlow.value = ConnectionState.CONNECTED
         advanceTimeBy(PumpPollingOrchestrator.RECONNECT_MEDIUM_DELAY_MS + 100)
-        coVerify(atLeast = 1) { pumpDriver.getBolusHistory(any()) }
+        coVerify(atLeast = 1) { pumpDriver.getBolusHistory(any(), any()) }
         orchestrator.stop()
     }
 
@@ -396,7 +396,7 @@ class PumpPollingOrchestratorTest {
         advanceTimeBy(PumpPollingOrchestrator.RECONNECT_MEDIUM_DELAY_MS + 100)
 
         // At 5.1 seconds, bolus history should NOT have been polled (initial delay is 60s)
-        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any()) }
+        coVerify(exactly = 0) { pumpDriver.getBolusHistory(any(), any()) }
         orchestrator.stop()
     }
 

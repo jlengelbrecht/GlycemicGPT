@@ -402,4 +402,12 @@ class HomeViewModelTest {
         coVerify(atLeast = 1) { api.getGlucoseRange() }
         verify { glucoseRangeStore.updateAll(urgentLow = 60, low = 85, high = 190, urgentHigh = 290) }
     }
+
+    @Test
+    fun `init refreshes safety limits when store is stale`() = runTest {
+        every { safetyLimitsStore.isStale(any()) } returns true
+        createViewModel()
+        advanceUntilIdle()
+        coVerify(atLeast = 1) { authRepository.refreshSafetyLimits() }
+    }
 }

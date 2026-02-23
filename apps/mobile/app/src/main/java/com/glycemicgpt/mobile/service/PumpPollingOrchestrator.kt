@@ -228,7 +228,8 @@ class PumpPollingOrchestrator @Inject constructor(
     private suspend fun pollBolusHistory() {
         val since = repository.getLatestBolusTimestamp()
             ?: Instant.now().minus(7, ChronoUnit.DAYS)
-        pumpDriver.getBolusHistory(since)
+        val limits = safetyLimitsStore.toSafetyLimits()
+        pumpDriver.getBolusHistory(since, limits)
             .onSuccess { events ->
                 if (events.isNotEmpty()) {
                     repository.saveBoluses(events)
