@@ -6,6 +6,7 @@ import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.pump.HistoryLogParser
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Tandem-specific implementation of [HistoryLogParser].
@@ -13,6 +14,7 @@ import javax.inject.Inject
  * Delegates to [StatusResponseParser] static methods which contain the
  * actual byte-level parsing logic for Tandem pump history log events.
  */
+@Singleton
 class TandemHistoryLogParser @Inject constructor() : HistoryLogParser {
 
     override fun extractCgmFromHistoryLogs(records: List<HistoryLogRecord>): List<CgmReading> =

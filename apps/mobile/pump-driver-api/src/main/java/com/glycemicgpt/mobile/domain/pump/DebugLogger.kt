@@ -6,6 +6,11 @@ package com.glycemicgpt.mobile.domain.pump
  * Provides a simplified logging API that doesn't expose internal
  * debug store types. Implementations in the app module translate
  * these calls to the concrete BleDebugStore.
+ *
+ * **Security:** Implementations must ensure that raw packet data
+ * (cargoHex, parsedValue) is only retained in debug/development builds
+ * and is never persisted to unencrypted storage. These fields may contain
+ * sensitive medical data (glucose readings, insulin doses, device identifiers).
  */
 interface DebugLogger {
 
