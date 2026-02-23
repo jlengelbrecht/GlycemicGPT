@@ -3,6 +3,7 @@ package com.glycemicgpt.mobile.data.local
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleDebugStoreAdapterTest {
