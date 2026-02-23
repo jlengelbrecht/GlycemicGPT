@@ -14,5 +14,9 @@ data class TimeInRangeData(
         require(inRangePercent in 0f..100f) { "inRangePercent must be in 0..100" }
         require(highPercent in 0f..100f) { "highPercent must be in 0..100" }
         require(totalReadings >= 0) { "totalReadings must be non-negative" }
+        val sum = lowPercent + inRangePercent + highPercent
+        require(sum < 0.5f || kotlin.math.abs(sum - 100f) <= 0.5f) {
+            "percentages must sum to ~100 (got $sum)"
+        }
     }
 }

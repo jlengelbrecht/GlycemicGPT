@@ -19,6 +19,9 @@ class BleDebugStoreAdapter @Inject constructor(
     private val store: BleDebugStore,
 ) : DebugLogger {
 
+    /** Visible for testing; defaults to [BuildConfig.DEBUG]. */
+    internal var debugEnabled: Boolean = BuildConfig.DEBUG
+
     override fun logPacket(
         direction: DebugLogger.Direction,
         opcode: Int,
@@ -29,7 +32,7 @@ class BleDebugStoreAdapter @Inject constructor(
         parsedValue: String?,
         error: String?,
     ) {
-        if (!BuildConfig.DEBUG) return
+        if (!debugEnabled) return
         store.add(
             BleDebugStore.Entry(
                 timestamp = Instant.now(),
@@ -51,7 +54,7 @@ class BleDebugStoreAdapter @Inject constructor(
         parsedValue: String?,
         error: String?,
     ) {
-        if (!BuildConfig.DEBUG) return
+        if (!debugEnabled) return
         store.updateLast(opcode, direction.toStoreDirection(), parsedValue, error)
     }
 

@@ -3,7 +3,6 @@ package com.glycemicgpt.mobile.data.local
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
 import io.mockk.mockk
 import io.mockk.verify
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleDebugStoreAdapterTest {
@@ -89,5 +88,35 @@ class BleDebugStoreAdapterTest {
         verify {
             store.updateLast(10, BleDebugStore.Direction.RX, null, "fail")
         }
+    }
+
+    // -- Release-build no-op tests ------------------------------------------------
+
+    @Test
+    fun `logPacket is no-op when debug disabled`() {
+        adapter.debugEnabled = false
+        adapter.logPacket(
+            direction = DebugLogger.Direction.TX,
+            opcode = 42,
+            opcodeName = "TestOp",
+            txId = 1,
+            cargoHex = "ab cd",
+            cargoSize = 2,
+            parsedValue = "parsed",
+            error = null,
+        )
+        verify(exactly = 0) { store.add(any()) }
+    }
+
+    @Test
+    fun `updateLastPacket is no-op when debug disabled`() {
+        adapter.debugEnabled = false
+        adapter.updateLastPacket(
+            opcode = 42,
+            direction = DebugLogger.Direction.TX,
+            parsedValue = "updated",
+            error = null,
+        )
+        verify(exactly = 0) { store.updateLast(any(), any(), any(), any()) }
     }
 }
