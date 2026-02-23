@@ -8,7 +8,7 @@
  * are synced to the mobile app where they gate data processing.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ShieldCheck,
   Loader2,
@@ -75,6 +75,7 @@ export default function SafetyLimitsPage() {
 
   const fetchLimits = useCallback(async () => {
     try {
+      setIsLoading(true);
       setError(null);
       const [data, serverDefaults] = await Promise.all([
         getSafetyLimits(),
@@ -122,6 +123,15 @@ export default function SafetyLimitsPage() {
     setShowConfirm(false);
     setPendingAction(null);
   }, []);
+
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the Cancel button when the confirmation dialog appears
+  useEffect(() => {
+    if (showConfirm) {
+      cancelButtonRef.current?.focus();
+    }
+  }, [showConfirm]);
 
   // Dismiss confirmation dialog on Escape key
   useEffect(() => {
@@ -223,10 +233,10 @@ export default function SafetyLimitsPage() {
         max_bolus_dose_milliunits: defaults.max_bolus_dose_milliunits,
       });
       setLimits(updated);
-      setMinGlucose(String(defaults.min_glucose_mgdl));
-      setMaxGlucose(String(defaults.max_glucose_mgdl));
-      setMaxBasal(milliunitsToUnits(defaults.max_basal_rate_milliunits));
-      setMaxBolus(milliunitsToUnits(defaults.max_bolus_dose_milliunits));
+      setMinGlucose(String(updated.min_glucose_mgdl));
+      setMaxGlucose(String(updated.max_glucose_mgdl));
+      setMaxBasal(milliunitsToUnits(updated.max_basal_rate_milliunits));
+      setMaxBolus(milliunitsToUnits(updated.max_bolus_dose_milliunits));
       setSuccess("Safety limits reset to defaults");
     } catch (err) {
       setError(
@@ -412,6 +422,7 @@ export default function SafetyLimitsPage() {
                   Confirm
                 </button>
                 <button
+                  ref={cancelButtonRef}
                   type="button"
                   onClick={cancelAction}
                   className={clsx(
@@ -473,7 +484,7 @@ export default function SafetyLimitsPage() {
                     step={1}
                     value={minGlucose}
                     onChange={(e) => setMinGlucose(e.target.value)}
-                    disabled={isSaving}
+                    disabled={isSaving || showConfirm}
                     aria-invalid={!isNaN(minGNum) && (minGNum < 20 || minGNum > 499) ? true : undefined}
                     className={clsx(
                       "w-full rounded-lg border px-3 py-2 text-sm",
@@ -510,7 +521,7 @@ export default function SafetyLimitsPage() {
                     step={1}
                     value={maxGlucose}
                     onChange={(e) => setMaxGlucose(e.target.value)}
-                    disabled={isSaving}
+                    disabled={isSaving || showConfirm}
                     aria-invalid={!isNaN(maxGNum) && (maxGNum < 21 || maxGNum > 500) ? true : undefined}
                     className={clsx(
                       "w-full rounded-lg border px-3 py-2 text-sm",
@@ -579,7 +590,7 @@ export default function SafetyLimitsPage() {
                   step="any"
                   value={maxBasal}
                   onChange={(e) => setMaxBasal(e.target.value)}
-                  disabled={isSaving}
+                  disabled={isSaving || showConfirm}
                   aria-invalid={!isNaN(basalMuNum) && (basalMuNum < 1 || basalMuNum > 15000) ? true : undefined}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
@@ -616,7 +627,7 @@ export default function SafetyLimitsPage() {
                   step="any"
                   value={maxBolus}
                   onChange={(e) => setMaxBolus(e.target.value)}
-                  disabled={isSaving}
+                  disabled={isSaving || showConfirm}
                   aria-invalid={!isNaN(bolusMuNum) && (bolusMuNum < 1 || bolusMuNum > 25000) ? true : undefined}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
