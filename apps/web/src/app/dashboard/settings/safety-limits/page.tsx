@@ -3,10 +3,9 @@
 /**
  * Safety Limits Configuration
  *
- * Allows users to configure platform-enforced safety guardrails for CGM
- * sensor data validation and extension module constraints. These limits
- * are synced to the mobile app where they gate data processing and any
- * installed extension modules.
+ * Allows users to configure platform-enforced safety guardrails for
+ * sensor data validation and delivery rate constraints. These limits
+ * are synced to the mobile app where they gate data processing.
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -288,33 +287,37 @@ export default function SafetyLimitsPage() {
         </Link>
         <h1 className="text-2xl font-bold">Safety Limits</h1>
         <p className="text-slate-400">
-          Platform-enforced guardrails for data validation and extension module
-          constraints
+          Platform-enforced bounds for data validation and delivery rates
         </p>
       </div>
 
       {/* About Safety Limits */}
       <div className="bg-slate-900/50 rounded-xl p-5 border border-slate-800">
         <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-blue-400 shrink-0 mt-0.5" />
+          <Info className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
           <div className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-200">
               About Safety Limits
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
               Safety limits define the platform-enforced bounds that constrain
-              all data processing and any installed extension modules. These
-              guardrails operate at the platform level &mdash; sensor readings
-              outside the glucose range are flagged as implausible, and extension
-              modules cannot exceed the configured delivery rate caps.
+              all data processing. These guardrails operate at the platform
+              level {"\u2014"} sensor readings outside the configured glucose range
+              are flagged as implausible, and delivery rate parameters are
+              capped at the configured maximums. These bounds are also enforced
+              on any user-compiled extension modules installed into the mobile
+              app (e.g., custom data sources or device integrations built using
+              the GlycemicGPT plugin SDK).
             </p>
             <p className="text-xs text-slate-400 leading-relaxed">
-              These limits apply regardless of which modules are installed. The
-              GlycemicGPT platform provides the safety infrastructure;
-              configuration of appropriate values and any use of user-compiled
-              extensions is solely the responsibility of the end user. Consult
-              your healthcare provider before adjusting these values. Changes
-              take effect across all connected devices after the next sync.
+              GlycemicGPT is an open-source data monitoring and analysis
+              platform. It does not provide medical advice, diagnosis, or
+              treatment. Configuration of appropriate values and any use of
+              user-compiled extensions is solely the responsibility of the end
+              user. The platform enforces these bounds as engineering
+              constraints but makes no clinical safety guarantees. Consult your
+              healthcare provider before adjusting these values. Changes sync
+              to connected devices within one hour or on next app launch.
             </p>
           </div>
         </div>
@@ -364,8 +367,9 @@ export default function SafetyLimitsPage() {
                   : "Update safety limits?"}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                These values control data validation and insulin delivery caps.
-                Changes are synced to the mobile app. Confirm to proceed.
+                These values control data validation bounds and delivery rate
+                constraints enforced across the platform. Changes sync to
+                connected devices. Confirm to proceed.
               </p>
               <div className="flex items-center gap-2 mt-3">
                 <button
@@ -516,16 +520,16 @@ export default function SafetyLimitsPage() {
             </div>
           </div>
 
-          {/* Insulin delivery limits */}
+          {/* Delivery rate constraints */}
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2 bg-orange-500/10 rounded-lg">
                 <ShieldCheck className="h-5 w-5 text-orange-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">Insulin Delivery Limits</h2>
+                <h2 className="text-lg font-semibold">Delivery Rate Constraints</h2>
                 <p className="text-xs text-slate-500">
-                  Maximum rates for basal and bolus insulin delivery
+                  Maximum delivery rates enforced by the platform
                 </p>
               </div>
             </div>
@@ -676,13 +680,9 @@ export default function SafetyLimitsPage() {
       {/* Platform disclaimer */}
       <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
         <p className="text-xs text-slate-500 leading-relaxed">
-          GlycemicGPT is an open-source data monitoring and analysis platform.
-          It does not provide medical advice, diagnosis, or treatment. Any
-          extension modules are compiled and installed by the end user at their
-          own risk. The platform enforces configured safety bounds as
-          engineering constraints but makes no clinical safety guarantees.
-          Always consult a qualified healthcare professional regarding insulin
-          dosing and diabetes management decisions.
+          Always consult a qualified healthcare professional regarding diabetes
+          management decisions. GlycemicGPT is not a medical device and makes
+          no clinical safety guarantees.
         </p>
       </div>
     </div>
