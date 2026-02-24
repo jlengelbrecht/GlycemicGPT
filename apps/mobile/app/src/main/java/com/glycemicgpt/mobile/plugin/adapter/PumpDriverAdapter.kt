@@ -38,15 +38,13 @@ class PumpDriverAdapter @Inject constructor(
     override suspend fun connect(deviceAddress: String): Result<Unit> {
         val plugin = registry.activePumpPlugin.value
             ?: return Result.failure(NoActivePluginException())
-        plugin.connect(deviceAddress)
-        return Result.success(Unit)
+        return runCatching { plugin.connect(deviceAddress) }
     }
 
     override suspend fun disconnect(): Result<Unit> {
         val plugin = registry.activePumpPlugin.value
             ?: return Result.failure(NoActivePluginException())
-        plugin.disconnect()
-        return Result.success(Unit)
+        return runCatching { plugin.disconnect() }
     }
 
     override suspend fun getIoB(): Result<IoBReading> =

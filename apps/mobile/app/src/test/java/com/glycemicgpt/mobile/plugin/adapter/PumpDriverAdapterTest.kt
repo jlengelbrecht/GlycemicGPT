@@ -78,6 +78,16 @@ class PumpDriverAdapterTest {
     }
 
     @Test
+    fun `getCgmStatus returns failure when no active glucose plugin`() = runTest {
+        glucosePluginFlow.value = null
+
+        val result = adapter.getCgmStatus()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is NoActivePluginException)
+    }
+
+    @Test
     fun `observeConnectionState follows active plugin`() = runTest {
         val connectionFlow = MutableStateFlow(ConnectionState.DISCONNECTED)
         val plugin: DevicePlugin = mockk(relaxed = true) {

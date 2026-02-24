@@ -123,7 +123,7 @@ fun SettingsScreen(
             onNavigateToPairing = onNavigateToPairing,
             onShowUnpair = settingsViewModel::showUnpairConfirm,
             onActivatePlugin = settingsViewModel::activatePlugin,
-            onDeactivatePlugin = settingsViewModel::deactivatePlugin,
+            onDeactivatePlugin = settingsViewModel::showDeactivateConfirm,
         )
 
         // Battery optimization warning (between Pump and Sync)
@@ -224,6 +224,24 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = settingsViewModel::dismissUnpairConfirm) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (state.showDeactivateConfirm) {
+        AlertDialog(
+            onDismissRequest = settingsViewModel::dismissDeactivateConfirm,
+            title = { Text("Deactivate Plugin") },
+            text = { Text("Deactivating the pump plugin will stop glucose monitoring, insulin tracking, and alerts. Are you sure?") },
+            confirmButton = {
+                TextButton(onClick = settingsViewModel::confirmDeactivatePlugin) {
+                    Text("Deactivate", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = settingsViewModel::dismissDeactivateConfirm) {
                     Text("Cancel")
                 }
             },
@@ -618,11 +636,15 @@ private fun PluginsSection(
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
+                                modifier = Modifier.testTag("deactivate_plugin_button"),
                             ) {
                                 Text("Deactivate")
                             }
                         } else {
-                            Button(onClick = { onActivatePlugin(plugin.id) }) {
+                            Button(
+                                onClick = { onActivatePlugin(plugin.id) },
+                                modifier = Modifier.testTag("activate_plugin_button"),
+                            ) {
                                 Text("Activate")
                             }
                         }

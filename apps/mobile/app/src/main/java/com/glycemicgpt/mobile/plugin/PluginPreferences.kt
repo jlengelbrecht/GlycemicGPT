@@ -33,12 +33,14 @@ class PluginPreferences @Inject constructor(
     fun getActivePluginIds(capability: PluginCapability): Set<String> =
         prefs.getStringSet(multiKeyFor(capability), emptySet()) ?: emptySet()
 
+    @Synchronized
     fun addActivePluginId(capability: PluginCapability, pluginId: String) {
         val current = getActivePluginIds(capability).toMutableSet()
         current.add(pluginId)
         prefs.edit().putStringSet(multiKeyFor(capability), current).apply()
     }
 
+    @Synchronized
     fun removeActivePluginId(capability: PluginCapability, pluginId: String) {
         val current = getActivePluginIds(capability).toMutableSet()
         current.remove(pluginId)

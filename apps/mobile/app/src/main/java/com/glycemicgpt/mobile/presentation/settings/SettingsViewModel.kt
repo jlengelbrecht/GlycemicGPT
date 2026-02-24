@@ -90,6 +90,8 @@ data class SettingsUiState(
     // Confirmation dialogs
     val showLogoutConfirm: Boolean = false,
     val showUnpairConfirm: Boolean = false,
+    val showDeactivateConfirm: Boolean = false,
+    val pendingDeactivatePluginId: String? = null,
     // App update
     val updateState: UpdateUiState = UpdateUiState.Idle,
     // Watch
@@ -304,11 +306,33 @@ class SettingsViewModel @Inject constructor(
         )
     }
 
-    fun deactivatePlugin(pluginId: String) {
+    fun showDeactivateConfirm(pluginId: String) {
+        _uiState.value = _uiState.value.copy(
+            showDeactivateConfirm = true,
+            pendingDeactivatePluginId = pluginId,
+        )
+    }
+
+    fun dismissDeactivateConfirm() {
+        _uiState.value = _uiState.value.copy(
+            showDeactivateConfirm = false,
+            pendingDeactivatePluginId = null,
+        )
+    }
+
+    fun confirmDeactivatePlugin() {
+        val pluginId = _uiState.value.pendingDeactivatePluginId ?: return
         pluginRegistry.deactivatePlugin(pluginId)
         _uiState.value = _uiState.value.copy(
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+            showDeactivateConfirm = false,
+            pendingDeactivatePluginId = null,
         )
+    }
+
+    @Deprecated("Use showDeactivateConfirm for safety", ReplaceWith("showDeactivateConfirm(pluginId)"))
+    fun deactivatePlugin(pluginId: String) {
+        showDeactivateConfirm(pluginId)
     }
 
     fun setBackendSyncEnabled(enabled: Boolean) {

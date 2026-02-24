@@ -23,17 +23,17 @@ interface PumpStatus : PluginCapabilityInterface {
 
     fun extractCgmFromHistoryLogs(
         records: List<HistoryLogRecord>,
-        limits: SafetyLimits = SafetyLimits(),
+        limits: SafetyLimits,
     ): List<CgmReading>
 
     fun extractBolusesFromHistoryLogs(
         records: List<HistoryLogRecord>,
-        limits: SafetyLimits = SafetyLimits(),
+        limits: SafetyLimits,
     ): List<BolusEvent>
 
     fun extractBasalFromHistoryLogs(
         records: List<HistoryLogRecord>,
-        limits: SafetyLimits = SafetyLimits(),
+        limits: SafetyLimits,
     ): List<BasalReading>
 
     /** Clear pairing credentials and disconnect. */
