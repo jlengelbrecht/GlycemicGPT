@@ -82,7 +82,7 @@ class PluginRegistry @Inject constructor(
         check(initialized.compareAndSet(false, true)) { "PluginRegistry already initialized" }
         Timber.d("PluginRegistry: initializing with %d factories", factories.size)
 
-        // Create all plugins from factories
+        // Create all plugins from factories; one bad plugin must not break the rest.
         for (factory in factories) {
             val meta = factory.metadata
             if (meta.apiVersion != PLUGIN_API_VERSION) {
@@ -92,12 +92,16 @@ class PluginRegistry @Inject constructor(
                 )
                 continue
             }
-            validatePluginId(meta.id)
-            val pluginContext = createPluginContext(meta.id)
-            val plugin = factory.create(pluginContext)
-            plugin.initialize(pluginContext)
-            plugins[meta.id] = plugin
-            Timber.d("Plugin created: %s (%s)", meta.name, meta.id)
+            try {
+                validatePluginId(meta.id)
+                val pluginContext = createPluginContext(meta.id)
+                val plugin = factory.create(pluginContext)
+                plugin.initialize(pluginContext)
+                plugins[meta.id] = plugin
+                Timber.d("Plugin created: %s (%s)", meta.name, meta.id)
+            } catch (e: Exception) {
+                Timber.e(e, "Plugin %s failed to create/initialize -- skipping", meta.id)
+            }
         }
 
         _availablePlugins.value = plugins.values.map { it.metadata }
@@ -115,6 +119,12 @@ class PluginRegistry @Inject constructor(
     fun activatePlugin(pluginId: String): Result<Unit> = synchronized(activationLock) {
         val plugin = plugins[pluginId]
             ?: return Result.failure(IllegalArgumentException("Unknown plugin: $pluginId"))
+
+        // Idempotent: already active, nothing to do
+        if (pluginId in activePlugins) {
+            Timber.d("Plugin %s is already active, skipping activation", pluginId)
+            return Result.success(Unit)
+        }
 
         // Collect conflicting plugins before activation
         val conflictingIds = mutableSetOf<String>()

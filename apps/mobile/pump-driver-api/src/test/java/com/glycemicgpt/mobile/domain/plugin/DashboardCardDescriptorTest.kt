@@ -61,4 +61,22 @@ class DashboardCardDescriptorTest {
             elements = emptyList(),
         )
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `whitespace-only id is rejected`() {
+        DashboardCardDescriptor(
+            id = "   ",
+            title = "Valid Title",
+            elements = emptyList(),
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `whitespace-only title is rejected`() {
+        DashboardCardDescriptor(
+            id = "valid_id",
+            title = "   ",
+            elements = emptyList(),
+        )
+    }
 }

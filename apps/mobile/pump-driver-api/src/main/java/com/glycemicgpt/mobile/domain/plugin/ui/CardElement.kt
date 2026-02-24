@@ -41,7 +41,11 @@ sealed class CardElement {
     data class SparkLine(
         val values: List<Float>,
         val label: String = "",
-    ) : CardElement()
+    ) : CardElement() {
+        init {
+            require(values.isNotEmpty()) { "SparkLine values must not be empty" }
+        }
+    }
 
     data class Row(val elements: List<CardElement>) : CardElement()
     data class Column(val elements: List<CardElement>) : CardElement()

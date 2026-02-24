@@ -302,7 +302,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun activatePlugin(pluginId: String) {
-        pluginRegistry.activatePlugin(pluginId)
+        val result = pluginRegistry.activatePlugin(pluginId)
+        if (result.isFailure) {
+            Timber.e(result.exceptionOrNull(), "Failed to activate plugin %s", pluginId)
+        }
         _uiState.value = _uiState.value.copy(
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
             activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
@@ -325,7 +328,10 @@ class SettingsViewModel @Inject constructor(
 
     fun confirmDeactivatePlugin() {
         val pluginId = _uiState.value.pendingDeactivatePluginId ?: return
-        pluginRegistry.deactivatePlugin(pluginId)
+        val result = pluginRegistry.deactivatePlugin(pluginId)
+        if (result.isFailure) {
+            Timber.e(result.exceptionOrNull(), "Failed to deactivate plugin %s", pluginId)
+        }
         _uiState.value = _uiState.value.copy(
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
             activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
