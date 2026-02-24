@@ -16,6 +16,7 @@ import com.glycemicgpt.mobile.domain.plugin.asPumpStatus
 import com.glycemicgpt.mobile.domain.pump.PumpDriver
 import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import com.glycemicgpt.mobile.plugin.PluginRegistry
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -38,13 +39,27 @@ class PumpDriverAdapter @Inject constructor(
     override suspend fun connect(deviceAddress: String): Result<Unit> {
         val plugin = registry.activePumpPlugin.value
             ?: return Result.failure(NoActivePluginException())
-        return runCatching { plugin.connect(deviceAddress) }
+        return try {
+            plugin.connect(deviceAddress)
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun disconnect(): Result<Unit> {
         val plugin = registry.activePumpPlugin.value
             ?: return Result.failure(NoActivePluginException())
-        return runCatching { plugin.disconnect() }
+        return try {
+            plugin.disconnect()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun getIoB(): Result<IoBReading> =
