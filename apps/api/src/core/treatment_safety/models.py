@@ -8,9 +8,9 @@ See __init__.py for important regulatory context.
 """
 
 import uuid
-from typing import Any, Final
+from typing import Any, Final, Self
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from src.core.treatment_safety.enums import BolusSource, SafetyCheckType
 
@@ -28,6 +28,8 @@ class BolusRequest(BaseModel):
     Glucose values are in mg/dL matching the project-wide convention.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     user_id: uuid.UUID
     requested_dose_milliunits: int = Field(
         ge=0,
@@ -41,10 +43,19 @@ class BolusRequest(BaseModel):
     )
     timestamp: AwareDatetime
     source: BolusSource
+    user_confirmed: bool = Field(
+        default=False,
+        description=(
+            "Whether the user has explicitly confirmed this bolus. "
+            "Required for ai_suggested and automated sources."
+        ),
+    )
 
 
 class SafetyCheckResult(BaseModel):
     """Result of a single safety check."""
+
+    model_config = ConfigDict(frozen=True)
 
     check_type: SafetyCheckType
     passed: bool
@@ -54,6 +65,8 @@ class SafetyCheckResult(BaseModel):
 
 class BolusValidationResult(BaseModel):
     """Aggregate result of all safety checks for a bolus request."""
+
+    model_config = ConfigDict(frozen=True)
 
     approved: bool
     rejection_reasons: list[str] = Field(default_factory=list)
@@ -67,12 +80,15 @@ class BolusValidationResult(BaseModel):
     safety_check_results: list[SafetyCheckResult] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def check_consistency(self) -> "BolusValidationResult":
+    def check_consistency(self) -> Self:
         """Enforce that approved/rejected states are internally consistent."""
         if not self.approved and self.validated_dose_milliunits != 0:
             msg = "validated_dose_milliunits must be 0 when the bolus is not approved"
             raise ValueError(msg)
         if self.approved and self.rejection_reasons:
             msg = "rejection_reasons must be empty when the bolus is approved"
+            raise ValueError(msg)
+        if self.approved and self.validated_dose_milliunits == 0:
+            msg = "validated_dose_milliunits must be > 0 when the bolus is approved"
             raise ValueError(msg)
         return self

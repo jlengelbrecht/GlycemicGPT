@@ -1,18 +1,26 @@
-"""Treatment safety validation scaffolding.
+"""Treatment safety validation.
 
-This module provides structural foundation for where treatment safety
-validation would live if pump control features are ever implemented.
-Currently, all classes and methods are stubs that raise NotImplementedError.
+This module enforces safety guardrails for bolus delivery requests.
+Every bolus request -- regardless of which plugin originates it --
+must pass through the TreatmentSafetyValidator before reaching the
+pump. Six checks run on every request (no short-circuit):
 
-IMPORTANT: This is scaffolding only. No functional treatment validation
-exists in this codebase. Before implementing any pump control features:
+1. Max single bolus (user-configured)
+2. Max daily total (user-configured)
+3. CGM freshness (must have recent reading)
+4. Rate limiting (minimum interval between boluses)
+5. Glucose range (hard hypoglycemia floor + user range)
+6. User confirmation (required for non-manual sources)
+
+IMPORTANT: This validator is a software safety layer -- it does NOT
+replace clinical judgment. Before implementing pump control features:
 
 1. Review MEDICAL-DISCLAIMER.md for regulatory context
 2. Review CONTRIBUTING.md for the pump control policy
 3. Obtain legal counsel regarding FDA/regulatory requirements
-4. All safety limits are enforced at the platform level -- see
+4. Safety limits are enforced at the platform level -- see
    src.schemas.safety_limits for the active safety limit
-   configuration used by the monitoring system.
+   configuration.
 """
 
 from src.core.treatment_safety.enums import (

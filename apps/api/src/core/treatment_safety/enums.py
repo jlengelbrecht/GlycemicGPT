@@ -1,43 +1,47 @@
 """Treatment safety enums.
 
-Structural scaffolding for treatment safety validation types.
+Validation types for the treatment safety subsystem.
 See __init__.py for important regulatory context.
 """
 
-from enum import Enum
+from enum import StrEnum, auto
 
 
-class SafetyCheckType(str, Enum):
+class SafetyCheckType(StrEnum):
     """Types of safety checks applied to treatment requests."""
 
-    max_single_bolus = "max_single_bolus"
-    max_daily_total = "max_daily_total"
-    cgm_freshness = "cgm_freshness"
-    rate_limit = "rate_limit"
-    glucose_range_check = "glucose_range_check"
-    user_confirmation_required = "user_confirmation_required"
-    biometric_required = "biometric_required"
+    max_single_bolus = auto()
+    max_daily_total = auto()
+    cgm_freshness = auto()
+    rate_limit = auto()
+    glucose_range_check = auto()
+    user_confirmation_required = auto()
+    biometric_required = auto()
 
 
-class BolusSource(str, Enum):
+class BolusSource(StrEnum):
     """Origin of a bolus request.
 
-    The ``automated`` member exists to represent closed-loop pump modes.
-    Any bolus with source ``automated`` MUST pass
-    ``SafetyCheckType.user_confirmation_required`` or
-    ``SafetyCheckType.biometric_required`` before being approved.
-    This invariant must be enforced structurally in the validator,
-    not left to callers.
+    Both ``ai_suggested`` and ``automated`` boluses MUST pass
+    ``SafetyCheckType.user_confirmation_required`` before approval.
+    This invariant is enforced structurally in the validator.
+
+    ``ai_suggested``: AI-recommended bolus. MUST be presented with a
+    mandatory disclaimer. Auto-execution is strictly prohibited
+    regardless of validation outcome.
+
+    ``automated``: Closed-loop pump mode bolus. Requires explicit
+    user confirmation before any delivery action.
     """
 
-    manual = "manual"
-    ai_suggested = "ai_suggested"
-    automated = "automated"
+    manual = auto()
+    ai_suggested = auto()
+    automated = auto()
 
 
-class ValidationStatus(str, Enum):
+class ValidationStatus(StrEnum):
     """Outcome of a bolus validation check."""
 
-    approved = "approved"
-    rejected = "rejected"
-    pending_confirmation = "pending_confirmation"
+    approved = auto()
+    rejected = auto()
+    pending_confirmation = auto()

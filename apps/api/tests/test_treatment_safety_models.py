@@ -1,7 +1,6 @@
-"""Tests for treatment safety scaffolding.
+"""Tests for treatment safety models and enums.
 
-Verifies Pydantic model construction, enum values, field validation
-bounds, and that validator stubs raise NotImplementedError.
+Verifies Pydantic model construction, enum values, and field validation bounds.
 """
 
 import uuid
@@ -20,7 +19,6 @@ from src.core.treatment_safety.models import (
     BolusValidationResult,
     SafetyCheckResult,
 )
-from src.core.treatment_safety.validator import TreatmentSafetyValidator
 
 # ---------------------------------------------------------------------------
 # Enum tests
@@ -197,37 +195,28 @@ class TestBolusValidationResult:
                 validated_dose_milliunits=1000,
             )
 
+    def test_approved_with_zero_dose_invalid(self):
+        with pytest.raises(ValidationError):
+            BolusValidationResult(
+                approved=True,
+                validated_dose_milliunits=0,
+            )
+
 
 # ---------------------------------------------------------------------------
-# Validator stub tests
+# user_confirmed field tests
 # ---------------------------------------------------------------------------
 
 
-class TestTreatmentSafetyValidator:
-    def setup_method(self):
-        self.validator = TreatmentSafetyValidator()
-        self.request = _make_bolus_request()
+class TestBolusRequestUserConfirmed:
+    def test_defaults_to_false(self):
+        req = _make_bolus_request()
+        assert req.user_confirmed is False
 
-    def test_validate_bolus_request_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator.validate_bolus_request(self.request)
+    def test_explicit_true(self):
+        req = _make_bolus_request(user_confirmed=True)
+        assert req.user_confirmed is True
 
-    def test_check_max_single_bolus_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator._check_max_single_bolus(self.request)
-
-    def test_check_max_daily_total_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator._check_max_daily_total(self.request)
-
-    def test_check_cgm_freshness_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator._check_cgm_freshness(self.request)
-
-    def test_check_rate_limit_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator._check_rate_limit(self.request)
-
-    def test_check_glucose_range_raises(self):
-        with pytest.raises(NotImplementedError, match="CONTRIBUTING.md"):
-            self.validator._check_glucose_range(self.request)
+    def test_explicit_false(self):
+        req = _make_bolus_request(user_confirmed=False)
+        assert req.user_confirmed is False
