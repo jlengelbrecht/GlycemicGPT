@@ -44,11 +44,16 @@ sealed class CardElement {
     ) : CardElement() {
         init {
             require(values.isNotEmpty()) { "SparkLine values must not be empty" }
+            require(values.all { it.isFinite() }) { "SparkLine values must all be finite" }
         }
     }
 
-    data class Row(val elements: List<CardElement>) : CardElement()
-    data class Column(val elements: List<CardElement>) : CardElement()
+    data class Row(val elements: List<CardElement>) : CardElement() {
+        init { require(elements.isNotEmpty()) { "Row elements must not be empty" } }
+    }
+    data class Column(val elements: List<CardElement>) : CardElement() {
+        init { require(elements.isNotEmpty()) { "Column elements must not be empty" } }
+    }
     data class Spacer(val heightDp: Int = 8) : CardElement() {
         init {
             require(heightDp >= 0) { "Spacer heightDp must be non-negative, was $heightDp" }
