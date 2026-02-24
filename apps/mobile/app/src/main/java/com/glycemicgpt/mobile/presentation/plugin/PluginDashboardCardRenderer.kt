@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.glycemicgpt.mobile.domain.plugin.ui.CardElement
 import com.glycemicgpt.mobile.domain.plugin.ui.DashboardCardDescriptor
@@ -47,10 +49,14 @@ import com.glycemicgpt.mobile.domain.plugin.ui.UiColor
 /**
  * Renders a [DashboardCardDescriptor] as a Material 3 card.
  */
+private const val MAX_NESTING_DEPTH = 5
+
 @Composable
 fun PluginDashboardCardRenderer(card: DashboardCardDescriptor) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("plugin_card_${card.id}"),
     ) {
         Column(
             modifier = Modifier
@@ -63,14 +69,15 @@ fun PluginDashboardCardRenderer(card: DashboardCardDescriptor) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             card.elements.forEach { element ->
-                RenderElement(element)
+                RenderElement(element, depth = 0)
             }
         }
     }
 }
 
 @Composable
-private fun RenderElement(element: CardElement) {
+private fun RenderElement(element: CardElement, depth: Int = 0) {
+    if (depth > MAX_NESTING_DEPTH) return
     when (element) {
         is CardElement.LargeValue -> LargeValueElement(element)
         is CardElement.Label -> LabelElement(element)
@@ -78,8 +85,8 @@ private fun RenderElement(element: CardElement) {
         is CardElement.ProgressBar -> ProgressBarElement(element)
         is CardElement.IconValue -> IconValueElement(element)
         is CardElement.SparkLine -> SparkLineElement(element)
-        is CardElement.Row -> RowElement(element)
-        is CardElement.Column -> ColumnElement(element)
+        is CardElement.Row -> RowElement(element, depth + 1)
+        is CardElement.Column -> ColumnElement(element, depth + 1)
         is CardElement.Spacer -> Spacer(modifier = Modifier.height(element.heightDp.dp))
     }
 }
@@ -118,8 +125,9 @@ private fun LabelElement(element: CardElement.Label) {
 
 @Composable
 private fun StatusBadgeElement(element: CardElement.StatusBadge) {
-    val bgColor = element.color.toComposeColor().copy(alpha = 0.12f)
-    val textColor = element.color.toComposeColor()
+    val resolvedColor = element.color.toComposeColor()
+    val bgColor = resolvedColor.copy(alpha = 0.12f)
+    val textColor = resolvedColor
     Surface(
         shape = RoundedCornerShape(4.dp),
         color = bgColor,
@@ -190,6 +198,7 @@ private fun SparkLineElement(element: CardElement.SparkLine) {
             Spacer(modifier = Modifier.height(4.dp))
         }
         val lineColor = MaterialTheme.colorScheme.primary
+        val strokeWidthPx = with(LocalDensity.current) { 2.dp.toPx() }
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -209,7 +218,7 @@ private fun SparkLineElement(element: CardElement.SparkLine) {
                     color = lineColor,
                     start = Offset(x1, y1),
                     end = Offset(x2, y2),
-                    strokeWidth = 2f,
+                    strokeWidth = strokeWidthPx,
                 )
             }
         }
@@ -217,23 +226,23 @@ private fun SparkLineElement(element: CardElement.SparkLine) {
 }
 
 @Composable
-private fun RowElement(element: CardElement.Row) {
+private fun RowElement(element: CardElement.Row, depth: Int) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         element.elements.forEach { child ->
-            RenderElement(child)
+            RenderElement(child, depth)
         }
     }
 }
 
 @Composable
-private fun ColumnElement(element: CardElement.Column) {
+private fun ColumnElement(element: CardElement.Column, depth: Int) {
     Column(modifier = Modifier.fillMaxWidth()) {
         element.elements.forEach { child ->
-            RenderElement(child)
+            RenderElement(child, depth)
         }
     }
 }

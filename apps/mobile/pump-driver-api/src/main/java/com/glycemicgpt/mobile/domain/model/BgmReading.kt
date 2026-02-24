@@ -4,7 +4,7 @@ import java.time.Instant
 
 /**
  * A fingerstick blood glucose meter reading.
- * Glucose values are validated to be within clinically plausible range (20-600 mg/dL).
+ * Glucose values are validated to be within clinically plausible range (20-500 mg/dL).
  */
 data class BgmReading(
     val glucoseMgDl: Int,
@@ -12,8 +12,8 @@ data class BgmReading(
     val meterName: String? = null,
 ) {
     init {
-        require(glucoseMgDl in 20..600) {
-            "glucoseMgDl must be in 20..600, was $glucoseMgDl"
+        require(glucoseMgDl in 20..500) {
+            "glucoseMgDl must be in 20..500, was $glucoseMgDl"
         }
     }
 }

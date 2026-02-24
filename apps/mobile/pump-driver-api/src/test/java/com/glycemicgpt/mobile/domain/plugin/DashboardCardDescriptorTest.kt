@@ -43,4 +43,13 @@ class DashboardCardDescriptorTest {
         assertEquals("default", sorted[1].id)
         assertEquals("low", sorted[2].id)
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `blank id is rejected`() {
+        DashboardCardDescriptor(
+            id = "",
+            title = "No ID",
+            elements = emptyList(),
+        )
+    }
 }

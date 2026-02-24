@@ -46,6 +46,7 @@ sealed class SettingDescriptor {
             requireValidKey(key)
             require(min < max) { "Slider min ($min) must be less than max ($max)" }
             require(step > 0) { "Slider step must be positive, was $step" }
+            require(step <= max - min) { "Slider step ($step) must not exceed range (${max - min})" }
         }
     }
 

@@ -11,4 +11,8 @@ data class DashboardCardDescriptor(
     val title: String,
     val priority: Int = 100,
     val elements: List<CardElement>,
-)
+) {
+    init {
+        require(id.isNotBlank()) { "DashboardCardDescriptor id must not be blank" }
+    }
+}

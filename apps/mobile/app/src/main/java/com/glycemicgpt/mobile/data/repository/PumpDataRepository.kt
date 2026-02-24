@@ -180,7 +180,7 @@ class PumpDataRepository @Inject constructor(
 
     fun observeCgmHistory(since: Instant): Flow<List<CgmReading>> =
         pumpDao.observeCgmHistory(since.toEpochMilli()).map { entities ->
-            entities.map { it.toDomain() }
+            entities.mapNotNull { it.toDomain() }
         }
 
     // -- Time in Range --------------------------------------------------------
@@ -240,15 +240,20 @@ private fun BolusEventEntity.toDomain() = BolusEvent(
     timestamp = Instant.ofEpochMilli(timestampMs),
 )
 
-private fun CgmReadingEntity.toDomain() = CgmReading(
-    glucoseMgDl = glucoseMgDl,
-    trendArrow = try {
-        CgmTrend.valueOf(trendArrow)
-    } catch (_: IllegalArgumentException) {
-        CgmTrend.UNKNOWN
-    },
-    timestamp = Instant.ofEpochMilli(timestampMs),
-)
+private fun CgmReadingEntity.toDomain(): CgmReading? = try {
+    CgmReading(
+        glucoseMgDl = glucoseMgDl,
+        trendArrow = try {
+            CgmTrend.valueOf(trendArrow)
+        } catch (_: IllegalArgumentException) {
+            CgmTrend.UNKNOWN
+        },
+        timestamp = Instant.ofEpochMilli(timestampMs),
+    )
+} catch (_: IllegalArgumentException) {
+    // Legacy data may have out-of-range glucose values (pre-validation).
+    null
+}
 
 private fun TimeInRangeCounts.toTimeInRange(): TimeInRangeData {
     if (total == 0) return TimeInRangeData(0f, 0f, 0f, 0)

@@ -44,7 +44,13 @@ sealed class PluginEvent {
         override val pluginId: String,
         val bgValueMgDl: Int,
         val timestamp: Instant,
-    ) : PluginEvent()
+    ) : PluginEvent() {
+        init {
+            require(bgValueMgDl in 20..500) {
+                "bgValueMgDl must be in 20..500, was $bgValueMgDl"
+            }
+        }
+    }
 
     data class CalibrationCompleted(
         override val pluginId: String,
@@ -61,8 +67,8 @@ sealed class PluginEvent {
 
     companion object {
         /** Event types that only the platform may publish. */
-        val PLATFORM_ONLY: Set<Class<out PluginEvent>> = setOf(
-            SafetyLimitsChanged::class.java,
+        val PLATFORM_ONLY: Set<kotlin.reflect.KClass<out PluginEvent>> = setOf(
+            SafetyLimitsChanged::class,
         )
     }
 }

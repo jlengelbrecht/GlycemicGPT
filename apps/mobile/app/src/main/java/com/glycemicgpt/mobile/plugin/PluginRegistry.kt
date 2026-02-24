@@ -155,7 +155,11 @@ class PluginRegistry @Inject constructor(
         val plugin = activePlugins.remove(pluginId)
             ?: return Result.failure(IllegalArgumentException("Plugin not active: $pluginId"))
 
-        plugin.onDeactivated()
+        try {
+            plugin.onDeactivated()
+        } catch (e: Exception) {
+            Timber.e(e, "Plugin %s threw during onDeactivated, continuing cleanup", pluginId)
+        }
 
         // Clear preferences
         for (cap in plugin.capabilities) {
@@ -267,7 +271,7 @@ class PluginRegistry @Inject constructor(
         /** Identifier used for platform-originated events (not a real plugin). */
         const val PLATFORM_PLUGIN_ID = "platform"
 
-        /** Plugin IDs must be reverse-domain-name style: letters, digits, dots, hyphens. */
+        /** Plugin IDs must be reverse-domain-name style: letters, digits, dots, hyphens, underscores. */
         private val VALID_PLUGIN_ID = Regex("^[a-zA-Z][a-zA-Z0-9._-]{1,127}$")
     }
 }

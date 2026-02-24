@@ -48,7 +48,13 @@ data class CgmReading(
     val glucoseMgDl: Int,
     val trendArrow: CgmTrend,
     val timestamp: Instant,
-)
+) {
+    init {
+        require(glucoseMgDl in 20..500) {
+            "glucoseMgDl must be in 20..500, was $glucoseMgDl"
+        }
+    }
+}
 
 enum class CgmTrend {
     DOUBLE_UP,

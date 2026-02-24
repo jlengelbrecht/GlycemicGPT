@@ -25,7 +25,12 @@ sealed class CardElement {
         val value: Float,
         val max: Float,
         val label: String = "",
-    ) : CardElement()
+    ) : CardElement() {
+        init {
+            require(max > 0f) { "ProgressBar max must be positive, was $max" }
+            require(value in 0f..max) { "ProgressBar value ($value) must be in 0..$max" }
+        }
+    }
 
     data class IconValue(
         val icon: PluginIcon,

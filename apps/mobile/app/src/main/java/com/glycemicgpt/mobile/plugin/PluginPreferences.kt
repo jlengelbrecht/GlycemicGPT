@@ -47,6 +47,7 @@ class PluginPreferences @Inject constructor(
         prefs.edit().putStringSet(multiKeyFor(capability), current).apply()
     }
 
+    @Synchronized
     fun clear() {
         prefs.edit().clear().apply()
     }

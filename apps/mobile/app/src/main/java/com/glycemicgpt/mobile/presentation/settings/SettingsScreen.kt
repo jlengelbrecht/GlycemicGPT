@@ -636,14 +636,14 @@ private fun PluginsSection(
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
-                                modifier = Modifier.testTag("deactivate_plugin_button"),
+                                modifier = Modifier.testTag("deactivate_plugin_${plugin.id}"),
                             ) {
                                 Text("Deactivate")
                             }
                         } else {
                             Button(
                                 onClick = { onActivatePlugin(plugin.id) },
-                                modifier = Modifier.testTag("activate_plugin_button"),
+                                modifier = Modifier.testTag("activate_plugin_${plugin.id}"),
                             ) {
                                 Text("Activate")
                             }

@@ -29,7 +29,7 @@ class PluginEventBusImpl @Inject constructor() : PluginEventBus {
     val events = _events.asSharedFlow()
 
     override fun publish(event: PluginEvent) {
-        if (event.javaClass in PluginEvent.PLATFORM_ONLY) {
+        if (event::class in PluginEvent.PLATFORM_ONLY) {
             Timber.w(
                 "Plugin %s attempted to publish platform-only event %s -- blocked",
                 event.pluginId,

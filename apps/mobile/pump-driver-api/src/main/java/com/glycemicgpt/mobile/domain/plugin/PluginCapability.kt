@@ -42,5 +42,13 @@ enum class PluginCapability {
             BGM_SOURCE,
             DATA_SYNC,
         )
+
+        init {
+            val covered = SINGLE_INSTANCE + MULTI_INSTANCE
+            check(covered == entries.toSet()) {
+                "PluginCapability exhaustiveness: missing from SINGLE_INSTANCE or MULTI_INSTANCE: " +
+                    (entries.toSet() - covered)
+            }
+        }
     }
 }

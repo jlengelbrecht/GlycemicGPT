@@ -140,7 +140,12 @@ private fun ToggleSetting(descriptor: SettingDescriptor.Toggle, store: PluginSet
 
 @Composable
 private fun SliderSetting(descriptor: SettingDescriptor.Slider, store: PluginSettingsStore) {
-    var value by remember { mutableFloatStateOf(store.getFloat(descriptor.key, descriptor.min)) }
+    var value by remember {
+        mutableFloatStateOf(
+            store.getFloat(descriptor.key, descriptor.min)
+                .coerceIn(descriptor.min, descriptor.max),
+        )
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),

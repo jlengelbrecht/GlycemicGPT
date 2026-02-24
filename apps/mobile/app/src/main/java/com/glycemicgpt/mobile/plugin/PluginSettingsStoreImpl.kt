@@ -7,6 +7,10 @@ import com.glycemicgpt.mobile.domain.plugin.PluginSettingsStore
 /**
  * Per-plugin key-value store backed by SharedPreferences.
  * Keys are namespaced by plugin ID to prevent collisions.
+ *
+ * Note: this store is for general plugin settings (not credentials).
+ * Sensitive credentials should be stored via [PumpCredentialProvider]
+ * which uses EncryptedSharedPreferences.
  */
 class PluginSettingsStoreImpl(
     context: Context,
@@ -28,6 +32,13 @@ class PluginSettingsStoreImpl(
 
     override fun putBoolean(key: String, value: Boolean) {
         prefs.edit().putBoolean(key, value).apply()
+    }
+
+    override fun getInt(key: String, default: Int): Int =
+        prefs.getInt(key, default)
+
+    override fun putInt(key: String, value: Int) {
+        prefs.edit().putInt(key, value).apply()
     }
 
     override fun getFloat(key: String, default: Float): Float =

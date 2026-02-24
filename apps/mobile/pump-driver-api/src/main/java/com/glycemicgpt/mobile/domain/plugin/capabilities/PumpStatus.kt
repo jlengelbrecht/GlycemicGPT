@@ -51,9 +51,19 @@ interface PumpStatus : PluginCapabilityInterface {
         limits: SafetyLimits,
     ): List<BasalReading>
 
-    /** Clear pairing credentials and disconnect. */
+    /**
+     * Clear pairing credentials and disconnect.
+     *
+     * TODO: Make suspend once deprecated PumpConnectionManager is removed.
+     * Current implementations (BleConnectionManager) do not require suspension.
+     */
     fun unpair()
 
-    /** Attempt to reconnect to a previously paired device. */
+    /**
+     * Attempt to reconnect to a previously paired device.
+     *
+     * TODO: Make suspend once deprecated PumpConnectionManager is removed.
+     * Current implementations (BleConnectionManager) do not require suspension.
+     */
     fun autoReconnectIfPaired()
 }
