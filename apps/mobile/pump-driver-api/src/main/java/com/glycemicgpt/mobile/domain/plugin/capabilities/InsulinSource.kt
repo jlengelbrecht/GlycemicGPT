@@ -16,6 +16,6 @@ interface InsulinSource : PluginCapabilityInterface {
     suspend fun getBasalRate(): Result<BasalReading>
     suspend fun getBolusHistory(
         since: Instant,
-        limits: SafetyLimits = SafetyLimits(),
+        limits: SafetyLimits,
     ): Result<List<BolusEvent>>
 }

@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
  * MUST be replaced with a restricted interface before any runtime-loaded
  * (third-party) plugin support is introduced. See Phase 4c in the plan.
  */
-data class PluginContext(
+class PluginContext(
     val androidContext: Context,
     val pluginId: String,
     val settingsStore: PluginSettingsStore,

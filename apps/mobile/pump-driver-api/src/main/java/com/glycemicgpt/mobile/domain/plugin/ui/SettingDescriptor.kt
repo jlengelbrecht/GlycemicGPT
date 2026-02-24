@@ -7,19 +7,32 @@ package com.glycemicgpt.mobile.domain.plugin.ui
 sealed class SettingDescriptor {
     abstract val key: String
 
+    companion object {
+        private val VALID_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$")
+        internal fun requireValidKey(key: String) {
+            require(key.isNotBlank() && VALID_KEY.matches(key)) {
+                "Setting key must be non-blank and match $VALID_KEY, was '$key'"
+            }
+        }
+    }
+
     data class TextInput(
         override val key: String,
         val label: String,
         val hint: String = "",
         /** If true, the field is masked in the UI (password-style). */
         val sensitive: Boolean = false,
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init { requireValidKey(key) }
+    }
 
     data class Toggle(
         override val key: String,
         val label: String,
         val description: String = "",
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init { requireValidKey(key) }
+    }
 
     data class Slider(
         override val key: String,
@@ -28,24 +41,36 @@ sealed class SettingDescriptor {
         val max: Float,
         val step: Float = 1f,
         val unit: String = "",
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init {
+            requireValidKey(key)
+            require(min < max) { "Slider min ($min) must be less than max ($max)" }
+            require(step > 0) { "Slider step must be positive, was $step" }
+        }
+    }
 
     data class Dropdown(
         override val key: String,
         val label: String,
         val options: List<DropdownOption>,
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init { requireValidKey(key) }
+    }
 
     data class ActionButton(
         override val key: String,
         val label: String,
         val style: ButtonStyle = ButtonStyle.DEFAULT,
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init { requireValidKey(key) }
+    }
 
     data class InfoText(
         override val key: String,
         val text: String,
-    ) : SettingDescriptor()
+    ) : SettingDescriptor() {
+        init { requireValidKey(key) }
+    }
 }
 
 data class DropdownOption(val value: String, val label: String)

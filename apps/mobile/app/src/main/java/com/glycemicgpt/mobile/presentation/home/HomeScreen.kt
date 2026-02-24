@@ -118,9 +118,10 @@ fun HomeScreen(
                 thresholds = thresholds,
             )
 
-            // Plugin-contributed cards (sorted by priority)
-            if (pluginCards.isNotEmpty()) {
-                pluginCards.sortedBy { it.priority }.forEach { card ->
+            // Plugin-contributed cards (sorted by priority, memoized)
+            val sortedCards = remember(pluginCards) { pluginCards.sortedBy { it.priority } }
+            if (sortedCards.isNotEmpty()) {
+                sortedCards.forEach { card ->
                     Spacer(modifier = Modifier.height(12.dp))
                     PluginDashboardCardRenderer(card = card)
                 }
