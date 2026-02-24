@@ -17,6 +17,7 @@ import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
 import com.glycemicgpt.mobile.data.update.UpdateInfo
 import com.glycemicgpt.mobile.domain.plugin.DevicePlugin
+import com.glycemicgpt.mobile.domain.plugin.Plugin
 import com.glycemicgpt.mobile.domain.plugin.PluginMetadata
 import com.glycemicgpt.mobile.plugin.PluginRegistry
 import io.mockk.coEvery
@@ -85,6 +86,7 @@ class SettingsViewModelTest {
     private val pluginRegistry = mockk<PluginRegistry>(relaxed = true) {
         every { availablePlugins } returns MutableStateFlow<List<PluginMetadata>>(emptyList())
         every { activePumpPlugin } returns MutableStateFlow<DevicePlugin?>(null)
+        every { allActivePlugins } returns MutableStateFlow<List<Plugin>>(emptyList())
     }
 
     @Before

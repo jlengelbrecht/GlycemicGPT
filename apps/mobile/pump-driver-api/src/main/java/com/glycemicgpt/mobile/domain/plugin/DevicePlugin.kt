@@ -22,9 +22,16 @@ interface DevicePlugin : Plugin {
      */
     fun connect(address: String, config: Map<String, String> = emptyMap())
 
-    /** Disconnect from the currently connected device. */
+    /**
+     * Disconnect from the currently connected device.
+     * Must be safe to call even if not currently connected (no-op in that case).
+     */
     fun disconnect()
 
-    /** Scan for discoverable devices compatible with this plugin. */
+    /**
+     * Scan for discoverable devices compatible with this plugin.
+     * The returned flow completes when scanning ends (typically after a timeout).
+     * Callers should cancel collection to stop scanning early.
+     */
     fun scan(): Flow<DiscoveredDevice>
 }

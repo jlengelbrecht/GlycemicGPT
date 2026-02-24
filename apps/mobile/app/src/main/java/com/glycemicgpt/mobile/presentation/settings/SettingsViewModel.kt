@@ -75,6 +75,7 @@ data class SettingsUiState(
     // Plugins
     val availablePlugins: List<PluginMetadata> = emptyList(),
     val activePumpPluginId: String? = null,
+    val activePluginIds: Set<String> = emptySet(),
     // Sync
     val backendSyncEnabled: Boolean = true,
     val dataRetentionDays: Int = 7,
@@ -166,6 +167,7 @@ class SettingsViewModel @Inject constructor(
             overrideSilentForLow = alertSoundStore.overrideSilentForLowAlerts,
             availablePlugins = pluginRegistry.availablePlugins.value,
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+            activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
         )
 
         checkBatteryOptimization()
@@ -303,6 +305,7 @@ class SettingsViewModel @Inject constructor(
         pluginRegistry.activatePlugin(pluginId)
         _uiState.value = _uiState.value.copy(
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+            activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
         )
     }
 
@@ -325,6 +328,7 @@ class SettingsViewModel @Inject constructor(
         pluginRegistry.deactivatePlugin(pluginId)
         _uiState.value = _uiState.value.copy(
             activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+            activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
             showDeactivateConfirm = false,
             pendingDeactivatePluginId = null,
         )

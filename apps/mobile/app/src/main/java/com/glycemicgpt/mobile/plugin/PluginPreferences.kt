@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.glycemicgpt.mobile.domain.plugin.PluginCapability
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,7 +32,7 @@ class PluginPreferences @Inject constructor(
 
     /** Get all plugin IDs currently active for multi-instance capabilities. */
     fun getActivePluginIds(capability: PluginCapability): Set<String> =
-        prefs.getStringSet(multiKeyFor(capability), emptySet()) ?: emptySet()
+        prefs.getStringSet(multiKeyFor(capability), emptySet())?.toSet() ?: emptySet()
 
     @Synchronized
     fun addActivePluginId(capability: PluginCapability, pluginId: String) {
@@ -53,8 +54,8 @@ class PluginPreferences @Inject constructor(
     }
 
     private fun keyFor(capability: PluginCapability): String =
-        "active_${capability.name.lowercase()}"
+        "active_${capability.name.lowercase(Locale.ROOT)}"
 
     private fun multiKeyFor(capability: PluginCapability): String =
-        "active_multi_${capability.name.lowercase()}"
+        "active_multi_${capability.name.lowercase(Locale.ROOT)}"
 }

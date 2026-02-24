@@ -109,24 +109,31 @@ class PluginRegistry @Inject constructor(
     /**
      * Activate a plugin by ID. Handles mutual exclusion: if the plugin has
      * single-instance capabilities that conflict with an already-active plugin,
-     * the old plugin is deactivated first.
+     * the new plugin is activated first (so the capability slot is never empty),
+     * then the conflicting plugin is deactivated.
      */
     fun activatePlugin(pluginId: String): Result<Unit> = synchronized(activationLock) {
         val plugin = plugins[pluginId]
             ?: return Result.failure(IllegalArgumentException("Unknown plugin: $pluginId"))
 
-        // Check for mutual exclusion conflicts
+        // Collect conflicting plugins before activation
+        val conflictingIds = mutableSetOf<String>()
         for (cap in plugin.capabilities) {
             if (cap in PluginCapability.SINGLE_INSTANCE) {
                 val existingId = preferences.getActivePluginId(cap)
                 if (existingId != null && existingId != pluginId) {
-                    deactivatePluginInternal(existingId)
+                    conflictingIds.add(existingId)
                 }
             }
         }
 
-        // Activate
-        plugin.onActivated()
+        // Activate new plugin first (slot is never empty)
+        try {
+            plugin.onActivated()
+        } catch (e: Exception) {
+            Timber.e(e, "Plugin %s failed to activate", pluginId)
+            return Result.failure(e)
+        }
         activePlugins[pluginId] = plugin
 
         // Persist and update state flows
@@ -136,6 +143,11 @@ class PluginRegistry @Inject constructor(
             } else {
                 preferences.addActivePluginId(cap, pluginId)
             }
+        }
+
+        // Now deactivate conflicts (old plugins) after new one is active
+        for (conflictId in conflictingIds) {
+            deactivatePluginInternal(conflictId)
         }
 
         updateStateFlows()
@@ -185,7 +197,7 @@ class PluginRegistry @Inject constructor(
      * Called by HomeViewModel / BackendSyncManager after a successful
      * safety-limits refresh from the backend.
      */
-    fun refreshSafetyLimits() {
+    fun refreshSafetyLimits() = synchronized(activationLock) {
         val updated = safetyLimitsStore.toSafetyLimits()
         _safetyLimits.value = updated
         eventBus.publishPlatform(
@@ -203,8 +215,13 @@ class PluginRegistry @Inject constructor(
             val pluginId = preferences.getActivePluginId(cap) ?: continue
             val plugin = plugins[pluginId] ?: continue
             if (pluginId !in activePlugins) {
-                plugin.onActivated()
-                activePlugins[pluginId] = plugin
+                try {
+                    plugin.onActivated()
+                    activePlugins[pluginId] = plugin
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to restore plugin %s for %s, clearing preference", pluginId, cap)
+                    preferences.clearActivePlugin(cap)
+                }
             }
         }
 
@@ -213,8 +230,13 @@ class PluginRegistry @Inject constructor(
             for (pluginId in preferences.getActivePluginIds(cap)) {
                 val plugin = plugins[pluginId] ?: continue
                 if (pluginId !in activePlugins) {
-                    plugin.onActivated()
-                    activePlugins[pluginId] = plugin
+                    try {
+                        plugin.onActivated()
+                        activePlugins[pluginId] = plugin
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to restore plugin %s for %s, clearing preference", pluginId, cap)
+                        preferences.removeActivePluginId(cap, pluginId)
+                    }
                 }
             }
         }
@@ -252,7 +274,7 @@ class PluginRegistry @Inject constructor(
 
     private fun validatePluginId(id: String) {
         require(VALID_PLUGIN_ID.matches(id)) {
-            "Invalid plugin ID '$id'. Must match: letters, digits, dots, hyphens."
+            "Invalid plugin ID '$id'. Must match: letters, digits, dots, hyphens, underscores."
         }
     }
 

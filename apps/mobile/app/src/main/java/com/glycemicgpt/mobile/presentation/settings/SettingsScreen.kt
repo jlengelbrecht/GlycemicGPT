@@ -234,7 +234,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = settingsViewModel::dismissDeactivateConfirm,
             title = { Text("Deactivate Plugin") },
-            text = { Text("Deactivating the pump plugin will stop glucose monitoring, insulin tracking, and alerts. Are you sure?") },
+            text = { Text("Deactivating this plugin may stop glucose monitoring, insulin tracking, or other services it provides. Are you sure?") },
             confirmButton = {
                 TextButton(onClick = settingsViewModel::confirmDeactivatePlugin) {
                     Text("Deactivate", color = MaterialTheme.colorScheme.error)
@@ -611,7 +611,7 @@ private fun PluginsSection(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 state.availablePlugins.forEach { plugin ->
-                    val isActive = plugin.id == state.activePumpPluginId
+                    val isActive = plugin.id in state.activePluginIds
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

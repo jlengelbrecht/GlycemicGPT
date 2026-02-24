@@ -113,7 +113,7 @@ class PumpDataRepository @Inject constructor(
 
     fun observeBolusHistory(since: Instant): Flow<List<BolusEvent>> =
         pumpDao.observeBolusHistory(since.toEpochMilli()).map { entities ->
-            entities.map { it.toDomain() }
+            entities.mapNotNull { it.toDomain() }
         }
 
     suspend fun getLatestBolusTimestamp(): Instant? {
@@ -233,12 +233,16 @@ private fun ReservoirReadingEntity.toDomain() = ReservoirReading(
     timestamp = Instant.ofEpochMilli(timestampMs),
 )
 
-private fun BolusEventEntity.toDomain() = BolusEvent(
-    units = units,
-    isAutomated = isAutomated,
-    isCorrection = isCorrection,
-    timestamp = Instant.ofEpochMilli(timestampMs),
-)
+private fun BolusEventEntity.toDomain(): BolusEvent? = try {
+    BolusEvent(
+        units = units,
+        isAutomated = isAutomated,
+        isCorrection = isCorrection,
+        timestamp = Instant.ofEpochMilli(timestampMs),
+    )
+} catch (_: IllegalArgumentException) {
+    null // Skip legacy records that violate current safety bounds
+}
 
 private fun CgmReadingEntity.toDomain(): CgmReading? = try {
     CgmReading(

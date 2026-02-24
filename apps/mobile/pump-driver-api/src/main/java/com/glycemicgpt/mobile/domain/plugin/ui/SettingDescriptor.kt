@@ -55,7 +55,10 @@ sealed class SettingDescriptor {
         val label: String,
         val options: List<DropdownOption>,
     ) : SettingDescriptor() {
-        init { requireValidKey(key) }
+        init {
+            requireValidKey(key)
+            require(options.isNotEmpty()) { "Dropdown options must not be empty for key '$key'" }
+        }
     }
 
     data class ActionButton(

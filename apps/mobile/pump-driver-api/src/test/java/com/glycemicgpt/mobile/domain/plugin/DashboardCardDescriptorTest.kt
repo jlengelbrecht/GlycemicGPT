@@ -52,4 +52,13 @@ class DashboardCardDescriptorTest {
             elements = emptyList(),
         )
     }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `blank title is rejected`() {
+        DashboardCardDescriptor(
+            id = "valid_id",
+            title = "",
+            elements = emptyList(),
+        )
+    }
 }

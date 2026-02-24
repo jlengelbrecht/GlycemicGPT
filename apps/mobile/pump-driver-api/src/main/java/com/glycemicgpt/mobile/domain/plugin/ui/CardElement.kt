@@ -45,7 +45,11 @@ sealed class CardElement {
 
     data class Row(val elements: List<CardElement>) : CardElement()
     data class Column(val elements: List<CardElement>) : CardElement()
-    data class Spacer(val heightDp: Int = 8) : CardElement()
+    data class Spacer(val heightDp: Int = 8) : CardElement() {
+        init {
+            require(heightDp >= 0) { "Spacer heightDp must be non-negative, was $heightDp" }
+        }
+    }
 }
 
 enum class UiColor { DEFAULT, SUCCESS, WARNING, ERROR, INFO, MUTED }

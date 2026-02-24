@@ -14,5 +14,6 @@ data class DashboardCardDescriptor(
 ) {
     init {
         require(id.isNotBlank()) { "DashboardCardDescriptor id must not be blank" }
+        require(title.isNotBlank()) { "DashboardCardDescriptor title must not be blank" }
     }
 }
