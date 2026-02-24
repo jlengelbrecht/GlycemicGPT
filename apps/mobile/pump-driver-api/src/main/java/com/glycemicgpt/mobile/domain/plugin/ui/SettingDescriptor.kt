@@ -73,7 +73,11 @@ sealed class SettingDescriptor {
     }
 }
 
-data class DropdownOption(val value: String, val label: String)
+data class DropdownOption(val value: String, val label: String) {
+    init {
+        require(value.isNotBlank()) { "DropdownOption value must not be blank" }
+    }
+}
 
 enum class ButtonStyle { DEFAULT, PRIMARY, DESTRUCTIVE }
 
@@ -90,4 +94,12 @@ data class PluginSettingsSection(
  */
 data class PluginSettingsDescriptor(
     val sections: List<PluginSettingsSection>,
-)
+) {
+    init {
+        val allKeys = sections.flatMap { it.items }.map { it.key }
+        require(allKeys.size == allKeys.distinct().size) {
+            val dupes = allKeys.groupBy { it }.filter { it.value.size > 1 }.keys
+            "PluginSettingsDescriptor contains duplicate setting keys: $dupes"
+        }
+    }
+}
