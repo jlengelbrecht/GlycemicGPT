@@ -10,8 +10,8 @@ sealed class SettingDescriptor {
     companion object {
         private val VALID_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$")
         internal fun requireValidKey(key: String) {
-            require(key.isNotBlank() && VALID_KEY.matches(key)) {
-                "Setting key must be non-blank and match $VALID_KEY, was '$key'"
+            require(VALID_KEY.matches(key)) {
+                "Setting key must match $VALID_KEY, was '$key'"
             }
         }
     }
