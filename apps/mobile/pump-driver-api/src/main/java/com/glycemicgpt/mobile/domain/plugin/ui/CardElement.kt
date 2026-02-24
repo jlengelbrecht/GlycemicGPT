@@ -27,6 +27,8 @@ sealed class CardElement {
         val label: String = "",
     ) : CardElement() {
         init {
+            require(max.isFinite()) { "ProgressBar max must be finite, was $max" }
+            require(value.isFinite()) { "ProgressBar value must be finite, was $value" }
             require(max > 0f) { "ProgressBar max must be positive, was $max" }
             require(value in 0f..max) { "ProgressBar value ($value) must be in 0..$max" }
         }
