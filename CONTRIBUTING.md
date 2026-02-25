@@ -527,9 +527,42 @@ The mobile app uses a capability-based plugin architecture. New device support (
 | Channel | Branch | Docker Tag | APK Type |
 |---------|--------|------------|----------|
 | **Stable** | `main` | `latest`, semver | Signed release APK |
-| **Dev** | `develop` | `dev` | Debug APK |
+| **Dev** | `develop` | `dev` | Debug APK (shared keystore) |
 
 Stable releases are created automatically by release-please when code is promoted from `develop` to `main`. Your contribution will ship in the next stable release after the promotion PR is merged.
+
+**Debug APK signing:** Dev-channel debug APKs are signed with a shared debug keystore stored as a GitHub Actions secret. This ensures that every CI-built debug APK has the same signing key, allowing the app's auto-update mechanism to install new dev builds over previous ones without "package conflicts" errors. Local `./gradlew assembleDebug` builds use your machine's default `~/.android/debug.keystore` and will have a different signature -- you'll need to uninstall the CI-built APK before installing a local build (and vice versa).
+
+<details>
+<summary>Keystore rotation (maintainers only)</summary>
+
+If the debug keystore needs to be regenerated (e.g., secret deleted, key compromised), use these exact parameters to keep the Gradle signing config (alias name, secret names) consistent. A new keystore produces new key material, so existing dev-channel installs will require an uninstall/reinstall.
+
+```bash
+# Prompt for password (never hits shell history or process list)
+read -rsp "Keystore password: " KSPASS && echo
+
+keytool -genkeypair \
+  -alias debug-key \
+  -keyalg RSA -keysize 2048 \
+  -validity 36500 \
+  -keystore debug-keystore.jks \
+  -storepass:env KSPASS \
+  -keypass:env KSPASS \
+  -dname "CN=GlycemicGPT Debug, OU=Development, O=GlycemicGPT, L=Austin, ST=Texas, C=US"
+
+# Set GitHub secrets (gh prompts for values securely):
+base64 debug-keystore.jks | tr -d '\n' | gh secret set DEBUG_KEYSTORE_BASE64
+gh secret set DEBUG_KEYSTORE_PASSWORD    # enter password at prompt
+gh secret set DEBUG_KEY_ALIAS            # enter: debug-key
+gh secret set DEBUG_KEY_PASSWORD         # enter password at prompt
+
+# Remove the local keystore file -- do not commit it
+rm debug-keystore.jks
+```
+
+The alias must remain `debug-key`.
+</details>
 
 ---
 

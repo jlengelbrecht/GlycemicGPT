@@ -28,6 +28,25 @@ android {
     }
 
     signingConfigs {
+        // Shared debug keystore for consistent signatures across CI and local
+        // builds.  When the env var is absent (local dev), Gradle falls back to
+        // the default ~/.android/debug.keystore automatically.
+        val debugKsFile = System.getenv("DEBUG_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+        if (debugKsFile != null) {
+            getByName("debug") {
+                storeFile = file(debugKsFile)
+                storePassword = requireNotNull(System.getenv("DEBUG_KEYSTORE_PASSWORD")) {
+                    "DEBUG_KEYSTORE_PASSWORD must be set when DEBUG_KEYSTORE_FILE is provided"
+                }
+                keyAlias = requireNotNull(System.getenv("DEBUG_KEY_ALIAS")) {
+                    "DEBUG_KEY_ALIAS must be set when DEBUG_KEYSTORE_FILE is provided"
+                }
+                keyPassword = requireNotNull(System.getenv("DEBUG_KEY_PASSWORD")) {
+                    "DEBUG_KEY_PASSWORD must be set when DEBUG_KEYSTORE_FILE is provided"
+                }
+            }
+        }
+
         create("release") {
             val ksFile = System.getenv("RELEASE_KEYSTORE_FILE")
             if (ksFile != null) {
