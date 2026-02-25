@@ -329,16 +329,19 @@ class RestrictedPluginContextTest {
         every { baseContext.getSharedPreferences(any(), any()) } returns prefs
 
         ScopedCredentialProvider("com.example.my-plugin", baseContext)
-        // sanitizeId replaces ALL non-alphanumeric chars with underscores
-        verify { baseContext.getSharedPreferences("plugin_creds_com_example_my_plugin", Context.MODE_PRIVATE) }
+        // sanitizeId preserves dots, hyphens, underscores (unique-preserving)
+        verify { baseContext.getSharedPreferences("plugin_creds_com.example.my-plugin", Context.MODE_PRIVATE) }
     }
 
     @Test
-    fun `sanitizeId replaces all non-alphanumeric characters`() {
-        // Verify that dots, hyphens, and other separators all become underscores
-        assertEquals("com_foo_bar_baz", ScopedCredentialProvider.sanitizeId("com.foo.bar-baz"))
-        assertEquals("com_foo_bar_baz", ScopedCredentialProvider.sanitizeId("com.foo.bar.baz"))
+    fun `sanitizeId preserves dots and hyphens but strips path-unsafe chars`() {
+        // Dots and hyphens preserved -- distinct IDs remain distinct
+        assertEquals("com.foo.bar-baz", ScopedCredentialProvider.sanitizeId("com.foo.bar-baz"))
+        assertEquals("com.foo.bar.baz", ScopedCredentialProvider.sanitizeId("com.foo.bar.baz"))
         assertEquals("simple", ScopedCredentialProvider.sanitizeId("simple"))
+        // Path-unsafe characters are stripped
+        assertEquals("com.foo_bar", ScopedCredentialProvider.sanitizeId("com.foo/bar"))
+        assertEquals("com.foo_bar", ScopedCredentialProvider.sanitizeId("com.foo\\bar"))
     }
 
     @Test

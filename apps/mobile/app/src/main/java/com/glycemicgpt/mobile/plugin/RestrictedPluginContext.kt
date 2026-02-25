@@ -85,8 +85,8 @@ object RestrictedPluginContext {
  *
  * **Also blocked** (prevents cross-plugin data access):
  * - getSharedPreferences -- can't read other plugins' credential storage
- * - openFileOutput -- can't write arbitrary files
- * - openOrCreateDatabase -- can't access databases
+ * - openFileOutput / openFileInput / deleteFile / getDir -- can't access app's internal files
+ * - openOrCreateDatabase / deleteDatabase / getDatabasePath -- can't access databases
  * - createDeviceProtectedStorageContext -- can't escape to unencrypted storage
  */
 internal class RestrictedContext(base: Context) : ContextWrapper(base) {
@@ -179,6 +179,34 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
 
     override fun openFileOutput(name: String?, mode: Int): java.io.FileOutputStream =
         denied("openFileOutput")
+
+    override fun openFileInput(name: String?): java.io.FileInputStream =
+        denied("openFileInput")
+
+    override fun deleteFile(name: String?): Boolean =
+        denied("deleteFile")
+
+    override fun getDir(name: String?, mode: Int): java.io.File =
+        denied("getDir")
+
+    override fun getDatabasePath(name: String?): java.io.File =
+        denied("getDatabasePath")
+
+    override fun openOrCreateDatabase(
+        name: String?,
+        mode: Int,
+        factory: android.database.sqlite.SQLiteDatabase.CursorFactory?,
+    ): android.database.sqlite.SQLiteDatabase = denied("openOrCreateDatabase")
+
+    override fun openOrCreateDatabase(
+        name: String?,
+        mode: Int,
+        factory: android.database.sqlite.SQLiteDatabase.CursorFactory?,
+        errorHandler: android.database.DatabaseErrorHandler?,
+    ): android.database.sqlite.SQLiteDatabase = denied("openOrCreateDatabase")
+
+    override fun deleteDatabase(name: String?): Boolean =
+        denied("deleteDatabase")
 
     override fun createDeviceProtectedStorageContext(): Context =
         denied("createDeviceProtectedStorageContext")
@@ -275,11 +303,12 @@ internal class ScopedCredentialProvider(
 
         /**
          * Sanitizes a plugin ID into a safe SharedPreferences filename component.
-         * Replaces all non-alphanumeric characters with underscores to prevent
-         * namespace collisions between IDs that differ only in separators
-         * (e.g., `com.foo.bar_baz` vs `com.foo.bar.baz`).
+         * Only strips path-unsafe characters (slashes, null bytes) while preserving
+         * dots, hyphens, and underscores to avoid namespace collisions between
+         * distinct plugin IDs (e.g., `com.foo.bar-baz` vs `com.foo.bar.baz`
+         * remain distinct).
          */
         internal fun sanitizeId(pluginId: String): String =
-            pluginId.replace(Regex("[^a-zA-Z0-9]"), "_")
+            pluginId.replace(Regex("[^a-zA-Z0-9._-]"), "_")
     }
 }
