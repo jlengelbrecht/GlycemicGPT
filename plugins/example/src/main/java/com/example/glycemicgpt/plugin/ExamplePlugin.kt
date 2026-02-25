@@ -39,20 +39,22 @@ class ExamplePlugin : Plugin {
 
     override fun initialize(context: PluginContext) {
         this.context = context
-        context.debugLogger.log("ExamplePlugin", "initialized with pluginId=${context.pluginId}")
+        // In a real plugin you'd set up resources here.
+        // DebugLogger is BLE-packet-oriented; use Android Log for general logging:
+        println("ExamplePlugin: initialized with pluginId=${context.pluginId}")
     }
 
     override fun shutdown() {
-        context?.debugLogger?.log("ExamplePlugin", "shutdown")
+        println("ExamplePlugin: shutdown")
         context = null
     }
 
     override fun onActivated() {
-        context?.debugLogger?.log("ExamplePlugin", "activated")
+        println("ExamplePlugin: activated")
     }
 
     override fun onDeactivated() {
-        context?.debugLogger?.log("ExamplePlugin", "deactivated")
+        println("ExamplePlugin: deactivated")
     }
 
     override fun settingsDescriptor(): PluginSettingsDescriptor = PluginSettingsDescriptor(

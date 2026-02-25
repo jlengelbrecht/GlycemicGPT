@@ -101,6 +101,9 @@ class PluginFileManager(private val context: Context) {
                 )
             }
 
+            // Make read-only: Android's DexClassLoader rejects writable DEX files.
+            destFile.setReadOnly()
+
             Timber.d("PluginFileManager: installed %s (%d bytes)", destFile.name, destFile.length())
             Result.success(destFile)
         } catch (e: Exception) {
@@ -129,6 +132,8 @@ class PluginFileManager(private val context: Context) {
             return false
         }
 
+        // Make writable so we can delete (installPlugin sets read-only for DexClassLoader).
+        jarFile.setWritable(true)
         val deleted = jarFile.delete()
         if (deleted) {
             Timber.d("PluginFileManager: removed %s", jarFile.name)

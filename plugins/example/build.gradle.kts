@@ -25,7 +25,14 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 repositories {
@@ -34,8 +41,8 @@ repositories {
 }
 
 dependencies {
-    // Standalone: place the pump-driver-api AAR in libs/ and reference it:
-    compileOnly(files("libs/pump-driver-api-release.aar"))
+    // Standalone: extract classes.jar from the pump-driver-api AAR and place in libs/:
+    compileOnly(files("libs/pump-driver-api.jar"))
 
     // Alternatively, when building within the monorepo for testing:
     // compileOnly(project(":pump-driver-api"))
@@ -45,7 +52,6 @@ dependencies {
 
 tasks.jar {
     archiveBaseName.set("example-plugin")
-
-    // Include the plugin manifest in the JAR
-    from("src/main/resources")
+    // src/main/resources/ is already included by processResources -- no extra from() needed.
+    // The META-INF/plugin.json manifest is picked up automatically.
 }
