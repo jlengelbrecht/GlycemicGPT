@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Watch
@@ -726,16 +727,16 @@ private fun CustomPluginsSection(
             Spacer(modifier = Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Info,
+                    imageVector = Icons.Default.Warning,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.error,
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Custom plugins are not verified by GlycemicGPT. Only install plugins from sources you trust.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.testTag("plugin_trust_warning"),
                 )
             }
@@ -808,12 +809,14 @@ private fun CustomPluginsSection(
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     contentColor = MaterialTheme.colorScheme.error,
                                 ),
+                                modifier = Modifier.testTag("deactivate_plugin_${rtp.metadata.id}"),
                             ) {
                                 Text("Deactivate")
                             }
                         } else {
                             Button(
                                 onClick = { onActivatePlugin(rtp.metadata.id) },
+                                modifier = Modifier.testTag("activate_plugin_${rtp.metadata.id}"),
                             ) {
                                 Text("Activate")
                             }
@@ -824,6 +827,7 @@ private fun CustomPluginsSection(
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = MaterialTheme.colorScheme.error,
                             ),
+                            modifier = Modifier.testTag("remove_plugin_${rtp.metadata.id}"),
                         ) {
                             Text("Remove")
                         }

@@ -112,11 +112,11 @@ class DexPluginLoader(private val context: Context) {
     }
 
     private fun readManifest(classLoader: ClassLoader, jarFile: File): PluginManifest? {
-        val stream = classLoader.getResourceAsStream(PluginManifest.manifestPath())
+        val stream = classLoader.getResourceAsStream(PluginManifest.MANIFEST_PATH)
         if (stream == null) {
             Timber.w(
                 "DexPluginLoader: no %s in %s -- skipping",
-                PluginManifest.manifestPath(), jarFile.name,
+                PluginManifest.MANIFEST_PATH, jarFile.name,
             )
             return null
         }

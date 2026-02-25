@@ -246,6 +246,14 @@ class PluginRegistry @Inject constructor(
             return Result.failure(IllegalArgumentException("Failed to load plugin from JAR"))
         }
 
+        // Validate plugin ID format
+        try {
+            validatePluginId(discovered.manifest.id)
+        } catch (e: Exception) {
+            pluginFileManager.removePlugin(jarFile)
+            return Result.failure(e)
+        }
+
         // Check for ID conflicts with compile-time plugins
         if (discovered.manifest.id in compileTimePluginIds) {
             pluginFileManager.removePlugin(jarFile)
@@ -303,7 +311,9 @@ class PluginRegistry @Inject constructor(
 
         // Deactivate if active
         if (pluginId in activePlugins) {
-            deactivatePluginInternal(pluginId)
+            deactivatePluginInternal(pluginId).onFailure { e ->
+                Timber.w(e, "Failed to deactivate plugin %s during removal, continuing", pluginId)
+            }
         }
 
         // Shutdown and remove from registry
@@ -455,6 +465,14 @@ class PluginRegistry @Inject constructor(
 
         for (dp in discovered) {
             val pluginId = dp.manifest.id
+
+            // Validate plugin ID format
+            try {
+                validatePluginId(pluginId)
+            } catch (e: Exception) {
+                Timber.w(e, "Runtime plugin has invalid ID '%s' -- skipping", pluginId)
+                continue
+            }
 
             // Skip if ID conflicts with compile-time plugin
             if (pluginId in compileTimePluginIds) {

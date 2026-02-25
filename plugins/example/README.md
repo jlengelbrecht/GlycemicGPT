@@ -29,14 +29,16 @@ This plugin implements the `DATA_SYNC` capability and logs lifecycle events (ini
 
    Android cannot run standard JVM bytecode. Use `d8` to convert:
    ```bash
-   d8 --output example-plugin.jar build/libs/example-plugin.jar
+   d8 --output dex-out/ build/libs/example-plugin.jar
    ```
 
-3. **Add the manifest to the DEX jar:**
+3. **Repackage DEX + manifest into the final JAR:**
 
-   The `d8` tool strips non-class resources. Re-add the manifest:
+   The `d8` tool outputs `classes.dex` to a directory. Combine it with the
+   original JAR (which has the manifest):
    ```bash
-   jar uf example-plugin.jar -C src/main/resources META-INF/plugin.json
+   cp build/libs/example-plugin.jar example-plugin.jar
+   jar uf example-plugin.jar -C dex-out classes.dex
    ```
 
 4. **Install on device:**
@@ -46,11 +48,17 @@ This plugin implements the `DATA_SYNC` capability and logs lifecycle events (ini
    - Open Settings > Plugins > Custom Plugins > Add Plugin
    - Select the JAR file
 
-   Option B -- Use adb:
+   Option B -- Use adb (debug builds only, non-rooted device):
    ```bash
-   adb push example-plugin.jar /data/data/com.glycemicgpt.mobile.debug/files/plugins/
+   adb push example-plugin.jar /sdcard/example-plugin.jar
+   adb shell run-as com.glycemicgpt.mobile.debug \
+       mkdir -p files/plugins
+   adb shell run-as com.glycemicgpt.mobile.debug \
+       cp /sdcard/example-plugin.jar files/plugins/
+   adb shell rm /sdcard/example-plugin.jar
    ```
-   Then restart the app.
+   Then restart the app. Replace `com.glycemicgpt.mobile.debug` with the
+   correct package name for your build variant.
 
 ## Plugin Manifest
 

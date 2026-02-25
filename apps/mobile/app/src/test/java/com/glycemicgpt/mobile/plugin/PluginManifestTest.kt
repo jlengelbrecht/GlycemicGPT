@@ -147,7 +147,7 @@ class PluginManifestTest {
     }
 
     @Test
-    fun `manifestPath returns correct path`() {
-        assertEquals("META-INF/plugin.json", PluginManifest.manifestPath())
+    fun `MANIFEST_PATH has correct value`() {
+        assertEquals("META-INF/plugin.json", PluginManifest.MANIFEST_PATH)
     }
 }

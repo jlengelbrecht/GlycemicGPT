@@ -27,7 +27,8 @@ data class PluginManifest(
     val description: String = "",
 ) {
     companion object {
-        private const val MANIFEST_PATH = "META-INF/plugin.json"
+        /** Resource path where the manifest must reside inside the JAR. */
+        const val MANIFEST_PATH = "META-INF/plugin.json"
 
         /**
          * Parse manifest JSON from a string.
@@ -52,10 +53,14 @@ data class PluginManifest(
             val version = obj.optString("version", "").ifBlank {
                 throw IllegalArgumentException("Manifest missing required field: version")
             }
-            if (!obj.has("apiVersion")) {
-                throw IllegalArgumentException("Manifest missing required field: apiVersion")
+            val apiVersion = try {
+                obj.getInt("apiVersion")
+            } catch (e: JSONException) {
+                throw IllegalArgumentException("Manifest missing or invalid required field: apiVersion", e)
             }
-            val apiVersion = obj.optInt("apiVersion", -1)
+            if (apiVersion < 1) {
+                throw IllegalArgumentException("Manifest apiVersion must be >= 1, got: $apiVersion")
+            }
 
             return PluginManifest(
                 factoryClass = factoryClass,
@@ -68,7 +73,6 @@ data class PluginManifest(
             )
         }
 
-        /** Resource path where the manifest must reside inside the JAR. */
-        fun manifestPath(): String = MANIFEST_PATH
+        // Callers use PluginManifest.MANIFEST_PATH directly.
     }
 }

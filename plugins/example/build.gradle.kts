@@ -11,9 +11,10 @@
  *
  * Build steps:
  * 1. Compile: `./gradlew jar`
- * 2. Convert to DEX: `d8 --output example-plugin.jar build/libs/example-plugin.jar`
- * 3. Copy plugin.json into the DEX jar:
- *    `jar uf example-plugin.jar -C src/main/resources META-INF/plugin.json`
+ * 2. Convert to DEX: `d8 --output dex-out/ build/libs/example-plugin.jar`
+ * 3. Repackage DEX + manifest into the final plugin JAR:
+ *    `cp build/libs/example-plugin.jar example-plugin.jar`
+ *    `jar uf example-plugin.jar -C dex-out classes.dex`
  * 4. Install on device: copy example-plugin.jar to the app's plugins directory
  *    via adb or the app's "Add Plugin" button.
  *
@@ -23,18 +24,21 @@ plugins {
     kotlin("jvm") version "2.0.21"
 }
 
+kotlin {
+    jvmToolchain(17)
+}
+
 repositories {
     mavenCentral()
     google()
 }
 
 dependencies {
-    // In a real build, reference the pump-driver-api AAR.
-    // For this example, we assume it's available in libs/:
-    // compileOnly(files("libs/pump-driver-api-release.aar"))
-    //
-    // Alternatively, if building within the monorepo for testing:
-    compileOnly(project(":pump-driver-api"))
+    // Standalone: place the pump-driver-api AAR in libs/ and reference it:
+    compileOnly(files("libs/pump-driver-api-release.aar"))
+
+    // Alternatively, when building within the monorepo for testing:
+    // compileOnly(project(":pump-driver-api"))
 
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 }
