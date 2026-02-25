@@ -616,12 +616,15 @@ private fun PluginsSection(
     onShowRemovePlugin: (String) -> Unit,
     onClearPluginInstallError: () -> Unit,
 ) {
-    // Active pump plugin card (uses existing PumpSection layout)
-    PumpSection(
-        state = state,
-        onNavigateToPairing = onNavigateToPairing,
-        onShowUnpair = onShowUnpair,
-    )
+    // Only show pump pairing card when the Tandem plugin is active.
+    // Uses literal ID to avoid importing TandemDevicePlugin into the UI layer.
+    if ("com.glycemicgpt.tandem" in state.activePluginIds) {
+        PumpSection(
+            state = state,
+            onNavigateToPairing = onNavigateToPairing,
+            onShowUnpair = onShowUnpair,
+        )
+    }
 
     // Available plugins list
     if (state.availablePlugins.isNotEmpty()) {
