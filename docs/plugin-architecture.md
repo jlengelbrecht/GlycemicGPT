@@ -746,7 +746,8 @@ Runtime plugins receive a `RestrictedPluginContext` that blocks app-scope escape
 | `createPackageContext()` | Blocked | `SecurityException` -- prevents accessing other apps |
 | `getBaseContext()` | Blocked | `SecurityException` -- prevents escaping the sandbox |
 | `getApplicationContext()` | Returns restricted self | Trapped -- prevents escape |
-| `getSystemService()` | **Allowlisted** | Hardware services only: `BluetoothManager`, `LocationManager`, `PowerManager`, `AlarmManager`, `SensorManager`, `UsbManager`, `WifiManager`, `WindowManager`. All others throw `SecurityException`. |
+| `getSystemService()` | **Allowlisted** | Hardware services only: `BluetoothManager`, `LocationManager`, `PowerManager`, `AlarmManager`, `SensorManager`, `UsbManager`, `WifiManager`. All others throw `SecurityException`. |
+| `getSharedPreferences()` | Blocked | `SecurityException` -- prevents cross-plugin credential access |
 | `credentialProvider.*` | **Per-plugin scoped** | Isolated `SharedPreferences` namespaced by plugin ID |
 | `settingsStore` | Allowed | Full access (per-plugin namespace) |
 | `debugLogger` | Allowed | Full access |

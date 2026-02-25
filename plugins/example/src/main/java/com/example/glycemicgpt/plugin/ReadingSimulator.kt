@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import java.time.Instant
 import java.util.Collections
+import kotlin.math.PI
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
@@ -42,7 +43,7 @@ import kotlin.random.Random
  */
 class ReadingSimulator {
 
-    /** Per-instance RNG to avoid thread-safety issues with Math.random(). */
+    /** Thread-safe RNG (Random.Default is a shared singleton but is thread-safe). */
     private val rng = Random.Default
 
     /** Tracks the sine-wave phase across readings. */
@@ -68,8 +69,13 @@ class ReadingSimulator {
      * @param safetyLimits Reactive safety limits StateFlow; current value is read each
      *   iteration so backend changes take effect immediately.
      * @return A cold Flow that emits readings until the coroutine is cancelled.
+     *
+     * **Note:** Only one collector should be active per ReadingSimulator instance.
+     * Multiple concurrent collectors would race on shared mutable state (phase, history).
+     * The platform ensures this by managing a single activation scope per plugin.
      */
     fun start(intervalSeconds: Long, safetyLimits: StateFlow<SafetyLimits>): Flow<BgmReading> = flow {
+        require(intervalSeconds > 0) { "intervalSeconds must be positive, was $intervalSeconds" }
         while (currentCoroutineContext().isActive) {
             val raw = generateRawValue()
             // Read the CURRENT safety limits on each iteration (reactive).
@@ -105,14 +111,16 @@ class ReadingSimulator {
         // Random jitter: +/- 10 mg/dL (using per-instance RNG, not Math.random())
         val jitter = rng.nextDouble(-10.0, 10.0)
         // Advance phase (full cycle every 12 readings)
-        phase += (2.0 * Math.PI / 12.0)
+        phase += (2.0 * PI / 12.0)
         return (base + jitter).roundToInt().coerceIn(20, 500)
     }
 
     private fun recordHistory(value: Float) {
-        _history.add(value)
-        if (_history.size > MAX_HISTORY) {
-            _history.removeAt(0)
+        synchronized(_history) {
+            _history.add(value)
+            if (_history.size > MAX_HISTORY) {
+                _history.removeAt(0)
+            }
         }
     }
 

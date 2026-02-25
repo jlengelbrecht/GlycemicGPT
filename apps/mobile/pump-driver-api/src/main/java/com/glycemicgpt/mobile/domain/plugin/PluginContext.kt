@@ -13,9 +13,9 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * **Security note:** For compile-time plugins, [androidContext] exposes the full
  * application [Context]. For runtime-loaded plugins, [androidContext] is a
- * [RestrictedContext][com.glycemicgpt.mobile.plugin.RestrictedContext] that blocks
- * app-scope escape vectors (startActivity, startService, sendBroadcast, etc.)
- * while allowing hardware access via an allowlisted getSystemService().
+ * restricted wrapper that blocks app-scope escape vectors (startActivity,
+ * startService, sendBroadcast, getSharedPreferences, etc.) while allowing
+ * hardware access via an allowlisted [Context.getSystemService] set.
  */
 class PluginContext(
     val androidContext: Context,

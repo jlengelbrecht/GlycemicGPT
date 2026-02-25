@@ -49,6 +49,7 @@ object RestrictedPluginContext {
         eventBus: PluginEventBus,
         safetyLimits: StateFlow<SafetyLimits>,
     ): PluginContext {
+        require(pluginId.isNotBlank()) { "pluginId must not be blank" }
         val restrictedContext = RestrictedContext(baseContext)
         return PluginContext(
             androidContext = restrictedContext,
@@ -81,6 +82,12 @@ object RestrictedPluginContext {
  *   PowerManager, AlarmManager, SensorManager, UsbManager)
  * - getApplicationContext -- returns self (trapped, prevents escape)
  * - getFilesDir, getCacheDir, getPackageName, etc. -- safe read-only operations
+ *
+ * **Also blocked** (prevents cross-plugin data access):
+ * - getSharedPreferences -- can't read other plugins' credential storage
+ * - openFileOutput -- can't write arbitrary files
+ * - openOrCreateDatabase -- can't access databases
+ * - createDeviceProtectedStorageContext -- can't escape to unencrypted storage
  */
 internal class RestrictedContext(base: Context) : ContextWrapper(base) {
 
@@ -164,6 +171,18 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
         flags: Int,
     ): Intent? = denied("registerReceiver")
 
+    // Block storage methods to prevent cross-plugin credential/data access.
+    // ScopedCredentialProvider uses baseContext (not this RestrictedContext) for
+    // its own namespaced SharedPreferences access.
+    override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+        denied("getSharedPreferences")
+
+    override fun openFileOutput(name: String?, mode: Int): java.io.FileOutputStream =
+        denied("openFileOutput")
+
+    override fun createDeviceProtectedStorageContext(): Context =
+        denied("createDeviceProtectedStorageContext")
+
     override fun createPackageContext(packageName: String?, flags: Int): Context =
         denied("createPackageContext")
 
@@ -177,7 +196,8 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
             Context.SENSOR_SERVICE,        // SensorManager -- hardware sensors
             Context.USB_SERVICE,           // UsbManager -- USB device plugins
             Context.WIFI_SERVICE,          // WifiManager -- network-connected devices
-            Context.WINDOW_SERVICE,        // WindowManager -- display metrics only
+            // WINDOW_SERVICE intentionally excluded -- plugins don't need display metrics,
+            // and WindowManager can add overlay views if SYSTEM_ALERT_WINDOW is held.
         )
     }
 }

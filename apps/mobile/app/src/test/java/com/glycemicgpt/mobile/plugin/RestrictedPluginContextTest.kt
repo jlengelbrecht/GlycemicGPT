@@ -183,9 +183,7 @@ class RestrictedPluginContextTest {
 
     @Test
     fun `RestrictedContext allows allowlisted system services`() {
-        // Verify that RestrictedContext overrides getSystemService() with an allowlist.
-        // Direct invocation fails in unit tests (ContextWrapper is an Android stub),
-        // so we verify the allowlist set contains the expected hardware services.
+        // Verify the allowlist contains hardware services needed for BLE plugins.
         assertTrue(
             "BLUETOOTH_SERVICE must be allowlisted",
             RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.BLUETOOTH_SERVICE),
@@ -197,6 +195,11 @@ class RestrictedPluginContextTest {
         assertTrue(
             "POWER_SERVICE must be allowlisted",
             RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.POWER_SERVICE),
+        )
+        // WINDOW_SERVICE should NOT be in the allowlist (overlay risk)
+        assertFalse(
+            "WINDOW_SERVICE must NOT be allowlisted",
+            RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.WINDOW_SERVICE),
         )
     }
 
@@ -211,6 +214,19 @@ class RestrictedPluginContextTest {
         }
         assertNotNull(thrown)
         assertTrue(thrown!!.message!!.contains("getSystemService"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks getSharedPreferences`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.getSharedPreferences("test", Context.MODE_PRIVATE)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("getSharedPreferences"))
     }
 
     @Test
@@ -278,6 +294,7 @@ class RestrictedPluginContextTest {
         provider.clearPairing()
         assertFalse(provider.isPaired())
         assertNull(provider.getPairedAddress())
+        assertNull(provider.getPairingCode())
     }
 
     @Test
