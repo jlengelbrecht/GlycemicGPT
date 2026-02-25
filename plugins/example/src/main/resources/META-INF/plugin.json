@@ -1,0 +1,9 @@
+{
+  "factoryClass": "com.example.glycemicgpt.plugin.ExamplePluginFactory",
+  "apiVersion": 1,
+  "id": "com.example.glycemicgpt.example",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "author": "GlycemicGPT",
+  "description": "A minimal reference plugin demonstrating the runtime plugin API."
+}

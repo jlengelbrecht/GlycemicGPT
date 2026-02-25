@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.plugin
 
 import android.content.Context
+import android.net.Uri
 import com.glycemicgpt.mobile.data.local.SafetyLimitsStore
 import com.glycemicgpt.mobile.domain.plugin.DevicePlugin
 import com.glycemicgpt.mobile.domain.plugin.PLUGIN_API_VERSION
@@ -18,10 +19,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
+import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Information about a runtime-loaded plugin for UI display.
+ */
+data class RuntimePluginInfo(
+    val metadata: PluginMetadata,
+    val jarFileName: String,
+    val isActive: Boolean,
+)
 
 /**
  * Central registry managing plugin lifecycle, activation, and mutual exclusion.
@@ -53,6 +64,12 @@ class PluginRegistry @Inject constructor(
 
     private val _safetyLimits = MutableStateFlow(safetyLimitsStore.toSafetyLimits())
 
+    // Runtime plugin support
+    private val dexPluginLoader = DexPluginLoader(context)
+    private val pluginFileManager = PluginFileManager(context)
+    private val runtimePluginJars: MutableMap<String, File> = ConcurrentHashMap()
+    private val compileTimePluginIds: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     private val _availablePlugins = MutableStateFlow<List<PluginMetadata>>(emptyList())
     val availablePlugins: StateFlow<List<PluginMetadata>> = _availablePlugins.asStateFlow()
 
@@ -74,6 +91,9 @@ class PluginRegistry @Inject constructor(
     private val _allActivePlugins = MutableStateFlow<List<Plugin>>(emptyList())
     val allActivePlugins: StateFlow<List<Plugin>> = _allActivePlugins.asStateFlow()
 
+    private val _runtimePlugins = MutableStateFlow<List<RuntimePluginInfo>>(emptyList())
+    val runtimePlugins: StateFlow<List<RuntimePluginInfo>> = _runtimePlugins.asStateFlow()
+
     /**
      * Initialize the registry: create plugins from factories and restore
      * previously active plugins from preferences. Called from Application.onCreate.
@@ -82,7 +102,7 @@ class PluginRegistry @Inject constructor(
         check(initialized.compareAndSet(false, true)) { "PluginRegistry already initialized" }
         Timber.d("PluginRegistry: initializing with %d factories", factories.size)
 
-        // Create all plugins from factories; one bad plugin must not break the rest.
+        // Create all plugins from compile-time factories; one bad plugin must not break the rest.
         for (factory in factories) {
             val meta = factory.metadata
             if (meta.apiVersion != PLUGIN_API_VERSION) {
@@ -98,11 +118,15 @@ class PluginRegistry @Inject constructor(
                 val plugin = factory.create(pluginContext)
                 plugin.initialize(pluginContext)
                 plugins[meta.id] = plugin
+                compileTimePluginIds.add(meta.id)
                 Timber.d("Plugin created: %s (%s)", meta.name, meta.id)
             } catch (e: Exception) {
                 Timber.e(e, "Plugin %s failed to create/initialize -- skipping", meta.id)
             }
         }
+
+        // Discover runtime plugins from JAR files
+        discoverRuntimePlugins()
 
         _availablePlugins.value = plugins.values.map { it.metadata }
 
@@ -201,6 +225,116 @@ class PluginRegistry @Inject constructor(
 
     fun getPlugin(pluginId: String): Plugin? = plugins[pluginId]
 
+    /** Returns true if the given plugin was loaded at runtime (not compile-time). */
+    fun isRuntimePlugin(pluginId: String): Boolean = pluginId in runtimePluginJars
+
+    /**
+     * Install a runtime plugin from a content URI.
+     * Copies the JAR, loads it, creates the plugin with a restricted context,
+     * and registers it. The plugin is not activated automatically.
+     */
+    fun installRuntimePlugin(uri: Uri): Result<PluginMetadata> = synchronized(activationLock) {
+        // Copy JAR to plugins dir
+        val jarFile = pluginFileManager.installPlugin(uri).getOrElse { e ->
+            return Result.failure(e)
+        }
+
+        // Load the JAR
+        val discovered = dexPluginLoader.loadJar(jarFile)
+        if (discovered == null) {
+            pluginFileManager.removePlugin(jarFile)
+            return Result.failure(IllegalArgumentException("Failed to load plugin from JAR"))
+        }
+
+        // Check for ID conflicts with compile-time plugins
+        if (discovered.manifest.id in compileTimePluginIds) {
+            pluginFileManager.removePlugin(jarFile)
+            return Result.failure(
+                IllegalArgumentException(
+                    "Plugin ID '${discovered.manifest.id}' conflicts with a built-in plugin",
+                ),
+            )
+        }
+
+        // Check for ID conflicts with already-loaded runtime plugins
+        if (discovered.manifest.id in plugins) {
+            pluginFileManager.removePlugin(jarFile)
+            return Result.failure(
+                IllegalArgumentException(
+                    "Plugin ID '${discovered.manifest.id}' is already installed",
+                ),
+            )
+        }
+
+        // Create the plugin with restricted context
+        return try {
+            val pluginContext = createRestrictedPluginContext(discovered.manifest.id)
+            val plugin = discovered.factory.create(pluginContext)
+            plugin.initialize(pluginContext)
+
+            plugins[discovered.manifest.id] = plugin
+            runtimePluginJars[discovered.manifest.id] = jarFile
+            preferences.addInstalledRuntimePlugin(discovered.manifest.id)
+
+            _availablePlugins.value = plugins.values.map { it.metadata }
+            updateRuntimePluginsFlow()
+
+            Timber.d(
+                "Runtime plugin installed: %s v%s from %s",
+                discovered.manifest.name, discovered.manifest.version, jarFile.name,
+            )
+            Result.success(plugin.metadata)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to create/initialize runtime plugin %s", discovered.manifest.id)
+            pluginFileManager.removePlugin(jarFile)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Remove a runtime plugin: deactivate, shutdown, delete JAR, clean preferences.
+     */
+    fun removeRuntimePlugin(pluginId: String): Result<Unit> = synchronized(activationLock) {
+        if (pluginId !in runtimePluginJars) {
+            return Result.failure(
+                IllegalArgumentException("Plugin '$pluginId' is not a runtime plugin"),
+            )
+        }
+
+        // Deactivate if active
+        if (pluginId in activePlugins) {
+            deactivatePluginInternal(pluginId)
+        }
+
+        // Shutdown and remove from registry
+        val plugin = plugins.remove(pluginId)
+        if (plugin != null) {
+            try {
+                plugin.shutdown()
+            } catch (e: Exception) {
+                Timber.e(e, "Plugin %s threw during shutdown, continuing cleanup", pluginId)
+            }
+        }
+
+        // Delete the JAR file
+        val jarFile = runtimePluginJars.remove(pluginId)
+        if (jarFile != null) {
+            pluginFileManager.removePlugin(jarFile)
+        }
+
+        // Clean up preferences
+        preferences.removeInstalledRuntimePlugin(pluginId)
+
+        // Delete plugin settings SharedPreferences
+        context.deleteSharedPreferences("plugin_settings_$pluginId")
+
+        _availablePlugins.value = plugins.values.map { it.metadata }
+        updateRuntimePluginsFlow()
+
+        Timber.d("Runtime plugin removed: %s", pluginId)
+        return Result.success(Unit)
+    }
+
     /**
      * Re-read safety limits from the store and push updated values to
      * all plugins via [PluginContext.safetyLimits] and the event bus.
@@ -280,6 +414,8 @@ class PluginRegistry @Inject constructor(
         _activeDataSyncPlugins.value = activePlugins.values
             .filter { PluginCapability.DATA_SYNC in it.capabilities }
             .toSet()
+
+        updateRuntimePluginsFlow()
     }
 
     private fun validatePluginId(id: String) {
@@ -299,11 +435,79 @@ class PluginRegistry @Inject constructor(
         apiVersion = PLUGIN_API_VERSION,
     )
 
+    private fun createRestrictedPluginContext(pluginId: String): PluginContext =
+        RestrictedPluginContext.create(
+            baseContext = context,
+            pluginId = pluginId,
+            settingsStore = PluginSettingsStoreImpl(context, pluginId),
+            debugLogger = debugLogger,
+            eventBus = eventBus,
+            safetyLimits = _safetyLimits,
+        )
+
+    /**
+     * Discover runtime plugins from JAR files on disk.
+     * Called once during [initialize] after compile-time plugins are registered.
+     */
+    private fun discoverRuntimePlugins() {
+        val discovered = dexPluginLoader.discover()
+        Timber.d("PluginRegistry: discovered %d runtime plugins", discovered.size)
+
+        for (dp in discovered) {
+            val pluginId = dp.manifest.id
+
+            // Skip if ID conflicts with compile-time plugin
+            if (pluginId in compileTimePluginIds) {
+                Timber.w(
+                    "Runtime plugin %s conflicts with built-in plugin -- skipping",
+                    pluginId,
+                )
+                continue
+            }
+
+            // Skip if already registered (shouldn't happen, but be safe)
+            if (pluginId in plugins) {
+                Timber.w("Runtime plugin %s already registered -- skipping", pluginId)
+                continue
+            }
+
+            try {
+                val pluginContext = createRestrictedPluginContext(pluginId)
+                val plugin = dp.factory.create(pluginContext)
+                plugin.initialize(pluginContext)
+
+                plugins[pluginId] = plugin
+                runtimePluginJars[pluginId] = dp.jarFile
+                preferences.addInstalledRuntimePlugin(pluginId)
+
+                Timber.d(
+                    "Runtime plugin loaded: %s (%s) from %s",
+                    dp.manifest.name, pluginId, dp.jarFile.name,
+                )
+            } catch (e: Exception) {
+                Timber.e(e, "Runtime plugin %s failed to create/initialize -- skipping", pluginId)
+            }
+        }
+
+        updateRuntimePluginsFlow()
+    }
+
+    private fun updateRuntimePluginsFlow() {
+        _runtimePlugins.value = runtimePluginJars.mapNotNull { (pluginId, jarFile) ->
+            val plugin = plugins[pluginId] ?: return@mapNotNull null
+            RuntimePluginInfo(
+                metadata = plugin.metadata,
+                jarFileName = jarFile.name,
+                isActive = pluginId in activePlugins,
+            )
+        }
+    }
+
     companion object {
         /** Identifier used for platform-originated events (not a real plugin). */
         const val PLATFORM_PLUGIN_ID = "platform"
 
         /** Plugin IDs must be reverse-domain-name style: letters, digits, dots, hyphens, underscores. */
-        private val VALID_PLUGIN_ID = Regex("^[a-zA-Z][a-zA-Z0-9._-]{1,127}$")
+        private val VALID_PLUGIN_ID = DexPluginLoader.VALID_PLUGIN_ID
     }
 }
