@@ -1,10 +1,20 @@
-# Example Runtime Plugin
+# Demo Glucometer Plugin
 
-A minimal reference plugin demonstrating how to build a GlycemicGPT runtime plugin.
+A comprehensive reference plugin demonstrating the full GlycemicGPT plugin API by simulating a Bluetooth glucose meter.
 
 ## What This Plugin Does
 
-This plugin implements the `DATA_SYNC` capability and logs lifecycle events (initialize, activate, deactivate, shutdown). It serves as a template for building your own plugins.
+This plugin implements `BGM_SOURCE` and `DATA_SYNC` capabilities, showcasing every plugin API feature:
+
+- **Dashboard Cards** -- LargeValue, StatusBadge, Row, IconValue, SparkLine, ProgressBar
+- **Settings UI** -- Toggle, Slider, Dropdown, TextInput, ActionButton, InfoText
+- **Event Bus** -- Publishing NewBgmReading events for cross-plugin workflows
+- **Safety Limits** -- Validating readings against platform-enforced glucose bounds
+- **Settings Persistence** -- Reading/writing plugin config via PluginSettingsStore
+- **BgmSource Capability** -- Implementing a typed capability interface
+- **Credential Storage** -- Per-plugin scoped credential provider (runtime plugins)
+
+Use this as a template when building real pump, CGM, or BGM drivers.
 
 ## Building
 
@@ -66,13 +76,13 @@ Every runtime plugin JAR must contain `META-INF/plugin.json`:
 
 ```json
 {
-  "factoryClass": "com.example.glycemicgpt.plugin.ExamplePluginFactory",
+  "factoryClass": "com.example.glycemicgpt.plugin.DemoGlucometerFactory",
   "apiVersion": 1,
-  "id": "com.example.glycemicgpt.example",
-  "name": "Example Plugin",
+  "id": "com.example.glycemicgpt.demo-glucometer",
+  "name": "Demo Glucometer",
   "version": "1.0.0",
   "author": "GlycemicGPT",
-  "description": "A minimal reference plugin."
+  "description": "Comprehensive plugin showcase simulating a Bluetooth glucose meter."
 }
 ```
 
@@ -93,22 +103,26 @@ Every runtime plugin JAR must contain `META-INF/plugin.json`:
 | `author` | Author name (displayed in Settings) |
 | `description` | Short description |
 
-## Security Restrictions
+## Security Model
 
-Runtime plugins run in a sandboxed context:
+Runtime plugins run in a sandboxed context that blocks app-scope escape vectors while allowing hardware access:
 
-- **No Android system services** -- `getSystemService()` throws `SecurityException`
-- **No activities or services** -- `startActivity()`, `startService()` throw `SecurityException`
-- **No content providers** -- `getContentResolver()` throws `SecurityException`
-- **No broadcasts** -- `sendBroadcast()` throws `SecurityException`
-- **No pump credentials** -- `credentialProvider` throws `UnsupportedOperationException`
+**Blocked** (prevents host app hijacking):
+- `startActivity()`, `startService()` -- can't launch arbitrary components
+- `getContentResolver()` -- can't access other apps' content providers
+- `sendBroadcast()` -- can't send system broadcasts
+- `getBaseContext()` -- can't escape the sandbox wrapper
 
-You DO have access to:
+**Allowed** (needed for BLE device drivers):
+- `getSystemService()` -- BluetoothManager, LocationManager, PowerManager, etc.
+- `credentialProvider` -- per-plugin scoped credential storage (isolated by plugin ID)
 - `settingsStore` -- per-plugin key-value persistence
 - `debugLogger` -- logging
-- `eventBus` -- cross-plugin communication
+- `eventBus` -- cross-plugin communication (platform-only events blocked)
 - `safetyLimits` -- read-only safety constraints
 - `androidContext.filesDir`, `cacheDir`, etc. -- file I/O
+
+Safety enforcement comes from `SafetyLimits` (synced from backend), not Context restrictions.
 
 ## Further Reading
 

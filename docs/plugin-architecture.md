@@ -732,25 +732,27 @@ Every runtime plugin JAR must contain `META-INF/plugin.json`:
 
 ### Security Restrictions
 
-Runtime plugins receive a `RestrictedPluginContext` that blocks dangerous operations:
+Runtime plugins receive a `RestrictedPluginContext` that blocks app-scope escape vectors while allowing hardware/system access needed for BLE pump and CGM drivers.
 
-| Operation | Blocked? | Error Type |
-|-----------|----------|------------|
-| `startActivity()` | Yes | `SecurityException` |
-| `startService()` / `startForegroundService()` / `bindService()` | Yes | `SecurityException` |
-| `getSystemService()` | Yes | `SecurityException` |
-| `getContentResolver()` | Yes | `SecurityException` |
-| `sendBroadcast()` / `sendOrderedBroadcast()` | Yes | `SecurityException` |
-| `registerReceiver()` | Yes | `SecurityException` |
-| `getBaseContext()` | Yes | `SecurityException` |
-| `getApplicationContext()` | Returns restricted self | -- |
-| `createPackageContext()` | Yes | `SecurityException` |
-| `credentialProvider.*` | Yes | `UnsupportedOperationException` |
-| `settingsStore` | No | Full access (per-plugin namespace) |
-| `debugLogger` | No | Full access |
-| `eventBus` | No | Full access (platform-only events still blocked) |
-| `safetyLimits` | No | Read-only access |
-| `filesDir` / `cacheDir` | No | Full access |
+**Design philosophy:** Safety enforcement comes from `SafetyLimits` (synced from the backend), not from blanket Context restrictions. Plugins need `getSystemService()` to access hardware services for device communication, but non-hardware services are blocked to prevent data exfiltration.
+
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| `startActivity()` | Blocked | `SecurityException` -- prevents launching arbitrary UI |
+| `startService()` / `startForegroundService()` / `bindService()` | Blocked | `SecurityException` -- prevents starting Android services |
+| `sendBroadcast()` / `sendOrderedBroadcast()` | Blocked | `SecurityException` -- prevents sending system broadcasts |
+| `registerReceiver()` | Blocked | `SecurityException` -- prevents intercepting system broadcasts |
+| `getContentResolver()` | Blocked | `SecurityException` -- prevents accessing other apps' data |
+| `createPackageContext()` | Blocked | `SecurityException` -- prevents accessing other apps |
+| `getBaseContext()` | Blocked | `SecurityException` -- prevents escaping the sandbox |
+| `getApplicationContext()` | Returns restricted self | Trapped -- prevents escape |
+| `getSystemService()` | **Allowlisted** | Hardware services only: `BluetoothManager`, `LocationManager`, `PowerManager`, `AlarmManager`, `SensorManager`, `UsbManager`, `WifiManager`, `WindowManager`. All others throw `SecurityException`. |
+| `credentialProvider.*` | **Per-plugin scoped** | Isolated `SharedPreferences` namespaced by plugin ID |
+| `settingsStore` | Allowed | Full access (per-plugin namespace) |
+| `debugLogger` | Allowed | Full access |
+| `eventBus` | Allowed | Full access (platform-only events still blocked) |
+| `safetyLimits` | Allowed | Read-only `StateFlow` |
+| `filesDir` / `cacheDir` | Allowed | Full access |
 
 Compile-time plugins (like Tandem) receive the full, unrestricted `PluginContext`.
 
@@ -773,7 +775,7 @@ See `plugins/example/` for a complete reference project. The general steps are:
 |---------|-------------|---------|
 | Discovery | Hilt `@IntoSet` multibindings | `DexClassLoader` + manifest |
 | Android Context | Full `Context` | `RestrictedContext` |
-| Credential Access | Full `PumpCredentialProvider` | Blocked (`DeniedCredentialProvider`) |
+| Credential Access | Full `PumpCredentialProvider` | Per-plugin scoped (`ScopedCredentialProvider`) |
 | Safety Limits | Read-only `StateFlow` | Read-only `StateFlow` |
 | Event Bus | Full (platform events blocked) | Full (platform events blocked) |
 | Settings Store | Per-plugin `SharedPreferences` | Per-plugin `SharedPreferences` |

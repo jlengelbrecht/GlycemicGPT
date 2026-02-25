@@ -2,15 +2,20 @@ package com.glycemicgpt.mobile.plugin
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import com.glycemicgpt.mobile.domain.plugin.PLUGIN_API_VERSION
 import com.glycemicgpt.mobile.domain.plugin.PluginSettingsStore
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
 import com.glycemicgpt.mobile.domain.pump.SafetyLimits
 import com.glycemicgpt.mobile.domain.plugin.events.PluginEventBus
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,14 +27,15 @@ class RestrictedPluginContextTest {
     private val eventBus: PluginEventBus = mockk(relaxed = true)
     private val safetyLimits = MutableStateFlow(SafetyLimits())
 
-    private fun createContext() = RestrictedPluginContext.create(
-        baseContext = baseContext,
-        pluginId = "test.runtime.plugin",
-        settingsStore = settingsStore,
-        debugLogger = debugLogger,
-        eventBus = eventBus,
-        safetyLimits = safetyLimits,
-    )
+    private fun createContext(pluginId: String = "test.runtime.plugin") =
+        RestrictedPluginContext.create(
+            baseContext = baseContext,
+            pluginId = pluginId,
+            settingsStore = settingsStore,
+            debugLogger = debugLogger,
+            eventBus = eventBus,
+            safetyLimits = safetyLimits,
+        )
 
     @Test
     fun `creates PluginContext with correct pluginId`() {
@@ -73,6 +79,8 @@ class RestrictedPluginContextTest {
         assertTrue(ctx.androidContext is RestrictedContext)
     }
 
+    // -- RestrictedContext: blocked operations --
+
     @Test
     fun `RestrictedContext blocks startActivity`() {
         val restricted = RestrictedContext(baseContext)
@@ -100,16 +108,16 @@ class RestrictedPluginContextTest {
     }
 
     @Test
-    fun `RestrictedContext blocks getSystemService`() {
+    fun `RestrictedContext blocks startForegroundService`() {
         val restricted = RestrictedContext(baseContext)
         val thrown = try {
-            restricted.getSystemService(Context.ALARM_SERVICE)
+            restricted.startForegroundService(Intent())
             null
         } catch (e: SecurityException) {
             e
         }
         assertNotNull(thrown)
-        assertTrue(thrown!!.message!!.contains("getSystemService"))
+        assertTrue(thrown!!.message!!.contains("startForegroundService"))
     }
 
     @Test
@@ -136,19 +144,6 @@ class RestrictedPluginContextTest {
         }
         assertNotNull(thrown)
         assertTrue(thrown!!.message!!.contains("sendBroadcast"))
-    }
-
-    @Test
-    fun `RestrictedContext blocks startForegroundService`() {
-        val restricted = RestrictedContext(baseContext)
-        val thrown = try {
-            restricted.startForegroundService(Intent())
-            null
-        } catch (e: SecurityException) {
-            e
-        }
-        assertNotNull(thrown)
-        assertTrue(thrown!!.message!!.contains("startForegroundService"))
     }
 
     @Test
@@ -184,64 +179,157 @@ class RestrictedPluginContextTest {
         assertTrue(thrown!!.message!!.contains("createPackageContext"))
     }
 
+    // -- RestrictedContext: system service allowlist --
+
     @Test
-    fun `DeniedCredentialProvider blocks getPairedAddress`() {
-        val ctx = createContext()
-        val thrown = try {
-            ctx.credentialProvider.getPairedAddress()
-            null
-        } catch (e: UnsupportedOperationException) {
-            e
-        }
-        assertNotNull(thrown)
-        assertTrue(thrown!!.message!!.contains("credentials"))
+    fun `RestrictedContext allows allowlisted system services`() {
+        // Verify that RestrictedContext overrides getSystemService() with an allowlist.
+        // Direct invocation fails in unit tests (ContextWrapper is an Android stub),
+        // so we verify the allowlist set contains the expected hardware services.
+        assertTrue(
+            "BLUETOOTH_SERVICE must be allowlisted",
+            RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.BLUETOOTH_SERVICE),
+        )
+        assertTrue(
+            "LOCATION_SERVICE must be allowlisted",
+            RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.LOCATION_SERVICE),
+        )
+        assertTrue(
+            "POWER_SERVICE must be allowlisted",
+            RestrictedContext.ALLOWED_SYSTEM_SERVICES.contains(Context.POWER_SERVICE),
+        )
     }
 
     @Test
-    fun `DeniedCredentialProvider blocks savePairing`() {
-        val ctx = createContext()
+    fun `RestrictedContext blocks non-allowlisted system services`() {
+        val restricted = RestrictedContext(baseContext)
         val thrown = try {
-            ctx.credentialProvider.savePairing("AA:BB:CC:DD:EE:FF", "1234")
+            restricted.getSystemService(Context.TELEPHONY_SERVICE)
             null
-        } catch (e: UnsupportedOperationException) {
+        } catch (e: SecurityException) {
             e
         }
         assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("getSystemService"))
     }
 
     @Test
-    fun `DeniedCredentialProvider blocks isPaired`() {
-        val ctx = createContext()
+    fun `RestrictedContext blocks startActivities`() {
+        val restricted = RestrictedContext(baseContext)
         val thrown = try {
-            ctx.credentialProvider.isPaired()
+            restricted.startActivities(arrayOf(Intent()))
             null
-        } catch (e: UnsupportedOperationException) {
+        } catch (e: SecurityException) {
             e
         }
         assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("startActivities"))
+    }
+
+    // -- ScopedCredentialProvider tests --
+
+    private fun mockPrefs(): SharedPreferences {
+        val store = mutableMapOf<String, String?>()
+        val editor = mockk<SharedPreferences.Editor>(relaxed = true)
+        every { editor.putString(any(), any()) } answers {
+            store[firstArg()] = secondArg()
+            editor
+        }
+        every { editor.remove(any()) } answers {
+            store.remove(firstArg<String>())
+            editor
+        }
+
+        val prefs = mockk<SharedPreferences>(relaxed = true)
+        every { prefs.edit() } returns editor
+        every { prefs.getString(any(), any()) } answers {
+            store[firstArg()] ?: secondArg()
+        }
+        every { prefs.contains(any()) } answers {
+            store.containsKey(firstArg<String>())
+        }
+        return prefs
     }
 
     @Test
-    fun `DeniedCredentialProvider blocks clearPairing`() {
-        val ctx = createContext()
-        val thrown = try {
-            ctx.credentialProvider.clearPairing()
-            null
-        } catch (e: UnsupportedOperationException) {
-            e
-        }
-        assertNotNull(thrown)
+    fun `ScopedCredentialProvider saves and retrieves pairing`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
+        val provider = ScopedCredentialProvider("test.plugin", baseContext)
+        assertFalse(provider.isPaired())
+        assertNull(provider.getPairedAddress())
+
+        provider.savePairing("AA:BB:CC:DD:EE:FF", "1234")
+        assertTrue(provider.isPaired())
+        assertEquals("AA:BB:CC:DD:EE:FF", provider.getPairedAddress())
+        assertEquals("1234", provider.getPairingCode())
     }
 
     @Test
-    fun `DeniedCredentialProvider blocks JPAKE credentials`() {
+    fun `ScopedCredentialProvider clears pairing`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
+        val provider = ScopedCredentialProvider("test.plugin", baseContext)
+        provider.savePairing("AA:BB:CC:DD:EE:FF", "1234")
+        assertTrue(provider.isPaired())
+
+        provider.clearPairing()
+        assertFalse(provider.isPaired())
+        assertNull(provider.getPairedAddress())
+    }
+
+    @Test
+    fun `ScopedCredentialProvider saves and retrieves JPAKE credentials`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
+        val provider = ScopedCredentialProvider("test.plugin", baseContext)
+        assertNull(provider.getJpakeDerivedSecret())
+        assertNull(provider.getJpakeServerNonce())
+
+        provider.saveJpakeCredentials("deadbeef", "cafebabe")
+        assertEquals("deadbeef", provider.getJpakeDerivedSecret())
+        assertEquals("cafebabe", provider.getJpakeServerNonce())
+    }
+
+    @Test
+    fun `ScopedCredentialProvider clears JPAKE credentials`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
+        val provider = ScopedCredentialProvider("test.plugin", baseContext)
+        provider.saveJpakeCredentials("deadbeef", "cafebabe")
+        provider.clearJpakeCredentials()
+        assertNull(provider.getJpakeDerivedSecret())
+        assertNull(provider.getJpakeServerNonce())
+    }
+
+    @Test
+    fun `ScopedCredentialProvider uses plugin-namespaced SharedPreferences`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
+        ScopedCredentialProvider("com.example.my-plugin", baseContext)
+        // sanitizeId replaces ALL non-alphanumeric chars with underscores
+        verify { baseContext.getSharedPreferences("plugin_creds_com_example_my_plugin", Context.MODE_PRIVATE) }
+    }
+
+    @Test
+    fun `sanitizeId replaces all non-alphanumeric characters`() {
+        // Verify that dots, hyphens, and other separators all become underscores
+        assertEquals("com_foo_bar_baz", ScopedCredentialProvider.sanitizeId("com.foo.bar-baz"))
+        assertEquals("com_foo_bar_baz", ScopedCredentialProvider.sanitizeId("com.foo.bar.baz"))
+        assertEquals("simple", ScopedCredentialProvider.sanitizeId("simple"))
+    }
+
+    @Test
+    fun `credentialProvider is ScopedCredentialProvider`() {
+        val prefs = mockPrefs()
+        every { baseContext.getSharedPreferences(any(), any()) } returns prefs
+
         val ctx = createContext()
-        val thrown = try {
-            ctx.credentialProvider.saveJpakeCredentials("secret", "nonce")
-            null
-        } catch (e: UnsupportedOperationException) {
-            e
-        }
-        assertNotNull(thrown)
+        assertTrue(ctx.credentialProvider is ScopedCredentialProvider)
     }
 }

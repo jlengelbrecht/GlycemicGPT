@@ -1,9 +1,9 @@
 {
-  "factoryClass": "com.example.glycemicgpt.plugin.ExamplePluginFactory",
+  "factoryClass": "com.example.glycemicgpt.plugin.DemoGlucometerFactory",
   "apiVersion": 1,
-  "id": "com.example.glycemicgpt.example",
-  "name": "Example Plugin",
+  "id": "com.example.glycemicgpt.demo-glucometer",
+  "name": "Demo Glucometer",
   "version": "1.0.0",
   "author": "GlycemicGPT",
-  "description": "A minimal reference plugin demonstrating the runtime plugin API."
+  "description": "Comprehensive plugin showcase simulating a Bluetooth glucose meter. Demonstrates dashboard cards, settings UI, event bus, safety limits, BGM readings, and data sync."
 }

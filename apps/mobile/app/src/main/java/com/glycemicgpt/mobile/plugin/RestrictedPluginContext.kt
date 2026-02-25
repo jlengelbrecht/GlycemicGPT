@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
+import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.Handler
 import com.glycemicgpt.mobile.domain.plugin.PLUGIN_API_VERSION
@@ -23,11 +24,20 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Compile-time plugins get full access to the application context and credential
  * provider. Runtime plugins get:
- * - [RestrictedContext]: blocks startActivity, startService, startForegroundService,
- *   getSystemService, getContentResolver, sendBroadcast, createPackageContext;
- *   returns self for getApplicationContext(); blocks getBaseContext()
- * - [DeniedCredentialProvider]: throws on all credential operations
+ * - [RestrictedContext]: blocks app-scope escape vectors (startActivity, startActivities,
+ *   startService, sendBroadcast, registerReceiver, getContentResolver,
+ *   createPackageContext, getBaseContext). Allows hardware-related system services
+ *   via an allowlist (BluetoothManager, LocationManager, etc.).
+ *   Returns self for getApplicationContext() to prevent escape.
+ * - [ScopedCredentialProvider]: per-plugin isolated credential storage namespaced
+ *   by plugin ID, so each runtime plugin's pairing data is separate. Uses the
+ *   unrestricted base context for SharedPreferences access (SharedPreferences is
+ *   per-app sandboxed by Android, and the plugin ID namespace prevents cross-plugin access).
  * - Full access to settingsStore, debugLogger, eventBus, safetyLimits
+ *
+ * Safety enforcement comes from [SafetyLimits] (synced from backend), not from
+ * blanket Context restrictions. Plugins need hardware access to function as
+ * pump/CGM/BGM drivers.
  */
 object RestrictedPluginContext {
 
@@ -38,22 +48,39 @@ object RestrictedPluginContext {
         debugLogger: DebugLogger,
         eventBus: PluginEventBus,
         safetyLimits: StateFlow<SafetyLimits>,
-    ): PluginContext = PluginContext(
-        androidContext = RestrictedContext(baseContext),
-        pluginId = pluginId,
-        settingsStore = settingsStore,
-        credentialProvider = DeniedCredentialProvider,
-        debugLogger = debugLogger,
-        eventBus = eventBus,
-        safetyLimits = safetyLimits,
-        apiVersion = PLUGIN_API_VERSION,
-    )
+    ): PluginContext {
+        val restrictedContext = RestrictedContext(baseContext)
+        return PluginContext(
+            androidContext = restrictedContext,
+            pluginId = pluginId,
+            settingsStore = settingsStore,
+            credentialProvider = ScopedCredentialProvider(pluginId, baseContext),
+            debugLogger = debugLogger,
+            eventBus = eventBus,
+            safetyLimits = safetyLimits,
+            apiVersion = PLUGIN_API_VERSION,
+        )
+    }
 }
 
 /**
- * A [ContextWrapper] that blocks dangerous operations for runtime plugins.
- * Throws [SecurityException] on activity, service, broadcast, system service,
- * and content resolver access.
+ * A [ContextWrapper] that blocks app-scope escape vectors for runtime plugins.
+ *
+ * **Blocked** (prevents plugins from hijacking the host app):
+ * - startActivity / startActivities -- can't launch arbitrary UI
+ * - startService / startForegroundService / bindService / stopService -- can't start services
+ * - sendBroadcast / sendOrderedBroadcast -- can't send system broadcasts
+ * - registerReceiver (all overloads) -- can't intercept system broadcasts
+ * - getContentResolver -- can't access other apps' content providers
+ * - createPackageContext -- can't access other apps' contexts
+ * - getBaseContext -- can't escape the sandbox wrapper
+ * - getSystemService for non-hardware services -- allowlist enforced
+ *
+ * **Allowed** (needed for BLE pump/CGM drivers):
+ * - getSystemService for hardware-related services only (BluetoothManager, LocationManager,
+ *   PowerManager, AlarmManager, SensorManager, UsbManager)
+ * - getApplicationContext -- returns self (trapped, prevents escape)
+ * - getFilesDir, getCacheDir, getPackageName, etc. -- safe read-only operations
  */
 internal class RestrictedContext(base: Context) : ContextWrapper(base) {
 
@@ -66,6 +93,11 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
 
     override fun startActivity(intent: Intent?) = denied("startActivity")
     override fun startActivity(intent: Intent?, options: Bundle?) = denied("startActivity")
+    @Suppress("SpreadOperator")
+    override fun startActivities(intents: Array<out Intent>?) = denied("startActivities")
+    @Suppress("SpreadOperator")
+    override fun startActivities(intents: Array<out Intent>?, options: Bundle?) =
+        denied("startActivities")
 
     override fun startService(service: Intent?): ComponentName = denied("startService")
     override fun startForegroundService(service: Intent?): ComponentName = denied("startForegroundService")
@@ -73,7 +105,16 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
     override fun bindService(service: Intent, conn: ServiceConnection, flags: Int): Boolean =
         denied("bindService")
 
-    override fun getSystemService(name: String): Any = denied("getSystemService")
+    // getSystemService() is allowlisted to hardware-related services only.
+    // Plugins need BluetoothManager, LocationManager (BLE scanning requires location on Android),
+    // PowerManager, AlarmManager, etc. Non-hardware services (TelephonyManager, AccountManager,
+    // ClipboardManager, etc.) are blocked to prevent data exfiltration.
+    override fun getSystemService(name: String): Any? {
+        if (name !in ALLOWED_SYSTEM_SERVICES) {
+            denied("getSystemService($name)")
+        }
+        return super.getSystemService(name)
+    }
 
     override fun getContentResolver(): ContentResolver = denied("getContentResolver")
 
@@ -108,30 +149,117 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
         flags: Int,
     ): Intent? = denied("registerReceiver")
 
+    override fun registerReceiver(
+        receiver: BroadcastReceiver?,
+        filter: IntentFilter?,
+        broadcastPermission: String?,
+        scheduler: Handler?,
+    ): Intent? = denied("registerReceiver")
+
+    override fun registerReceiver(
+        receiver: BroadcastReceiver?,
+        filter: IntentFilter?,
+        broadcastPermission: String?,
+        scheduler: Handler?,
+        flags: Int,
+    ): Intent? = denied("registerReceiver")
+
     override fun createPackageContext(packageName: String?, flags: Int): Context =
         denied("createPackageContext")
 
-    // Allow safe read-only operations:
-    // getFilesDir, getCacheDir, getPackageName, getApplicationInfo, getResources, etc.
-    // These pass through to the base context via ContextWrapper defaults.
+    companion object {
+        /** System services allowed for runtime plugins (hardware/device access). */
+        val ALLOWED_SYSTEM_SERVICES: Set<String> = setOf(
+            Context.BLUETOOTH_SERVICE,     // BluetoothManager -- BLE device communication
+            Context.LOCATION_SERVICE,      // LocationManager -- required for BLE scanning
+            Context.POWER_SERVICE,         // PowerManager -- wake locks for BLE connections
+            Context.ALARM_SERVICE,         // AlarmManager -- scheduling periodic reads
+            Context.SENSOR_SERVICE,        // SensorManager -- hardware sensors
+            Context.USB_SERVICE,           // UsbManager -- USB device plugins
+            Context.WIFI_SERVICE,          // WifiManager -- network-connected devices
+            Context.WINDOW_SERVICE,        // WindowManager -- display metrics only
+        )
+    }
 }
 
 /**
- * A [PumpCredentialProvider] that denies all operations.
- * Runtime plugins must not access pump credentials.
+ * Per-plugin scoped credential storage for runtime plugins.
+ *
+ * Each runtime plugin gets its own isolated [SharedPreferences] namespace
+ * (keyed by a sanitized plugin ID), preventing cross-plugin credential access.
+ * Compile-time plugins use the app's EncryptedSharedPreferences directly;
+ * runtime plugins use regular SharedPreferences since credentials are
+ * only accessible within the app's Android sandbox and plugin credentials
+ * are for devices the user explicitly pairs with.
+ *
+ * **Note on encryption:** Regular SharedPreferences is used instead of
+ * EncryptedSharedPreferences because runtime plugins cannot access AndroidX
+ * Security library. On rooted/debug devices, credentials are readable via
+ * `run-as`. This is acceptable for the current trust model (user-installed
+ * plugins for personal device pairing). If the threat model changes to include
+ * adversarial plugins, migration to EncryptedSharedPreferences is required.
  */
-internal object DeniedCredentialProvider : PumpCredentialProvider {
+internal class ScopedCredentialProvider(
+    private val pluginId: String,
+    context: Context,
+) : PumpCredentialProvider {
 
-    private fun denied(): Nothing =
-        throw UnsupportedOperationException("Runtime plugins cannot access pump credentials")
+    private val prefs: SharedPreferences = context.getSharedPreferences(
+        "plugin_creds_${sanitizeId(pluginId)}",
+        Context.MODE_PRIVATE,
+    )
 
-    override fun getPairedAddress(): String = denied()
-    override fun getPairingCode(): String = denied()
-    override fun isPaired(): Boolean = denied()
-    override fun savePairing(address: String, pairingCode: String) = denied()
-    override fun clearPairing() = denied()
-    override fun saveJpakeCredentials(derivedSecretHex: String, serverNonceHex: String) = denied()
-    override fun getJpakeDerivedSecret(): String = denied()
-    override fun getJpakeServerNonce(): String = denied()
-    override fun clearJpakeCredentials() = denied()
+    override fun getPairedAddress(): String? = prefs.getString(KEY_ADDRESS, null)
+
+    override fun getPairingCode(): String? = prefs.getString(KEY_PAIRING_CODE, null)
+
+    override fun isPaired(): Boolean = prefs.contains(KEY_ADDRESS)
+
+    override fun savePairing(address: String, pairingCode: String) {
+        prefs.edit()
+            .putString(KEY_ADDRESS, address)
+            .putString(KEY_PAIRING_CODE, pairingCode)
+            .apply()
+    }
+
+    override fun clearPairing() {
+        prefs.edit()
+            .remove(KEY_ADDRESS)
+            .remove(KEY_PAIRING_CODE)
+            .apply()
+    }
+
+    override fun saveJpakeCredentials(derivedSecretHex: String, serverNonceHex: String) {
+        prefs.edit()
+            .putString(KEY_JPAKE_SECRET, derivedSecretHex)
+            .putString(KEY_JPAKE_NONCE, serverNonceHex)
+            .apply()
+    }
+
+    override fun getJpakeDerivedSecret(): String? = prefs.getString(KEY_JPAKE_SECRET, null)
+
+    override fun getJpakeServerNonce(): String? = prefs.getString(KEY_JPAKE_NONCE, null)
+
+    override fun clearJpakeCredentials() {
+        prefs.edit()
+            .remove(KEY_JPAKE_SECRET)
+            .remove(KEY_JPAKE_NONCE)
+            .apply()
+    }
+
+    companion object {
+        private const val KEY_ADDRESS = "paired_address"
+        private const val KEY_PAIRING_CODE = "pairing_code"
+        private const val KEY_JPAKE_SECRET = "jpake_derived_secret"
+        private const val KEY_JPAKE_NONCE = "jpake_server_nonce"
+
+        /**
+         * Sanitizes a plugin ID into a safe SharedPreferences filename component.
+         * Replaces all non-alphanumeric characters with underscores to prevent
+         * namespace collisions between IDs that differ only in separators
+         * (e.g., `com.foo.bar_baz` vs `com.foo.bar.baz`).
+         */
+        internal fun sanitizeId(pluginId: String): String =
+            pluginId.replace(Regex("[^a-zA-Z0-9]"), "_")
+    }
 }
