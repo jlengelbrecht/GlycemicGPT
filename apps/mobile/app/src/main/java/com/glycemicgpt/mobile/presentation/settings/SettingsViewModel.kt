@@ -353,18 +353,22 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun installPlugin(uri: Uri) {
-        val result = pluginRegistry.installRuntimePlugin(uri)
-        result.onSuccess {
-            _uiState.value = _uiState.value.copy(
-                availablePlugins = pluginRegistry.availablePlugins.value,
-                activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
-                runtimePlugins = pluginRegistry.runtimePlugins.value,
-                pluginInstallError = null,
-            )
-        }.onFailure { e ->
-            _uiState.value = _uiState.value.copy(
-                pluginInstallError = e.message ?: "Failed to install plugin",
-            )
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = pluginRegistry.installRuntimePlugin(uri)
+            withContext(Dispatchers.Main) {
+                result.onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        availablePlugins = pluginRegistry.availablePlugins.value,
+                        activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
+                        runtimePlugins = pluginRegistry.runtimePlugins.value,
+                        pluginInstallError = null,
+                    )
+                }.onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        pluginInstallError = e.message ?: "Failed to install plugin",
+                    )
+                }
+            }
         }
     }
 
@@ -384,22 +388,26 @@ class SettingsViewModel @Inject constructor(
 
     fun confirmRemovePlugin() {
         val pluginId = _uiState.value.pendingRemovePluginId ?: return
-        val result = pluginRegistry.removeRuntimePlugin(pluginId)
-        val errorMsg = if (result.isFailure) {
-            Timber.e(result.exceptionOrNull(), "Failed to remove plugin %s", pluginId)
-            result.exceptionOrNull()?.message ?: "Failed to remove plugin"
-        } else {
-            null
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = pluginRegistry.removeRuntimePlugin(pluginId)
+            withContext(Dispatchers.Main) {
+                val errorMsg = if (result.isFailure) {
+                    Timber.e(result.exceptionOrNull(), "Failed to remove plugin %s", pluginId)
+                    result.exceptionOrNull()?.message ?: "Failed to remove plugin"
+                } else {
+                    null
+                }
+                _uiState.value = _uiState.value.copy(
+                    availablePlugins = pluginRegistry.availablePlugins.value,
+                    activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
+                    activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
+                    runtimePlugins = pluginRegistry.runtimePlugins.value,
+                    pluginInstallError = errorMsg,
+                    showRemovePluginConfirm = false,
+                    pendingRemovePluginId = null,
+                )
+            }
         }
-        _uiState.value = _uiState.value.copy(
-            availablePlugins = pluginRegistry.availablePlugins.value,
-            activePumpPluginId = pluginRegistry.activePumpPlugin.value?.metadata?.id,
-            activePluginIds = pluginRegistry.allActivePlugins.value.map { it.metadata.id }.toSet(),
-            runtimePlugins = pluginRegistry.runtimePlugins.value,
-            pluginInstallError = errorMsg,
-            showRemovePluginConfirm = false,
-            pendingRemovePluginId = null,
-        )
     }
 
     fun clearPluginInstallError() {

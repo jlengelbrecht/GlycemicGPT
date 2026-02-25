@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.domain.plugin.ui.DetailScreenDescriptor
 import com.glycemicgpt.mobile.plugin.PluginRegistry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +25,7 @@ class PluginDetailViewModel @Inject constructor(
 
     private var plugin: Plugin? = null
     private var cardId: String? = null
+    private var collectionJob: Job? = null
 
     private val _detailScreen = MutableStateFlow<DetailScreenDescriptor?>(null)
     val detailScreen: StateFlow<DetailScreenDescriptor?> = _detailScreen.asStateFlow()
@@ -35,7 +37,13 @@ class PluginDetailViewModel @Inject constructor(
     val settingsStore: StateFlow<PluginSettingsStore?> = _settingsStore.asStateFlow()
 
     fun load(pluginId: String, cardId: String) {
-        if (this.plugin != null) return // already loaded
+        // Allow reload if args changed (e.g. navigation to a different card)
+        if (this.plugin != null && this.cardId == cardId) return
+
+        // Reset state for fresh load
+        _error.value = null
+        _detailScreen.value = null
+        collectionJob?.cancel()
 
         val p = pluginRegistry.getPlugin(pluginId)
         if (p == null) {
@@ -55,12 +63,13 @@ class PluginDetailViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        collectionJob = viewModelScope.launch {
             try {
                 flow
                     .flowOn(Dispatchers.IO)
                     .conflate()
                     .collect { descriptor ->
+                        _error.value = null
                         _detailScreen.value = descriptor
                     }
             } catch (e: Exception) {

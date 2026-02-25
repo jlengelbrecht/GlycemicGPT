@@ -242,6 +242,164 @@ class RestrictedPluginContextTest {
         assertTrue(thrown!!.message!!.contains("startActivities"))
     }
 
+    // -- RestrictedContext: storage-blocking overrides --
+
+    @Test
+    fun `RestrictedContext blocks openFileOutput`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.openFileOutput("test.txt", Context.MODE_PRIVATE)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("openFileOutput"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks openFileInput`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.openFileInput("test.txt")
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("openFileInput"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks deleteFile`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.deleteFile("test.txt")
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("deleteFile"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks getDir`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.getDir("test", Context.MODE_PRIVATE)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("getDir"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks getDatabasePath`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.getDatabasePath("test.db")
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("getDatabasePath"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks openOrCreateDatabase`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.openOrCreateDatabase("test.db", Context.MODE_PRIVATE, null)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("openOrCreateDatabase"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks deleteDatabase`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.deleteDatabase("test.db")
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("deleteDatabase"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks createDeviceProtectedStorageContext`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.createDeviceProtectedStorageContext()
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("createDeviceProtectedStorageContext"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks stopService`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.stopService(Intent())
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("stopService"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks bindService`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.bindService(Intent(), mockk(relaxed = true), 0)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("bindService"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks sendOrderedBroadcast`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.sendOrderedBroadcast(Intent(), null)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("sendOrderedBroadcast"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks registerReceiver`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.registerReceiver(null, null)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("registerReceiver"))
+    }
+
     // -- ScopedCredentialProvider tests --
 
     private fun mockPrefs(): SharedPreferences {

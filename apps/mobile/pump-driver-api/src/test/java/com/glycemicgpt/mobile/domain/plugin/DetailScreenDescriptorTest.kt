@@ -97,4 +97,27 @@ class DetailScreenDescriptorTest {
         assertEquals("Empty Detail", descriptor.title)
         assertEquals(0, descriptor.elements.size)
     }
+
+    @Test
+    fun `exactly MAX_ELEMENTS is accepted`() {
+        val elements = (1..DetailScreenDescriptor.MAX_ELEMENTS).map {
+            DetailElement.Display(CardElement.Label(text = "Item $it"))
+        }
+        val descriptor = DetailScreenDescriptor(
+            title = "Max Elements",
+            elements = elements,
+        )
+        assertEquals(DetailScreenDescriptor.MAX_ELEMENTS, descriptor.elements.size)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `MAX_ELEMENTS plus one is rejected`() {
+        val elements = (1..DetailScreenDescriptor.MAX_ELEMENTS + 1).map {
+            DetailElement.Display(CardElement.Label(text = "Item $it"))
+        }
+        DetailScreenDescriptor(
+            title = "Over Max",
+            elements = elements,
+        )
+    }
 }

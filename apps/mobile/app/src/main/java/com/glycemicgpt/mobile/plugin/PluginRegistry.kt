@@ -126,6 +126,7 @@ class PluginRegistry @Inject constructor(
                 Timber.d("Plugin created: %s (%s)", meta.name, meta.id)
             } catch (e: Exception) {
                 Timber.e(e, "Plugin %s failed to create/initialize -- skipping", meta.id)
+                pluginSettingsStores.remove(meta.id)
             }
         }
 
@@ -301,6 +302,7 @@ class PluginRegistry @Inject constructor(
             Result.success(plugin.metadata)
         } catch (e: Exception) {
             Timber.e(e, "Failed to create/initialize runtime plugin %s", discovered.manifest.id)
+            pluginSettingsStores.remove(discovered.manifest.id)
             pluginFileManager.removePlugin(jarFile)
             Result.failure(e)
         }
@@ -519,6 +521,7 @@ class PluginRegistry @Inject constructor(
                 )
             } catch (e: Exception) {
                 Timber.e(e, "Runtime plugin %s failed to create/initialize -- skipping", pluginId)
+                pluginSettingsStores.remove(pluginId)
             }
         }
 

@@ -89,14 +89,14 @@ class DemoGlucometerPlugin : Plugin {
 
     // -- Internal state --
 
-    private var context: PluginContext? = null
+    @Volatile private var context: PluginContext? = null
     private var scope: CoroutineScope? = null
     @Volatile private var isActive = false
     private val simulator = ReadingSimulator()
     private var bgmSource: DemoBgmSource? = null
-    private var readingCount = 0
-    private var lastSyncTime: Instant? = null
-    private var simulatedBattery = 87f
+    @Volatile private var readingCount = 0
+    @Volatile private var lastSyncTime: Instant? = null
+    @Volatile private var simulatedBattery = 87f
 
     // -- Lifecycle --
 
@@ -481,7 +481,7 @@ class DemoGlucometerPlugin : Plugin {
             KEY_DETAIL_RECORD -> {
                 val valueStr = ctx.settingsStore.getString(KEY_DETAIL_BG_VALUE, "")
                 val value = valueStr.toIntOrNull()
-                if (value != null && value in 20..600) {
+                if (value != null && value in 20..500) {
                     // Add to simulator history and publish event
                     simulator.addManualReading(value.toFloat())
                     readingCount++
@@ -556,7 +556,7 @@ class DemoGlucometerPlugin : Plugin {
                 SettingDescriptor.TextInput(
                     key = KEY_DETAIL_BG_VALUE,
                     label = "Blood Glucose (mg/dL)",
-                    hint = "Enter value between 20-600",
+                    hint = "Enter value between 20-500",
                 ),
             ),
         )

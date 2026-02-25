@@ -91,7 +91,7 @@ class DexPluginLoader(private val context: Context) {
             }
 
             val factoryClass = classLoader.loadClass(manifest.factoryClass)
-            val factory = factoryClass.getDeclaredConstructor().newInstance() as? PluginFactory
+            val factory = factoryClass.getConstructor().newInstance() as? PluginFactory
             if (factory == null) {
                 Timber.e(
                     "DexPluginLoader: %s does not implement PluginFactory -- skipping %s",

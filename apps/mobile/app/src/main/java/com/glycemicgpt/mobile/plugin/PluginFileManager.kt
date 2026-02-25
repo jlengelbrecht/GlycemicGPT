@@ -63,6 +63,15 @@ class PluginFileManager(private val context: Context) {
             val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             val destFile = File(dir, sanitized)
 
+            // Canonical-path check: prevent path traversal via crafted filenames
+            val dirCanonical = dir.canonicalFile
+            val destCanonical = destFile.canonicalFile
+            if (!destCanonical.path.startsWith(dirCanonical.path + File.separator)) {
+                return Result.failure(
+                    SecurityException("Plugin filename resolves outside plugins directory"),
+                )
+            }
+
             if (destFile.exists()) {
                 return Result.failure(
                     IllegalArgumentException("Plugin file already exists: ${destFile.name}"),
@@ -106,8 +115,11 @@ class PluginFileManager(private val context: Context) {
 
             Timber.d("PluginFileManager: installed %s (%d bytes)", destFile.name, destFile.length())
             Result.success(destFile)
-        } catch (e: Exception) {
+        } catch (e: IOException) {
             Timber.e(e, "PluginFileManager: failed to install plugin from %s", sourceUri)
+            Result.failure(e)
+        } catch (e: SecurityException) {
+            Timber.e(e, "PluginFileManager: security error installing plugin from %s", sourceUri)
             Result.failure(e)
         }
     }

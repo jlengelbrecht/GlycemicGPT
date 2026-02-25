@@ -123,8 +123,12 @@ class ReadingSimulator {
 
     /**
      * Adds a manual reading to history (for detail screen manual entry).
+     * Validates that the value is within BgmReading's valid range (20-500 mg/dL).
      */
     fun addManualReading(glucoseMgDl: Float) {
+        require(glucoseMgDl in 20f..500f) {
+            "Manual reading must be between 20 and 500 mg/dL, was $glucoseMgDl"
+        }
         recordHistory(glucoseMgDl)
     }
 
