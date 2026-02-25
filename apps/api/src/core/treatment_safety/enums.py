@@ -16,7 +16,6 @@ class SafetyCheckType(StrEnum):
     rate_limit = auto()
     glucose_range_check = auto()
     user_confirmation_required = auto()
-    biometric_required = auto()
 
 
 class BolusSource(StrEnum):
@@ -44,4 +43,3 @@ class ValidationStatus(StrEnum):
 
     approved = auto()
     rejected = auto()
-    pending_confirmation = auto()

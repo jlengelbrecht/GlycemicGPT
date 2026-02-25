@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import get_current_user, require_diabetic_or_admin
+from src.core.treatment_safety.enums import BolusSource
 from src.database import get_db
 from src.models.user import User
 from src.schemas.treatment_validation import (
@@ -15,6 +16,12 @@ from src.schemas.treatment_validation import (
     SafetyCheckResponse,
 )
 from src.services.treatment_validation import validate_bolus
+
+_AI_DISCLAIMER = (
+    "This dose was suggested by an AI model and may be incorrect. "
+    "Verify with your healthcare provider before acting. "
+    "Auto-execution of AI-suggested doses is prohibited."
+)
 
 router = APIRouter(
     prefix="/api/treatment",
@@ -60,10 +67,13 @@ async def validate_bolus_request(
     await db.commit()
     await db.refresh(log_entry)
 
+    disclaimer = _AI_DISCLAIMER if body.source == BolusSource.ai_suggested else None
+
     return BolusValidationResponse(
         approved=result.approved,
         rejection_reasons=result.rejection_reasons,
         warnings=result.warnings,
+        disclaimer=disclaimer,
         validated_dose_milliunits=result.validated_dose_milliunits,
         safety_checks=[
             SafetyCheckResponse(

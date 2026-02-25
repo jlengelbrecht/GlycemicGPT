@@ -52,6 +52,13 @@ class BolusValidationResponse(BaseModel):
     approved: bool
     rejection_reasons: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    disclaimer: str | None = Field(
+        default=None,
+        description=(
+            "Safety disclaimer text that MUST be shown to the user "
+            "before any delivery action. Present for ai_suggested sources."
+        ),
+    )
     validated_dose_milliunits: int = Field(
         ge=0,
         le=25_000,

@@ -34,7 +34,6 @@ class TestSafetyCheckType:
             "rate_limit",
             "glucose_range_check",
             "user_confirmation_required",
-            "biometric_required",
         }
         assert {e.value for e in SafetyCheckType} == expected
 
@@ -50,7 +49,7 @@ class TestBolusSource:
 
 class TestValidationStatus:
     def test_all_values_exist(self):
-        expected = {"approved", "rejected", "pending_confirmation"}
+        expected = {"approved", "rejected"}
         assert {e.value for e in ValidationStatus} == expected
 
 
@@ -200,6 +199,13 @@ class TestBolusValidationResult:
             BolusValidationResult(
                 approved=True,
                 validated_dose_milliunits=0,
+            )
+
+    def test_rejected_without_reasons_invalid(self):
+        with pytest.raises(ValidationError):
+            BolusValidationResult(
+                approved=False,
+                rejection_reasons=[],
             )
 
 

@@ -81,9 +81,17 @@ class TreatmentSafetyValidator:
         approved = len(rejection_reasons) == 0
         validated_dose = request.requested_dose_milliunits if approved else 0
 
+        warnings: list[str] = []
+        if request.source == BolusSource.ai_suggested:
+            warnings.append(
+                "This dose was AI-suggested. Verify with your healthcare "
+                "provider before acting. Auto-execution is prohibited."
+            )
+
         return BolusValidationResult(
             approved=approved,
             rejection_reasons=rejection_reasons,
+            warnings=warnings,
             validated_dose_milliunits=validated_dose,
             safety_check_results=checks,
         )

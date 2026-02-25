@@ -45,27 +45,10 @@ def upgrade() -> None:
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("requested_dose_milliunits", sa.Integer(), nullable=False),
         sa.Column("glucose_at_request_mgdl", sa.Integer(), nullable=False),
         sa.Column("source", sa.String(20), nullable=False),
-        sa.CheckConstraint(
-            "requested_dose_milliunits >= 0 AND requested_dose_milliunits <= 25000",
-            name="ck_bolus_log_dose_range",
-        ),
-        sa.CheckConstraint(
-            "glucose_at_request_mgdl >= 20 AND glucose_at_request_mgdl <= 500",
-            name="ck_bolus_log_glucose_range",
-        ),
-        sa.CheckConstraint(
-            "validated_dose_milliunits >= 0 AND validated_dose_milliunits <= 25000",
-            name="ck_bolus_log_validated_dose_range",
-        ),
-        sa.CheckConstraint(
-            "source IN ('manual', 'ai_suggested', 'automated')",
-            name="ck_bolus_log_source_values",
-        ),
         sa.Column(
             "user_confirmed", sa.Boolean(), nullable=False, server_default="false"
         ),
@@ -105,10 +88,37 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
+        # CHECK constraints -- placed after all column definitions
+        sa.CheckConstraint(
+            "requested_dose_milliunits >= 0 AND requested_dose_milliunits <= 25000",
+            name="ck_bolus_log_dose_range",
+        ),
+        sa.CheckConstraint(
+            "glucose_at_request_mgdl >= 20 AND glucose_at_request_mgdl <= 500",
+            name="ck_bolus_log_glucose_range",
+        ),
+        sa.CheckConstraint(
+            "validated_dose_milliunits >= 0 AND validated_dose_milliunits <= 25000",
+            name="ck_bolus_log_validated_dose_range",
+        ),
+        sa.CheckConstraint(
+            "source IN ('manual', 'ai_suggested', 'automated')",
+            name="ck_bolus_log_source_values",
+        ),
+    )
+    # Alembic ignores index=True in op.create_table -- explicit create_index required.
+    op.create_index(
+        "ix_bolus_validation_logs_user_id",
+        "bolus_validation_logs",
+        ["user_id"],
     )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "ix_bolus_validation_logs_user_id",
+        table_name="bolus_validation_logs",
+    )
     op.drop_table("bolus_validation_logs")
     op.drop_constraint("ck_safety_limits_daily_bolus_range", "safety_limits")
     op.drop_column("safety_limits", "max_daily_bolus_milliunits")

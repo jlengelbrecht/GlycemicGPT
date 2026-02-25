@@ -6,6 +6,7 @@ audit trail and safety review.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
@@ -64,13 +65,13 @@ class BolusValidationLog(Base, TimestampMixin):
         default=0,
     )
 
-    check_results: Mapped[list] = mapped_column(
+    check_results: Mapped[list[dict[str, Any]]] = mapped_column(
         JSON,
         nullable=False,
         default=list,
     )
 
-    rejection_reasons: Mapped[list] = mapped_column(
+    rejection_reasons: Mapped[list[str]] = mapped_column(
         JSON,
         nullable=False,
         default=list,

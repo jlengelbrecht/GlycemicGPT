@@ -91,4 +91,7 @@ class BolusValidationResult(BaseModel):
         if self.approved and self.validated_dose_milliunits == 0:
             msg = "validated_dose_milliunits must be > 0 when the bolus is approved"
             raise ValueError(msg)
+        if not self.approved and not self.rejection_reasons:
+            msg = "rejection_reasons must not be empty when the bolus is rejected"
+            raise ValueError(msg)
         return self

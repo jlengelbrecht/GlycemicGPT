@@ -52,6 +52,8 @@ class SafetyLimitsUpdate(BaseModel):
         le=25000,
         description="Maximum single bolus dose in milliunits. Range: 1-25000.",
     )
+    # 200 U/day ceiling accommodates severe insulin-resistant T2D patients
+    # who may require 150-200 U/day total.  Default is 100 U (100000 mU).
     max_daily_bolus_milliunits: int | None = Field(
         default=None,
         ge=1,
