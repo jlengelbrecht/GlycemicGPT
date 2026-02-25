@@ -62,6 +62,12 @@ class ReadingSimulator {
     private val _history: MutableList<Float> = Collections.synchronizedList(mutableListOf())
     val history: List<Float> get() = synchronized(_history) { _history.toList() }
 
+    /** Thread-safe timestamped reading history for the detail screen. */
+    private val _recentReadings: MutableList<Pair<Instant, Float>> =
+        Collections.synchronizedList(mutableListOf())
+    val recentReadings: List<Pair<Instant, Float>>
+        get() = synchronized(_recentReadings) { _recentReadings.toList() }
+
     /**
      * Produces a [Flow] of simulated [BgmReading] values at the given interval.
      *
@@ -115,11 +121,25 @@ class ReadingSimulator {
         return (base + jitter).roundToInt().coerceIn(20, 500)
     }
 
+    /**
+     * Adds a manual reading to history (for detail screen manual entry).
+     */
+    fun addManualReading(glucoseMgDl: Float) {
+        recordHistory(glucoseMgDl)
+    }
+
     private fun recordHistory(value: Float) {
+        val now = Instant.now()
         synchronized(_history) {
             _history.add(value)
             if (_history.size > MAX_HISTORY) {
                 _history.removeAt(0)
+            }
+        }
+        synchronized(_recentReadings) {
+            _recentReadings.add(now to value)
+            if (_recentReadings.size > MAX_HISTORY) {
+                _recentReadings.removeAt(0)
             }
         }
     }

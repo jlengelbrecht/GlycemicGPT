@@ -10,6 +10,7 @@ import com.glycemicgpt.mobile.domain.plugin.PluginCapability
 import com.glycemicgpt.mobile.domain.plugin.PluginContext
 import com.glycemicgpt.mobile.domain.plugin.PluginFactory
 import com.glycemicgpt.mobile.domain.plugin.PluginMetadata
+import com.glycemicgpt.mobile.domain.plugin.PluginSettingsStore
 import com.glycemicgpt.mobile.domain.pump.DebugLogger
 import com.glycemicgpt.mobile.domain.plugin.events.PluginEvent
 import com.glycemicgpt.mobile.domain.pump.PumpCredentialProvider
@@ -63,6 +64,9 @@ class PluginRegistry @Inject constructor(
     private val initialized = AtomicBoolean(false)
 
     private val _safetyLimits = MutableStateFlow(safetyLimitsStore.toSafetyLimits())
+
+    // Plugin settings stores (keyed by plugin ID) for access from detail screens
+    private val pluginSettingsStores: MutableMap<String, PluginSettingsStoreImpl> = ConcurrentHashMap()
 
     // Runtime plugin support
     private val dexPluginLoader = DexPluginLoader(context)
@@ -225,6 +229,9 @@ class PluginRegistry @Inject constructor(
 
     fun getPlugin(pluginId: String): Plugin? = plugins[pluginId]
 
+    /** Returns the settings store for a plugin, or null if not found. */
+    fun getPluginSettingsStore(pluginId: String): PluginSettingsStore? = pluginSettingsStores[pluginId]
+
     /** Returns true if the given plugin was loaded at runtime (not compile-time). */
     fun isRuntimePlugin(pluginId: String): Boolean = pluginId in runtimePluginJars
 
@@ -332,8 +339,9 @@ class PluginRegistry @Inject constructor(
             pluginFileManager.removePlugin(jarFile)
         }
 
-        // Clean up preferences
+        // Clean up preferences and settings store
         preferences.removeInstalledRuntimePlugin(pluginId)
+        pluginSettingsStores.remove(pluginId)
 
         // Delete plugin settings SharedPreferences
         context.deleteSharedPreferences("plugin_settings_$pluginId")
@@ -434,26 +442,33 @@ class PluginRegistry @Inject constructor(
         }
     }
 
-    private fun createPluginContext(pluginId: String): PluginContext = PluginContext(
-        androidContext = context,
-        pluginId = pluginId,
-        settingsStore = PluginSettingsStoreImpl(context, pluginId),
-        credentialProvider = credentialProvider,
-        debugLogger = debugLogger,
-        eventBus = eventBus,
-        safetyLimits = _safetyLimits,
-        apiVersion = PLUGIN_API_VERSION,
-    )
+    private fun createPluginContext(pluginId: String): PluginContext {
+        val settingsStore = PluginSettingsStoreImpl(context, pluginId)
+        pluginSettingsStores[pluginId] = settingsStore
+        return PluginContext(
+            androidContext = context,
+            pluginId = pluginId,
+            settingsStore = settingsStore,
+            credentialProvider = credentialProvider,
+            debugLogger = debugLogger,
+            eventBus = eventBus,
+            safetyLimits = _safetyLimits,
+            apiVersion = PLUGIN_API_VERSION,
+        )
+    }
 
-    private fun createRestrictedPluginContext(pluginId: String): PluginContext =
-        RestrictedPluginContext.create(
+    private fun createRestrictedPluginContext(pluginId: String): PluginContext {
+        val settingsStore = PluginSettingsStoreImpl(context, pluginId)
+        pluginSettingsStores[pluginId] = settingsStore
+        return RestrictedPluginContext.create(
             baseContext = context,
             pluginId = pluginId,
-            settingsStore = PluginSettingsStoreImpl(context, pluginId),
+            settingsStore = settingsStore,
             debugLogger = debugLogger,
             eventBus = eventBus,
             safetyLimits = _safetyLimits,
         )
+    }
 
     /**
      * Discover runtime plugins from JAR files on disk.

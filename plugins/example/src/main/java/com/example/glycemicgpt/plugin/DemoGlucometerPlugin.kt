@@ -18,6 +18,8 @@ import com.glycemicgpt.mobile.domain.plugin.ui.PluginIcon
 import com.glycemicgpt.mobile.domain.plugin.ui.PluginSettingsDescriptor
 import com.glycemicgpt.mobile.domain.plugin.ui.PluginSettingsSection
 import com.glycemicgpt.mobile.domain.plugin.ui.SettingDescriptor
+import com.glycemicgpt.mobile.domain.plugin.ui.DetailElement
+import com.glycemicgpt.mobile.domain.plugin.ui.DetailScreenDescriptor
 import com.glycemicgpt.mobile.domain.plugin.ui.UiColor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -309,6 +311,7 @@ class DemoGlucometerPlugin : Plugin {
             title = "Demo Glucometer",
             priority = 100,
             elements = elements,
+            hasDetail = true,
         )
     }
 
@@ -453,6 +456,161 @@ class DemoGlucometerPlugin : Plugin {
         ),
     )
 
+    // -- Detail Screen --
+
+    /**
+     * Provides a rich detail view for the glucometer status card.
+     * Includes reading history, manual entry, simulator controls, and safety info.
+     */
+    override fun observeDetailScreen(cardId: String): Flow<DetailScreenDescriptor>? {
+        if (cardId != "demo-glucometer-status") return null
+
+        return flow {
+            while (true) {
+                emit(buildDetailScreen())
+                kotlinx.coroutines.delay(3000L)
+            }
+        }
+    }
+
+    override fun onDetailAction(cardId: String, actionKey: String) {
+        if (cardId != "demo-glucometer-status") return
+        val ctx = context ?: return
+
+        when (actionKey) {
+            KEY_DETAIL_RECORD -> {
+                val valueStr = ctx.settingsStore.getString(KEY_DETAIL_BG_VALUE, "")
+                val value = valueStr.toIntOrNull()
+                if (value != null && value in 20..600) {
+                    // Add to simulator history and publish event
+                    simulator.addManualReading(value.toFloat())
+                    readingCount++
+                    lastSyncTime = Instant.now()
+                    ctx.eventBus.publish(
+                        PluginEvent.NewBgmReading(
+                            pluginId = metadata.id,
+                            reading = BgmReading(
+                                glucoseMgDl = value,
+                                timestamp = Instant.now(),
+                                meterName = "Demo Glucometer (manual)",
+                            ),
+                        ),
+                    )
+                    println("DemoGlucometer: manual reading recorded: $value mg/dL")
+                    // Clear the input field
+                    ctx.settingsStore.putString(KEY_DETAIL_BG_VALUE, "")
+                } else {
+                    println("DemoGlucometer: invalid manual reading value: $valueStr")
+                }
+            }
+        }
+    }
+
+    private fun buildDetailScreen(): DetailScreenDescriptor {
+        val elements = mutableListOf<DetailElement>()
+
+        // Section: Recent Readings
+        elements.add(DetailElement.SectionHeader("Recent Readings"))
+        val history = simulator.recentReadings
+        if (history.isEmpty()) {
+            elements.add(
+                DetailElement.Display(
+                    CardElement.Label(
+                        text = "No readings yet. Activate the simulator or enter a manual reading.",
+                        style = LabelStyle.CAPTION,
+                    ),
+                ),
+            )
+        } else {
+            val formatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+                .withZone(ZoneId.systemDefault())
+            history.takeLast(10).reversed().forEach { (timestamp, glucose) ->
+                elements.add(
+                    DetailElement.Display(
+                        CardElement.Label(
+                            text = "${formatter.format(timestamp)}  -  ${glucose.toInt()} mg/dL",
+                            style = LabelStyle.BODY,
+                        ),
+                    ),
+                )
+            }
+        }
+
+        // SparkLine of recent values
+        val sparkData = simulator.history
+        if (sparkData.size >= 2) {
+            elements.add(
+                DetailElement.Display(
+                    CardElement.SparkLine(
+                        values = sparkData,
+                        label = "Glucose trend",
+                    ),
+                ),
+            )
+        }
+
+        // Section: Manual Entry
+        elements.add(DetailElement.SectionHeader("Manual Entry"))
+        elements.add(
+            DetailElement.Interactive(
+                SettingDescriptor.TextInput(
+                    key = KEY_DETAIL_BG_VALUE,
+                    label = "Blood Glucose (mg/dL)",
+                    hint = "Enter value between 20-600",
+                ),
+            ),
+        )
+        elements.add(
+            DetailElement.Interactive(
+                SettingDescriptor.ActionButton(
+                    key = KEY_DETAIL_RECORD,
+                    label = "Record Reading",
+                    style = ButtonStyle.PRIMARY,
+                ),
+            ),
+        )
+
+        // Section: Simulator Controls
+        elements.add(DetailElement.SectionHeader("Simulator Controls"))
+        elements.add(
+            DetailElement.Interactive(
+                SettingDescriptor.Toggle(
+                    key = KEY_SIM_ENABLED,
+                    label = "Enable Simulation",
+                    description = "Generate simulated glucose readings automatically",
+                ),
+            ),
+        )
+        elements.add(
+            DetailElement.Interactive(
+                SettingDescriptor.Slider(
+                    key = KEY_SIM_INTERVAL,
+                    label = "Reading Interval",
+                    min = 5f,
+                    max = 300f,
+                    step = 5f,
+                    unit = "sec",
+                ),
+            ),
+        )
+
+        // Section: Safety Info
+        elements.add(DetailElement.SectionHeader("Safety Info"))
+        elements.add(
+            DetailElement.Display(
+                CardElement.Label(
+                    text = buildSafetyInfoText(),
+                    style = LabelStyle.CAPTION,
+                ),
+            ),
+        )
+
+        return DetailScreenDescriptor(
+            title = "Demo Glucometer",
+            elements = elements,
+        )
+    }
+
     // -- Capability Interface --
 
     /**
@@ -503,6 +661,10 @@ class DemoGlucometerPlugin : Plugin {
         private const val KEY_AUTO_SYNC = "auto_sync"
         private const val KEY_SYNC_NOW = "sync_now"
         private const val KEY_CLEAR_DATA = "clear_data"
+
+        // Detail screen keys
+        private const val KEY_DETAIL_BG_VALUE = "detail_bg_value"
+        private const val KEY_DETAIL_RECORD = "detail_record_reading"
 
         private const val DEFAULT_INTERVAL = 30f
     }
