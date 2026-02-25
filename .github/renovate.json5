@@ -107,7 +107,7 @@
     {
       "description": "Group AGP plugins (gradle manager)",
       "matchManagers": ["gradle"],
-      "matchPackageNames": ["com.android.application", "com.android.library"],
+      "matchDepNames": ["com.android.application", "com.android.library"],
       "groupName": "Android Gradle Plugin + Wrapper"
     },
     {
@@ -158,6 +158,7 @@
     {
       "description": "Group Wear OS artifacts",
       "matchPackageNames": [
+        "androidx.wear:*",
         "androidx.wear.*:*"
       ],
       "groupName": "AndroidX Wear OS"
