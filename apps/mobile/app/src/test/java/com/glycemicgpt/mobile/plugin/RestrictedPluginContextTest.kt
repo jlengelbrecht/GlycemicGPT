@@ -139,6 +139,52 @@ class RestrictedPluginContextTest {
     }
 
     @Test
+    fun `RestrictedContext blocks startForegroundService`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.startForegroundService(Intent())
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("startForegroundService"))
+    }
+
+    @Test
+    fun `RestrictedContext blocks getBaseContext`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.baseContext
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("getBaseContext"))
+    }
+
+    @Test
+    fun `RestrictedContext getApplicationContext returns self`() {
+        val restricted = RestrictedContext(baseContext)
+        val appContext = restricted.applicationContext
+        assertTrue(appContext === restricted)
+    }
+
+    @Test
+    fun `RestrictedContext blocks createPackageContext`() {
+        val restricted = RestrictedContext(baseContext)
+        val thrown = try {
+            restricted.createPackageContext("com.other.app", 0)
+            null
+        } catch (e: SecurityException) {
+            e
+        }
+        assertNotNull(thrown)
+        assertTrue(thrown!!.message!!.contains("createPackageContext"))
+    }
+
+    @Test
     fun `DeniedCredentialProvider blocks getPairedAddress`() {
         val ctx = createContext()
         val thrown = try {

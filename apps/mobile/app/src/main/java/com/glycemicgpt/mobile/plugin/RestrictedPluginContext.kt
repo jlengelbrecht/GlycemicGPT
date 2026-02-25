@@ -23,8 +23,9 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * Compile-time plugins get full access to the application context and credential
  * provider. Runtime plugins get:
- * - [RestrictedContext]: blocks startActivity, startService, getSystemService,
- *   getContentResolver, sendBroadcast
+ * - [RestrictedContext]: blocks startActivity, startService, startForegroundService,
+ *   getSystemService, getContentResolver, sendBroadcast, createPackageContext;
+ *   returns self for getApplicationContext(); blocks getBaseContext()
  * - [DeniedCredentialProvider]: throws on all credential operations
  * - Full access to settingsStore, debugLogger, eventBus, safetyLimits
  */
@@ -59,10 +60,15 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
     private fun denied(operation: String): Nothing =
         throw SecurityException("Runtime plugins cannot call $operation")
 
+    // Prevent sandbox escape via getApplicationContext() or getBaseContext()
+    override fun getApplicationContext(): Context = this
+    override fun getBaseContext(): Context = denied("getBaseContext")
+
     override fun startActivity(intent: Intent?) = denied("startActivity")
     override fun startActivity(intent: Intent?, options: Bundle?) = denied("startActivity")
 
     override fun startService(service: Intent?): ComponentName = denied("startService")
+    override fun startForegroundService(service: Intent?): ComponentName = denied("startForegroundService")
     override fun stopService(name: Intent?): Boolean = denied("stopService")
     override fun bindService(service: Intent, conn: ServiceConnection, flags: Int): Boolean =
         denied("bindService")
@@ -101,6 +107,9 @@ internal class RestrictedContext(base: Context) : ContextWrapper(base) {
         filter: IntentFilter?,
         flags: Int,
     ): Intent? = denied("registerReceiver")
+
+    override fun createPackageContext(packageName: String?, flags: Int): Context =
+        denied("createPackageContext")
 
     // Allow safe read-only operations:
     // getFilesDir, getCacheDir, getPackageName, getApplicationInfo, getResources, etc.

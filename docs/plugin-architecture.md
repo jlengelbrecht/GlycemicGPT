@@ -737,11 +737,14 @@ Runtime plugins receive a `RestrictedPluginContext` that blocks dangerous operat
 | Operation | Blocked? | Error Type |
 |-----------|----------|------------|
 | `startActivity()` | Yes | `SecurityException` |
-| `startService()` / `bindService()` | Yes | `SecurityException` |
+| `startService()` / `startForegroundService()` / `bindService()` | Yes | `SecurityException` |
 | `getSystemService()` | Yes | `SecurityException` |
 | `getContentResolver()` | Yes | `SecurityException` |
-| `sendBroadcast()` | Yes | `SecurityException` |
+| `sendBroadcast()` / `sendOrderedBroadcast()` | Yes | `SecurityException` |
 | `registerReceiver()` | Yes | `SecurityException` |
+| `getBaseContext()` | Yes | `SecurityException` |
+| `getApplicationContext()` | Returns restricted self | -- |
+| `createPackageContext()` | Yes | `SecurityException` |
 | `credentialProvider.*` | Yes | `UnsupportedOperationException` |
 | `settingsStore` | No | Full access (per-plugin namespace) |
 | `debugLogger` | No | Full access |
@@ -750,6 +753,8 @@ Runtime plugins receive a `RestrictedPluginContext` that blocks dangerous operat
 | `filesDir` / `cacheDir` | No | Full access |
 
 Compile-time plugins (like Tandem) receive the full, unrestricted `PluginContext`.
+
+**Known limitation:** Runtime plugins are loaded in-process via `DexClassLoader` with the app's classloader as parent. This means plugins can theoretically load and reflect over host app classes beyond the `pump-driver-api` interfaces. Full process-level isolation would require running plugins in a separate Android process, which adds significant complexity. The current approach relies on the trust model (users explicitly install plugins with a security warning) and is appropriate for community-developed monitoring plugins.
 
 ### Building a Runtime Plugin
 
