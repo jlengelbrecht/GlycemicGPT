@@ -101,9 +101,17 @@
     },
     // Group Android Gradle Plugin with Gradle wrapper -- AGP major/minor
     // bumps almost always require a matching Gradle wrapper upgrade.
+    // Two rules with the same groupName: Renovate AND-combines matchers
+    // within a rule, so AGP (gradle manager) and the wrapper
+    // (gradle-wrapper manager) must be matched separately.
     {
-      "description": "Group AGP + Gradle wrapper (must upgrade together)",
+      "description": "Group AGP plugins (gradle manager)",
+      "matchManagers": ["gradle"],
       "matchPackageNames": ["com.android.application", "com.android.library"],
+      "groupName": "Android Gradle Plugin + Wrapper"
+    },
+    {
+      "description": "Group Gradle wrapper with AGP",
       "matchManagers": ["gradle-wrapper"],
       "groupName": "Android Gradle Plugin + Wrapper"
     },
