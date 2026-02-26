@@ -50,13 +50,13 @@ reviews:
     - label: "ble"
       instructions: >
         Apply when PR modifies Bluetooth Low Energy code under
-        apps/mobile/**/ble/**
+        {apps/mobile,plugins/shipped}/**/ble/**
     - label: "plugin-api"
       instructions: >
-        Apply when PR modifies files under apps/mobile/pump-driver-api/
+        Apply when PR modifies files under plugins/pump-driver-api/
     - label: "plugin-driver"
       instructions: >
-        Apply when PR modifies files under apps/mobile/tandem-pump-driver/
+        Apply when PR modifies files under plugins/shipped/tandem/
 
   path_filters:
     - "!**/*.png"
@@ -148,7 +148,7 @@ reviews:
           insulin doses must have hard caps, no auto-bolus without explicit user
           confirmation.
 
-    - path: "apps/mobile/pump-driver-api/**/*.kt"
+    - path: "plugins/pump-driver-api/**/*.kt"
       instructions: |
         Plugin API module defining interfaces and domain models for all plugins.
 
@@ -163,7 +163,7 @@ reviews:
         - PluginCapabilityInterface marker: all new capability interfaces must
           extend this marker.
 
-    - path: "apps/mobile/tandem-pump-driver/**/*.kt"
+    - path: "plugins/shipped/tandem/**/*.kt"
       instructions: |
         Tandem t:slim X2 plugin implementation (reference plugin for the architecture).
 
@@ -179,7 +179,7 @@ reviews:
           should disconnect, shutdown() should fully release resources.
         - Plugin metadata: apiVersion must match PLUGIN_API_VERSION.
 
-    - path: "apps/mobile/**/ble/**"
+    - path: "{apps/mobile,plugins/shipped}/**/ble/**"
       instructions: |
         BLE code communicates with Tandem t:slim X2 insulin pumps.
 
