@@ -50,7 +50,7 @@ reviews:
     - label: "ble"
       instructions: >
         Apply when PR modifies Bluetooth Low Energy code under
-        apps/mobile/**/ble/**
+        {apps/mobile,plugins/shipped}/**/ble/**
     - label: "plugin-api"
       instructions: >
         Apply when PR modifies files under plugins/pump-driver-api/
