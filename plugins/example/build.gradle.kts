@@ -6,7 +6,7 @@
  *
  * Prerequisites:
  * - The pump-driver-api AAR or JAR must be available. Build it from the main
- *   project: `./gradlew :pump-driver-api:assembleRelease`
+ *   project: `cd apps/mobile && ./gradlew :pump-driver-api:assembleRelease`
  * - Copy the AAR to this project's libs/ directory.
  *
  * Build steps:
