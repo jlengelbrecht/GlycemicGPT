@@ -58,7 +58,7 @@ GlycemicGPT's mobile app uses a three-layer plugin architecture:
 
 ### Gradle Module Setup
 
-Create a new Gradle module under `apps/mobile/`:
+Create a new Gradle module under `plugins/shipped/`:
 
 ```
 plugins/shipped/
