@@ -35,15 +35,15 @@ GlycemicGPT's mobile app uses a three-layer plugin architecture:
 |  declarative UI types, domain models               |
 +---------------------------------------------------+
 |                    Plugins                          |
-|  :tandem-pump-driver, future: :omnipod-driver, etc |
+|  plugins/shipped/tandem, future: omnipod, etc      |
 +---------------------------------------------------+
 ```
 
 **Platform** (`:app` module) -- Owns the `PluginRegistry`, core UI (GlucoseHero, TrendChart, TimeInRange), safety limit enforcement, and plugin lifecycle management. Plugins never import from this module.
 
-**Plugin API** (`:pump-driver-api` module) -- Defines all interfaces, capability contracts, event types, declarative UI descriptors, and domain models. Both the platform and plugins depend on this module.
+**Plugin API** (`:pump-driver-api` module, at `plugins/pump-driver-api/`) -- Defines all interfaces, capability contracts, event types, declarative UI descriptors, and domain models. Both the platform and plugins depend on this module.
 
-**Plugins** (e.g., `:tandem-pump-driver`) -- Implement one or more capability interfaces. Each plugin is a separate Gradle module that depends only on `:pump-driver-api`. Discovered at compile time via Hilt multibindings.
+**Plugins** (e.g., `:tandem-pump-driver` at `plugins/shipped/tandem/`) -- Implement one or more capability interfaces. Each shipped plugin is a separate Gradle module under `plugins/shipped/` that depends only on `:pump-driver-api`. Discovered at compile time via Hilt multibindings.
 
 ### Design Principles
 
@@ -61,7 +61,7 @@ GlycemicGPT's mobile app uses a three-layer plugin architecture:
 Create a new Gradle module under `apps/mobile/`:
 
 ```
-apps/mobile/
+plugins/shipped/
   your-plugin/
     build.gradle.kts
     src/main/kotlin/com/glycemicgpt/mobile/plugin/...
@@ -81,7 +81,7 @@ dependencies {
     implementation(project(":pump-driver-api"))
 
     // Use versions from the project's version catalog (libs.versions.toml)
-    // or match the versions used in :tandem-pump-driver/build.gradle.kts
+    // or match the versions used in plugins/shipped/tandem/build.gradle.kts
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.kotlinx.coroutines.core)
@@ -89,12 +89,13 @@ dependencies {
 }
 ```
 
-> **Note:** Always reference the project's version catalog (`gradle/libs.versions.toml`) for dependency versions. The `:tandem-pump-driver/build.gradle.kts` is the canonical example. Do not hardcode version strings.
+> **Note:** Always reference the project's version catalog (`gradle/libs.versions.toml`) for dependency versions. The `plugins/shipped/tandem/build.gradle.kts` is the canonical example. Do not hardcode version strings.
 
 Then add the module to `apps/mobile/settings.gradle.kts`:
 
 ```kotlin
 include(":your-plugin")
+project(":your-plugin").projectDir = file("../../plugins/shipped/your-plugin")
 ```
 
 And add it as a dependency in `:app`:
@@ -569,12 +570,12 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#device-control-plugins) for the full co
 
 ## Reference Implementation
 
-The Tandem plugin (`:tandem-pump-driver`) serves as the reference implementation.
+The Tandem plugin (`:tandem-pump-driver`) serves as the reference implementation for shipped plugins.
 
 ### Module Structure
 
 ```
-apps/mobile/tandem-pump-driver/
+plugins/shipped/tandem/
   src/main/kotlin/com/glycemicgpt/mobile/
     plugin/
       TandemDevicePlugin.kt      # Main plugin class

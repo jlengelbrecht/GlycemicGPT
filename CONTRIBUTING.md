@@ -495,9 +495,12 @@ GlycemicGPT/
 │   │   └── __tests__/  # Jest tests
 │   └── mobile/         # Android app (Kotlin)
 │       ├── app/                 # Platform app module
-│       ├── pump-driver-api/    # Plugin API interfaces & domain models
-│       ├── tandem-pump-driver/ # Tandem t:slim X2 plugin implementation
 │       └── wear/               # Wear OS module
+├── plugins/            # Plugin ecosystem
+│   ├── pump-driver-api/       # Plugin SDK (interfaces & domain models)
+│   ├── shipped/               # Built-in plugins (compiled into APK)
+│   │   └── tandem/            # Tandem t:slim X2 plugin implementation
+│   └── example/               # Example runtime plugins (NOT compiled into APK)
 ├── sidecar/            # AI provider proxy (TypeScript/Express)
 │   ├── src/            # Source code
 │   └── tests/          # Vitest tests
