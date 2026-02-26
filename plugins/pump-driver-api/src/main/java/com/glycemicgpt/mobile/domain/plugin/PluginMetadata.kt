@@ -1,7 +1,7 @@
 package com.glycemicgpt.mobile.domain.plugin
 
 /** Current plugin API version. Plugins with a different version are rejected. */
-const val PLUGIN_API_VERSION = 1
+const val PLUGIN_API_VERSION = 2
 
 /**
  * Immutable metadata describing a plugin. Available before the plugin is created.
