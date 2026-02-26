@@ -9,7 +9,7 @@ const val PLUGIN_API_VERSION = 1
 data class PluginMetadata(
     /** Reverse-domain unique ID, e.g. "com.glycemicgpt.tandem". */
     val id: String,
-    /** Human-readable name, e.g. "Tandem t:slim X2". */
+    /** Human-readable name, e.g. "Tandem Insulin Pump". */
     val name: String,
     /** Semantic version string, e.g. "1.0.0". */
     val version: String,
@@ -21,4 +21,9 @@ data class PluginMetadata(
     val author: String = "",
     /** Optional drawable resource name for the plugin icon. */
     val iconResName: String? = null,
+    /**
+     * Optional BLE/communication protocol family name, e.g. "Tandem".
+     * Combined with [version] for display: "Tandem v1.0.0".
+     */
+    val protocolName: String? = null,
 )
