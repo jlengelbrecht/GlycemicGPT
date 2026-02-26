@@ -30,4 +30,6 @@ rootProject.name = "GlycemicGPT"
 include(":app")
 include(":wear")
 include(":pump-driver-api")
+project(":pump-driver-api").projectDir = file("../../plugins/pump-driver-api")
 include(":tandem-pump-driver")
+project(":tandem-pump-driver").projectDir = file("../../plugins/shipped/tandem")
