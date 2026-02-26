@@ -28,7 +28,7 @@ class PluginFileManager(private val context: Context) {
     private fun isValidZip(file: File): Boolean {
         if (file.length() < 4) return false
         val header = ByteArray(4)
-        file.inputStream().use { it.read(header) }
+        java.io.DataInputStream(file.inputStream()).use { it.readFully(header) }
         return header.contentEquals(ZIP_MAGIC)
     }
 

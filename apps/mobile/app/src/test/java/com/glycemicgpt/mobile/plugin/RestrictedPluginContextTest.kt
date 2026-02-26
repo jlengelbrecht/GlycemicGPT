@@ -204,6 +204,24 @@ class RestrictedPluginContextTest {
     }
 
     @Test
+    fun `RestrictedContext does not throw for allowlisted system services`() {
+        // Verify that allowlisted services pass the allowlist check and don't
+        // throw SecurityException. The actual return value depends on the base
+        // context (which may return null in unit tests), but the key behavior
+        // is that no SecurityException is thrown.
+        val restricted = RestrictedContext(baseContext)
+        val result = try {
+            restricted.getSystemService(Context.BLUETOOTH_SERVICE)
+            true // no exception = passed allowlist check
+        } catch (_: SecurityException) {
+            false // would mean it was blocked
+        } catch (_: Exception) {
+            true // non-security exceptions are fine (mock delegation issues)
+        }
+        assertTrue("BLUETOOTH_SERVICE should pass allowlist check", result)
+    }
+
+    @Test
     fun `RestrictedContext blocks non-allowlisted system services`() {
         val restricted = RestrictedContext(baseContext)
         val thrown = try {
@@ -500,6 +518,22 @@ class RestrictedPluginContextTest {
         // Path-unsafe characters are stripped
         assertEquals("com.foo_bar", ScopedCredentialProvider.sanitizeId("com.foo/bar"))
         assertEquals("com.foo_bar", ScopedCredentialProvider.sanitizeId("com.foo\\bar"))
+    }
+
+    @Test
+    fun `sanitizeId handles various path-unsafe characters`() {
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo:bar"))
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo*bar"))
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo?bar"))
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo<bar"))
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo>bar"))
+        assertEquals("foo_bar", ScopedCredentialProvider.sanitizeId("foo|bar"))
+    }
+
+    @Test
+    fun `sanitizeId handles path traversal sequences`() {
+        assertEquals("foo_.._bar", ScopedCredentialProvider.sanitizeId("foo/../bar"))
+        assertEquals(".._.._.._.._etc_passwd", ScopedCredentialProvider.sanitizeId("../../../../etc/passwd"))
     }
 
     @Test

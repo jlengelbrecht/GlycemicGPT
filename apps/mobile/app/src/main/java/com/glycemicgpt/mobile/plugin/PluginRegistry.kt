@@ -118,11 +118,13 @@ class PluginRegistry @Inject constructor(
             }
             try {
                 validatePluginId(meta.id)
+                // Reserve the ID before init so a runtime plugin can't hijack
+                // a built-in ID if the built-in's init fails transiently.
+                compileTimePluginIds.add(meta.id)
                 val pluginContext = createPluginContext(meta.id)
                 val plugin = factory.create(pluginContext)
                 plugin.initialize(pluginContext)
                 plugins[meta.id] = plugin
-                compileTimePluginIds.add(meta.id)
                 Timber.d("Plugin created: %s (%s)", meta.name, meta.id)
             } catch (e: Exception) {
                 Timber.e(e, "Plugin %s failed to create/initialize -- skipping", meta.id)

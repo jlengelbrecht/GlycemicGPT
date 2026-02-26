@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.domain.plugin.ui.DetailScreenDescriptor
 import com.glycemicgpt.mobile.plugin.PluginRegistry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -72,6 +73,8 @@ class PluginDetailViewModel @Inject constructor(
                         _error.value = null
                         _detailScreen.value = descriptor
                     }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.e(e, "Plugin detail flow failed: pluginId=%s, cardId=%s", pluginId, cardId)
                 _error.value = "Plugin encountered an error loading detail content"
