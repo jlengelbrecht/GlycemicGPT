@@ -53,6 +53,7 @@ jest.mock("@/lib/api", () => ({
   getUnreadInsightsCount: (...args: unknown[]) =>
     mockGetUnreadInsightsCount(...args),
   getInsightDetail: (...args: unknown[]) => mockGetInsightDetail(...args),
+  getApiBaseUrl: () => "",
 }));
 
 // Mock fetch for insights list

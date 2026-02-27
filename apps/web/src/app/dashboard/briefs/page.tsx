@@ -34,9 +34,7 @@ export default function BriefsPage() {
   const fetchInsights = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${getApiBaseUrl()}/api/ai/insights?limit=50`, {
-        credentials: "include",
-      });
+      const response = await fetch(`${getApiBaseUrl()}/api/ai/insights?limit=50`);
 
       if (response.status === 401) {
         setInsights([]);
@@ -74,7 +72,6 @@ export default function BriefsPage() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ response, reason }),
       }
     );
