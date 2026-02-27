@@ -82,7 +82,7 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# Middleware (order matters: first added = last executed)
+# Middleware (order matters: last added = first executed on incoming requests)
 # Add CORS middleware (tightened per Story 28.4)
 app.add_middleware(
     CORSMiddleware,

@@ -29,10 +29,7 @@ _EXEMPT_PREFIXES = (
     "/api/auth/login",
     "/api/auth/register",
     "/api/auth/mobile/",
-    "/api/devices/",
-    "/api/pump/",
     "/api/disclaimer/",
-    "/api/caregivers/accept",
     "/health",
     "/api/glucose/stream",
     "/api/alerts/stream",
@@ -88,7 +85,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             csrf_cookie = request.cookies.get(_CSRF_COOKIE_NAME)
             csrf_header = request.headers.get(_CSRF_HEADER_NAME)
 
-            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+            if not csrf_cookie or not csrf_header or not secrets.compare_digest(csrf_cookie, csrf_header):
                 return Response(
                     content='{"detail":"CSRF token missing or invalid"}',
                     status_code=403,

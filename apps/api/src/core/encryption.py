@@ -98,7 +98,7 @@ def decrypt_credential(encrypted: str) -> str:
         decrypted = fernet.decrypt(encrypted.encode("utf-8"))
         return decrypted.decode("utf-8")
     except InvalidToken:
-        pass
+        pass  # PBKDF2 key didn't work; try legacy derivation
 
     # Fall back to legacy SHA-256 key
     try:

@@ -20,35 +20,33 @@ class AppSettingsStore @Inject constructor(
     @ApplicationContext context: Context,
 ) {
 
-    private val prefs: SharedPreferences
-
-    init {
+    private val prefs: SharedPreferences by lazy {
         val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
-        prefs = EncryptedSharedPreferences.create(
+        val encPrefs = EncryptedSharedPreferences.create(
             ENCRYPTED_PREFS_NAME,
             masterKey,
             context,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
-
         // One-time migration from plain SharedPreferences
-        migrateFromPlainPrefs(context)
+        migrateFromPlainPrefs(context, encPrefs)
+        encPrefs
     }
 
-    private fun migrateFromPlainPrefs(context: Context) {
+    private fun migrateFromPlainPrefs(context: Context, encPrefs: SharedPreferences) {
         val oldPrefs = context.getSharedPreferences(OLD_PREFS_NAME, Context.MODE_PRIVATE)
         if (oldPrefs.all.isEmpty()) return
 
         // Only migrate if encrypted prefs are empty (first run after upgrade)
-        if (prefs.all.isNotEmpty()) {
+        if (encPrefs.all.isNotEmpty()) {
             // Already migrated; delete old file if it still exists
             deleteOldPrefs(context)
             return
         }
 
         Timber.i("Migrating app settings from plain to encrypted SharedPreferences")
-        val editor = prefs.edit()
+        val editor = encPrefs.edit()
         editor.putBoolean(KEY_ONBOARDING_COMPLETE, oldPrefs.getBoolean(KEY_ONBOARDING_COMPLETE, false))
         editor.putBoolean(KEY_BACKEND_SYNC_ENABLED, oldPrefs.getBoolean(KEY_BACKEND_SYNC_ENABLED, true))
         editor.putInt(KEY_DATA_RETENTION_DAYS, oldPrefs.getInt(KEY_DATA_RETENTION_DAYS, DEFAULT_RETENTION_DAYS))

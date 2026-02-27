@@ -48,6 +48,8 @@ async def blacklist_token(jti: str, ttl_seconds: int) -> None:
         jti: The JWT ID (jti claim) to blacklist.
         ttl_seconds: Time-to-live in seconds (should match token's remaining lifetime).
     """
+    ttl_seconds = max(1, ttl_seconds)
+
     if settings.testing:
         _test_blacklist[jti] = time.monotonic() + ttl_seconds
         return
@@ -55,7 +57,7 @@ async def blacklist_token(jti: str, ttl_seconds: int) -> None:
     try:
         client = _get_redis()
         await client.setex(f"{_BLACKLIST_PREFIX}{jti}", ttl_seconds, "1")
-    except Exception:
+    except aioredis.RedisError:
         logger.error("Failed to blacklist token (Redis unavailable)", extra={"jti": jti})
 
 
@@ -83,7 +85,7 @@ async def is_token_blacklisted(jti: str) -> bool:
         client = _get_redis()
         result = await client.exists(f"{_BLACKLIST_PREFIX}{jti}")
         return bool(result)
-    except Exception:
+    except aioredis.RedisError:
         logger.error(
             "Redis unavailable for blacklist check; allowing token (fail-open)",
             extra={"jti": jti},
