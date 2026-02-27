@@ -10,8 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const SSE_ENDPOINT = `${API_BASE_URL}/api/v1/glucose/stream`;
+import { getApiBaseUrl } from "@/lib/api";
 
 /**
  * Backend trend direction values.
@@ -237,10 +236,9 @@ export function useGlucoseStream(
     setError(null);
 
     try {
-      // Create EventSource with credentials for cookie-based auth
-      const eventSource = new EventSource(SSE_ENDPOINT, {
-        withCredentials: true,
-      });
+      // Same-origin request via Next.js rewrite proxy (see next.config.ts)
+      const sseEndpoint = `${getApiBaseUrl()}/api/v1/glucose/stream`;
+      const eventSource = new EventSource(sseEndpoint);
 
       eventSource.onopen = () => {
         if (!isMountedRef.current) return;

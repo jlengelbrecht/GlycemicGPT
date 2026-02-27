@@ -15,9 +15,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FileText, Loader2, RefreshCw, Filter } from "lucide-react";
 import { AIInsightCard, type InsightData } from "@/components/dashboard";
-import { getInsightDetail, type InsightDetail } from "@/lib/api";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getInsightDetail, getApiBaseUrl, type InsightDetail } from "@/lib/api";
 
 interface InsightsResponse {
   insights: InsightData[];
@@ -36,7 +34,7 @@ export default function BriefsPage() {
   const fetchInsights = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/ai/insights?limit=50`, {
+      const response = await fetch(`${getApiBaseUrl()}/api/ai/insights?limit=50`, {
         credentials: "include",
       });
 
@@ -72,7 +70,7 @@ export default function BriefsPage() {
     reason?: string
   ) => {
     const res = await fetch(
-      `${API_BASE_URL}/api/ai/insights/${analysisType}/${analysisId}/respond`,
+      `${getApiBaseUrl()}/api/ai/insights/${analysisType}/${analysisId}/respond`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
