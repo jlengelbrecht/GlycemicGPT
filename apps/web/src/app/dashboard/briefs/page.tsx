@@ -15,7 +15,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FileText, Loader2, RefreshCw, Filter } from "lucide-react";
 import { AIInsightCard, type InsightData } from "@/components/dashboard";
-import { getInsightDetail, getApiBaseUrl, type InsightDetail } from "@/lib/api";
+import { apiFetch, getInsightDetail, getApiBaseUrl, type InsightDetail } from "@/lib/api";
 
 interface InsightsResponse {
   insights: InsightData[];
@@ -34,14 +34,7 @@ export default function BriefsPage() {
   const fetchInsights = useCallback(async () => {
     try {
       setError(null);
-      const response = await fetch(`${getApiBaseUrl()}/api/ai/insights?limit=50`);
-
-      if (response.status === 401) {
-        setInsights([]);
-        setTotal(0);
-        setIsLoading(false);
-        return;
-      }
+      const response = await apiFetch(`${getApiBaseUrl()}/api/ai/insights?limit=50`);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch insights: ${response.status}`);
@@ -67,7 +60,7 @@ export default function BriefsPage() {
     response: "acknowledged" | "dismissed",
     reason?: string
   ) => {
-    const res = await fetch(
+    const res = await apiFetch(
       `${getApiBaseUrl()}/api/ai/insights/${analysisType}/${analysisId}/respond`,
       {
         method: "POST",

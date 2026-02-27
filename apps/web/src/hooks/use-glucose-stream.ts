@@ -147,6 +147,10 @@ export interface GlucoseStreamState {
   disconnect: () => void;
 }
 
+/** Physiological glucose bounds (mg/dL) for input validation */
+const GLUCOSE_MIN = 20;
+const GLUCOSE_MAX = 500;
+
 /** Reconnection configuration */
 const RECONNECT_CONFIG = {
   /** Initial delay before first reconnect attempt (ms) */
@@ -161,8 +165,12 @@ const RECONNECT_CONFIG = {
 
 /**
  * Transform raw backend glucose data to frontend-friendly format.
+ * Returns null if the glucose value is outside physiological bounds (20-500 mg/dL).
  */
-function transformGlucoseData(raw: RawGlucoseData): GlucoseData {
+function transformGlucoseData(raw: RawGlucoseData): GlucoseData | null {
+  if (raw.value < GLUCOSE_MIN || raw.value > GLUCOSE_MAX) {
+    return null;
+  }
   return {
     ...raw,
     trend: mapBackendTrendToFrontend(raw.trend),
@@ -252,8 +260,10 @@ export function useGlucoseStream(
         try {
           const rawData: RawGlucoseData = JSON.parse(event.data);
           const glucoseData = transformGlucoseData(rawData);
-          setData(glucoseData);
-          setLastUpdated(new Date());
+          if (glucoseData) {
+            setData(glucoseData);
+            setLastUpdated(new Date());
+          }
           setConnectionState("connected");
         } catch {
           // Issue 8 fix: Remove console.log, silently handle parse errors
