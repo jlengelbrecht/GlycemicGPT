@@ -43,7 +43,7 @@ export function CGMIntegrationsSection({
         >
           <IntegrationCard
             title="Dexcom G7"
-            description="Connect your Dexcom Share account to sync CGM glucose data"
+            description="Connect your Dexcom account to sync continuous glucose monitor data"
             status={dexcom?.status ?? null}
             lastSyncAt={dexcom?.last_sync_at ?? null}
             lastError={dexcom?.last_error ?? null}
@@ -58,7 +58,7 @@ export function CGMIntegrationsSection({
                     htmlFor="dexcom-email"
                     className="block text-sm font-medium text-slate-300 mb-1"
                   >
-                    Dexcom Share Email
+                    Dexcom Email
                   </label>
                   <input
                     id="dexcom-email"
@@ -82,7 +82,7 @@ export function CGMIntegrationsSection({
                   value={dexcomPassword}
                   onChange={onDexcomPasswordChange}
                   disabled={isDexcomConnecting}
-                  label="Dexcom Share Password"
+                  label="Dexcom Password"
                 />
               </div>
             }
