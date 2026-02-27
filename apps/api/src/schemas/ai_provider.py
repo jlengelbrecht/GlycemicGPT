@@ -1,14 +1,18 @@
-"""Story 5.1 / 14.2: AI provider configuration schemas.
+"""Story 5.1 / 14.2 / 28.9: AI provider configuration schemas.
 
 Pydantic schemas for AI provider configuration endpoints.
 Supports 5 provider types with conditional validation.
+Story 28.9: SSRF prevention for base_url.
 """
 
+import ipaddress
+import socket
 from datetime import datetime
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.config import settings
 from src.models.ai_provider import AIProviderStatus, AIProviderType
 
 # Sentinel API key value for providers that don't require authentication
@@ -38,12 +42,46 @@ _DIRECT_API_TYPES = {
 }
 
 
-def _validate_base_url(url: str) -> str:
-    """Validate base_url to prevent misuse.
+# Cloud metadata endpoints -- always blocked regardless of settings
+_CLOUD_METADATA_HOSTS = {
+    "169.254.169.254",
+    "metadata.google.internal",
+    "metadata.internal",
+}
 
-    Ensures the URL uses http or https scheme and has a valid hostname.
-    Private IPs are allowed since this is a self-hosted homelab application
-    where users legitimately point at internal services.
+
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname resolves to any private/reserved IP address.
+
+    Checks ALL resolved addresses -- not just the first -- to prevent bypass
+    via multi-homed DNS records.
+    """
+    try:
+        addr = ipaddress.ip_address(hostname)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    except ValueError:
+        pass
+
+    # It's a hostname, resolve and check ALL addresses
+    try:
+        resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not resolved:
+            return False
+        for entry in resolved:
+            addr = ipaddress.ip_address(entry[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return True
+        return False
+    except (socket.gaierror, OSError):
+        return False
+
+
+def _validate_base_url(url: str) -> str:
+    """Validate base_url to prevent SSRF (Story 28.9).
+
+    Always blocks cloud metadata endpoints (169.254.169.254, etc.).
+    When ALLOW_PRIVATE_AI_URLS is False, also blocks RFC 1918,
+    loopback, and link-local addresses.
 
     Args:
         url: The base URL to validate.
@@ -52,7 +90,7 @@ def _validate_base_url(url: str) -> str:
         The validated URL.
 
     Raises:
-        ValueError: If the URL is invalid.
+        ValueError: If the URL is invalid or targets a blocked address.
     """
     parsed = urlparse(url)
 
@@ -61,6 +99,19 @@ def _validate_base_url(url: str) -> str:
 
     if not parsed.hostname:
         raise ValueError("base_url must contain a valid hostname")
+
+    hostname = parsed.hostname.lower()
+
+    # Always block cloud metadata endpoints
+    if hostname in _CLOUD_METADATA_HOSTS:
+        raise ValueError("base_url must not target cloud metadata services")
+
+    # Block private IPs when not allowed
+    if not settings.allow_private_ai_urls and _is_private_ip(hostname):
+        raise ValueError(
+            "base_url must not target private network addresses "
+            "(set ALLOW_PRIVATE_AI_URLS=true for homelab deployments)"
+        )
 
     return url
 

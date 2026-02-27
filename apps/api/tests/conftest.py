@@ -19,6 +19,8 @@ from src.config import settings
 
 # Override settings for testing
 settings.testing = True
+# Provide a sufficiently long secret_key for tests
+settings.secret_key = "test-secret-key-that-is-at-least-32-chars-long"
 
 from src.database import get_engine, get_session_maker, reset_database
 from src.main import app

@@ -16,10 +16,12 @@ from src.core.auth import CurrentUser
 from src.core.security import (
     create_access_token,
     create_refresh_token,
+    decode_access_token,
     decode_refresh_token,
     hash_password,
     verify_password,
 )
+from src.core.token_blacklist import blacklist_token, is_token_blacklisted
 from src.database import get_db
 from src.logging_config import get_logger
 from src.middleware.rate_limit import limiter
@@ -41,6 +43,38 @@ from src.schemas.auth import (
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+
+async def _blacklist_current_token(request: Request) -> None:
+    """Extract and blacklist the JWT from the current request.
+
+    Best-effort: silently does nothing if the token cannot be extracted.
+    """
+    token = None
+    cookie_val = request.cookies.get(settings.jwt_cookie_name)
+    if cookie_val:
+        token = cookie_val
+    else:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if not token:
+        return
+
+    payload = decode_access_token(token)
+    if not payload:
+        return
+
+    jti = payload.get("jti")
+    if not jti:
+        return
+
+    # TTL = remaining token lifetime (seconds)
+    exp = payload.get("exp", 0)
+    remaining = int(exp - datetime.now(UTC).timestamp())
+    if remaining > 0:
+        await blacklist_token(jti, remaining)
 
 
 @router.post(
@@ -74,7 +108,7 @@ async def register_user(
         HTTPException 409: If email already exists
         HTTPException 400: If password doesn't meet requirements
     """
-    # Check if email already exists
+    # Check if email already exists (Story 28.10: use generic message to prevent email enumeration)
     existing_user = await db.execute(
         select(User).where(User.email == request.email.lower())
     )
@@ -85,7 +119,7 @@ async def register_user(
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
+            detail="Registration failed. Please try again or contact support.",
         )
 
     # Create new user
@@ -125,7 +159,7 @@ async def register_user(
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
+            detail="Registration failed. Please try again or contact support.",
         )
 
 
@@ -337,6 +371,18 @@ async def mobile_refresh(
             detail="Invalid or expired refresh token",
         )
 
+    # Check if the refresh token has been blacklisted (Story 28.3)
+    old_jti = payload.get("jti")
+    if old_jti and await is_token_blacklisted(old_jti):
+        logger.warning(
+            "Blacklisted refresh token used",
+            client_ip=client_ip,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
     # Look up the user to ensure they still exist and are active
     user_id = uuid_mod.UUID(payload["sub"])
     result = await db.execute(select(User).where(User.id == user_id))
@@ -352,6 +398,13 @@ async def mobile_refresh(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
         )
+
+    # Blacklist the old refresh token (Story 28.3 -- token rotation)
+    if old_jti:
+        old_exp = payload.get("exp", 0)
+        remaining = int(old_exp - datetime.now(UTC).timestamp())
+        if remaining > 0:
+            await blacklist_token(old_jti, remaining)
 
     # Issue new token pair (rotation)
     new_access_token = create_access_token(
@@ -419,21 +472,26 @@ async def get_current_user_profile(
     },
 )
 async def logout(
+    request: Request,
     response: Response,
     current_user: CurrentUser,
 ) -> LogoutResponse:
     """Log out the current user and terminate their session.
 
-    Clears the session cookie, effectively invalidating the session.
+    Clears the session cookie and blacklists the token server-side.
     Requires a valid session to log out.
 
     Args:
+        request: The HTTP request (to extract the token for blacklisting)
         response: FastAPI response object for clearing cookies
         current_user: The authenticated user (validates session is active)
 
     Returns:
         LogoutResponse with success message
     """
+    # Blacklist the token server-side (Story 28.3)
+    await _blacklist_current_token(request)
+
     # Clear the session cookie by setting it to expire immediately
     response.delete_cookie(
         key=settings.jwt_cookie_name,
@@ -509,16 +567,19 @@ async def update_profile(
     },
 )
 async def change_password(
-    request: PasswordChangeRequest,
+    body: PasswordChangeRequest,
+    http_request: Request,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> LogoutResponse:
     """Change the current user's password.
 
     Verifies the current password before allowing the change.
+    Blacklists the current token so the user must re-authenticate.
 
     Args:
-        request: Current and new password
+        body: Current and new password
+        http_request: The HTTP request (for token blacklisting)
         current_user: The authenticated user
         db: Database session
 
@@ -528,14 +589,17 @@ async def change_password(
     Raises:
         HTTPException 400: If current password is incorrect
     """
-    if not verify_password(request.current_password, current_user.hashed_password):
+    if not verify_password(body.current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
 
-    current_user.hashed_password = hash_password(request.new_password)
+    current_user.hashed_password = hash_password(body.new_password)
     await db.commit()
+
+    # Blacklist the current token to force re-authentication (Story 28.3)
+    await _blacklist_current_token(http_request)
 
     logger.info(
         "User password changed",
