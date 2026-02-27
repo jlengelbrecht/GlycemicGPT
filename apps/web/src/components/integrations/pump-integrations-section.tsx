@@ -74,7 +74,7 @@ export function PumpIntegrationsSection({
                         onChange={(e) => onTandemEmailChange(e.target.value)}
                         disabled={isTandemConnecting}
                         placeholder="you@example.com"
-                        autoComplete="one-time-code"
+                        autoComplete="email"
                         className={clsx(
                           "w-full rounded-lg border px-3 py-2 text-sm",
                           "bg-slate-800 border-slate-700 text-slate-200",

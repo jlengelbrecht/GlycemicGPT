@@ -67,7 +67,7 @@ export function CGMIntegrationsSection({
                     onChange={(e) => onDexcomEmailChange(e.target.value)}
                     disabled={isDexcomConnecting}
                     placeholder="you@example.com"
-                    autoComplete="one-time-code"
+                    autoComplete="email"
                     className={clsx(
                       "w-full rounded-lg border px-3 py-2 text-sm",
                       "bg-slate-800 border-slate-700 text-slate-200",

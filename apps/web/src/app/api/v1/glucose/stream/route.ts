@@ -37,8 +37,14 @@ export async function GET(request: NextRequest) {
       },
       signal,
     });
-  } catch {
-    return new Response("Backend connection failed", { status: 502 });
+  } catch (err: unknown) {
+    const isAbort =
+      err instanceof DOMException && err.name === "AbortError";
+    const message = isAbort
+      ? "Client disconnected or connection timed out"
+      : "Backend connection failed";
+    // 499 (client closed) for aborts, 502 for everything else
+    return new Response(message, { status: isAbort ? 499 : 502 });
   }
 
   if (!backendResponse.ok) {

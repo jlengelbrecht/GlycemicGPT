@@ -79,7 +79,7 @@ export function PasswordInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
-          autoComplete="one-time-code"
+          autoComplete="current-password"
           className={clsx(
             "w-full rounded-lg border px-3 py-2 pr-10 text-sm",
             "bg-slate-800 border-slate-700 text-slate-200",
@@ -143,9 +143,14 @@ export function IntegrationCard({
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onConnect();
+    try {
+      await onConnect();
+    } catch {
+      // Connection errors are surfaced via the integration status/lastError
+      // fields from the backend -- no additional handling needed here.
+    }
   };
 
   return (
@@ -253,7 +258,7 @@ export function IntegrationCard({
               <button
                 type="button"
                 onClick={handleDisconnect}
-                disabled={isDisconnecting}
+                disabled={isDisconnecting || isOffline || isConnecting}
                 className={clsx(
                   "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-red-600 text-white hover:bg-red-500",
@@ -275,7 +280,7 @@ export function IntegrationCard({
               <button
                 type="button"
                 onClick={() => setConfirmDisconnect(false)}
-                disabled={isDisconnecting}
+                disabled={isDisconnecting || isOffline || isConnecting}
                 className={clsx(
                   "px-4 py-2 rounded-lg text-sm font-medium",
                   "bg-slate-800 text-slate-300 hover:bg-slate-700",
