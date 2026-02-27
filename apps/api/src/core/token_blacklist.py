@@ -63,6 +63,44 @@ async def blacklist_token(jti: str, ttl_seconds: int) -> None:
         )
 
 
+async def consume_token_once(jti: str, ttl_seconds: int) -> bool:
+    """Atomically consume a token (SET NX) -- returns True if this is the first use.
+
+    Uses Redis SET with NX (not-exists) to ensure only one caller can consume
+    a given JTI. This prevents refresh token replay races where two concurrent
+    requests with the same token both pass a non-atomic check-then-set.
+
+    Args:
+        jti: The JWT ID to consume.
+        ttl_seconds: TTL for the consumed marker (should match token's remaining lifetime).
+
+    Returns:
+        True if the token was successfully consumed (first caller wins).
+        False if the token was already consumed (replay attempt).
+    """
+    ttl_seconds = max(1, ttl_seconds)
+
+    if settings.testing:
+        if jti in _test_blacklist:
+            return False
+        _test_blacklist[jti] = time.monotonic() + ttl_seconds
+        return True
+
+    try:
+        client = _get_redis()
+        # SET NX: only succeeds if key does not exist (atomic)
+        result = await client.set(
+            f"{_BLACKLIST_PREFIX}{jti}", "1", ex=ttl_seconds, nx=True
+        )
+        return result is not None
+    except aioredis.RedisError:
+        logger.error(
+            "Redis unavailable for token consumption; allowing (fail-open)",
+            extra={"jti": jti},
+        )
+        return True  # Fail-open: allow the refresh
+
+
 async def is_token_blacklisted(jti: str) -> bool:
     """Check if a token's JTI is on the blacklist.
 

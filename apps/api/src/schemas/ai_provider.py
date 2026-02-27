@@ -132,8 +132,8 @@ def _validate_base_url(url: str) -> str:
             addr = ipaddress.ip_address(entry[4][0])
             if addr in _CLOUD_METADATA_IPS:
                 raise ValueError("base_url must not target cloud metadata services")
-    except (socket.gaierror, OSError):
-        pass  # DNS failure for metadata check is non-fatal; _is_private_ip handles it
+    except (socket.gaierror, OSError) as exc:
+        raise ValueError("base_url hostname could not be resolved") from exc
 
     # Block private IPs when not allowed
     if not settings.allow_private_ai_urls and _is_private_ip(hostname):
@@ -188,13 +188,13 @@ class AIProviderConfigRequest(BaseModel):
                 f"model_name is required for {self.provider_type.value} provider"
             )
 
+        # Strip base_url for direct API types before validation (it would be ignored anyway)
+        if self.provider_type in _DIRECT_API_TYPES:
+            self.base_url = None
+
         # Validate base_url format when provided
         if self.base_url:
             _validate_base_url(self.base_url)
-
-        # Strip base_url for direct API types (it would be ignored anyway)
-        if self.provider_type in _DIRECT_API_TYPES:
-            self.base_url = None
 
         return self
 

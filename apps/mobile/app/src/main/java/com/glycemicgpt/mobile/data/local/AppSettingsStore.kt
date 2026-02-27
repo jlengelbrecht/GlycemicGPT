@@ -43,7 +43,10 @@ class AppSettingsStore @Inject constructor(
         // Only migrate if encrypted prefs are empty (first run after upgrade)
         if (encPrefs.all.isNotEmpty()) {
             // Already migrated; delete old file if it still exists
-            deleteOldPrefs(context)
+            val deleted = deleteOldPrefs(context)
+            if (!deleted) {
+                Timber.w("Encrypted prefs exist but failed to delete legacy plain prefs; will retry")
+            }
             return
         }
 
@@ -58,15 +61,19 @@ class AppSettingsStore @Inject constructor(
         }
         val migrated = editor.commit()
         if (migrated) {
-            deleteOldPrefs(context)
-            Timber.i("Migration complete; old plain prefs deleted")
+            val deleted = deleteOldPrefs(context)
+            if (deleted) {
+                Timber.i("Migration complete; old plain prefs deleted")
+            } else {
+                Timber.w("Migration committed, but failed to delete old plain prefs; will retry")
+            }
         } else {
             Timber.w("Failed to commit migrated prefs; will retry on next launch")
         }
     }
 
-    private fun deleteOldPrefs(context: Context) {
-        context.deleteSharedPreferences(OLD_PREFS_NAME)
+    private fun deleteOldPrefs(context: Context): Boolean {
+        return context.deleteSharedPreferences(OLD_PREFS_NAME)
     }
 
     var onboardingComplete: Boolean

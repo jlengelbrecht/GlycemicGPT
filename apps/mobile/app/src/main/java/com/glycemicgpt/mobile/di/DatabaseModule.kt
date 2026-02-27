@@ -110,11 +110,19 @@ object DatabaseModule {
         val migrationPrefs = context.getSharedPreferences("db_migration", Context.MODE_PRIVATE)
         if (!migrationPrefs.getBoolean("sqlcipher_migrated", false)) {
             val oldDbFile = context.getDatabasePath("glycemicgpt.db")
+            var migrationReadyToMark = true
             if (oldDbFile.exists()) {
                 Timber.w("Deleting unencrypted database for migration to SQLCipher")
-                context.deleteDatabase("glycemicgpt.db")
+                val deleted = context.deleteDatabase("glycemicgpt.db")
+                if (!deleted) {
+                    migrationReadyToMark = false
+                    Timber.e("Failed to delete legacy unencrypted database; will retry next launch")
+                }
             }
-            migrationPrefs.edit().putBoolean("sqlcipher_migrated", true).commit()
+            if (migrationReadyToMark) {
+                val marked = migrationPrefs.edit().putBoolean("sqlcipher_migrated", true).commit()
+                check(marked) { "Failed to persist SQLCipher migration flag" }
+            }
         }
 
         return Room.databaseBuilder(context, AppDatabase::class.java, "glycemicgpt_encrypted.db")

@@ -11,10 +11,13 @@ Story 28.5: Uses PBKDF2 for key derivation (600K iterations) instead of raw SHA-
 
 import base64
 import hashlib
+import logging
 
 from cryptography.fernet import Fernet, InvalidToken
 
 from src.config import settings
+
+logger = logging.getLogger(__name__)
 
 # PBKDF2 parameters
 _PBKDF2_ITERATIONS = 600_000
@@ -104,6 +107,10 @@ def decrypt_credential(encrypted: str) -> str:
     try:
         fernet = Fernet(_derive_key_legacy(raw_key))
         decrypted = fernet.decrypt(encrypted.encode("utf-8"))
+        logger.warning(
+            "Decrypted credential using legacy SHA-256 key derivation; "
+            "re-encryption with PBKDF2 recommended"
+        )
         return decrypted.decode("utf-8")
     except InvalidToken as e:
         raise ValueError(

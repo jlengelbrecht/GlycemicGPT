@@ -1,6 +1,6 @@
 """Story 28.4: Double-submit cookie CSRF protection middleware.
 
-Sets a `csrf_token` cookie on every response. State-changing requests
+Sets a `csrf_token` cookie when absent. State-changing requests
 (POST, PATCH, PUT, DELETE) from web clients (cookie-authenticated)
 must include the cookie value as an `X-CSRF-Token` header.
 
@@ -55,9 +55,9 @@ def _is_bearer_auth(request: Request) -> bool:
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Double-submit cookie CSRF protection.
 
-    On every response, sets a non-httpOnly `csrf_token` cookie that
-    JavaScript can read. On state-changing requests from cookie-authenticated
-    clients, validates that `X-CSRF-Token` header matches the cookie.
+    Sets a non-httpOnly `csrf_token` cookie when absent so JavaScript can
+    read it. On state-changing requests from cookie-authenticated clients,
+    validates that `X-CSRF-Token` header matches the cookie.
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:

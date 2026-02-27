@@ -21,7 +21,10 @@ from src.core.security import (
     hash_password,
     verify_password,
 )
-from src.core.token_blacklist import blacklist_token, is_token_blacklisted
+from src.core.token_blacklist import (
+    blacklist_token,
+    consume_token_once,
+)
 from src.database import get_db
 from src.logging_config import get_logger
 from src.middleware.rate_limit import limiter
@@ -371,17 +374,21 @@ async def mobile_refresh(
             detail="Invalid or expired refresh token",
         )
 
-    # Check if the refresh token has been blacklisted (Story 28.3)
+    # Atomically consume the refresh token (Story 28.3 -- prevents replay races)
     old_jti = payload.get("jti")
-    if old_jti and await is_token_blacklisted(old_jti):
-        logger.warning(
-            "Blacklisted refresh token used",
-            client_ip=client_ip,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token",
-        )
+    if old_jti:
+        old_exp = payload.get("exp", 0)
+        remaining = int(old_exp - datetime.now(UTC).timestamp())
+        consumed = await consume_token_once(old_jti, max(1, remaining))
+        if not consumed:
+            logger.warning(
+                "Replayed refresh token used",
+                client_ip=client_ip,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
 
     # Look up the user to ensure they still exist and are active
     user_id = uuid_mod.UUID(payload["sub"])
@@ -399,12 +406,7 @@ async def mobile_refresh(
             detail="Invalid or expired refresh token",
         )
 
-    # Blacklist the old refresh token (Story 28.3 -- token rotation)
-    if old_jti:
-        old_exp = payload.get("exp", 0)
-        remaining = int(old_exp - datetime.now(UTC).timestamp())
-        if remaining > 0:
-            await blacklist_token(old_jti, remaining)
+    # Note: old refresh token already consumed atomically above via consume_token_once
 
     # Issue new token pair (rotation)
     new_access_token = create_access_token(
