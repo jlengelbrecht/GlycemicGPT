@@ -26,7 +26,9 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = _INSECURE_DEFAULT_SECRET
-    encryption_key: str = ""  # Separate key for credential encryption; falls back to secret_key
+    encryption_key: str = (
+        ""  # Separate key for credential encryption; falls back to secret_key
+    )
     jwt_algorithm: str = "HS256"
     jwt_cookie_name: str = "glycemicgpt_session"
 
@@ -112,8 +114,9 @@ def validate_secret_key() -> None:
     if settings.testing:
         return
 
-    if settings.secret_key == _INSECURE_DEFAULT_SECRET or settings.secret_key.startswith(
-        "change-me"
+    if (
+        settings.secret_key == _INSECURE_DEFAULT_SECRET
+        or settings.secret_key.startswith("change-me")
     ):
         print(
             "FATAL: SECRET_KEY is set to an insecure default. "

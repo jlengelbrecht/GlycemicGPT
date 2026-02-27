@@ -58,7 +58,9 @@ async def blacklist_token(jti: str, ttl_seconds: int) -> None:
         client = _get_redis()
         await client.setex(f"{_BLACKLIST_PREFIX}{jti}", ttl_seconds, "1")
     except aioredis.RedisError:
-        logger.error("Failed to blacklist token (Redis unavailable)", extra={"jti": jti})
+        logger.error(
+            "Failed to blacklist token (Redis unavailable)", extra={"jti": jti}
+        )
 
 
 async def is_token_blacklisted(jti: str) -> bool:

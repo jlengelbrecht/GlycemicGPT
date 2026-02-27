@@ -58,18 +58,30 @@ def _is_private_ip(hostname: str) -> bool:
     """
     try:
         addr = ipaddress.ip_address(hostname)
-        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+        )
     except ValueError:
         pass
 
     # It's a hostname, resolve and check ALL addresses
     try:
-        resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        resolved = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
         if not resolved:
             return True  # Fail closed: unresolvable hosts blocked
         for entry in resolved:
             addr = ipaddress.ip_address(entry[4][0])
-            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+            ):
                 return True
         return False
     except (socket.gaierror, OSError):
