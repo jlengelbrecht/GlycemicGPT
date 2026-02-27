@@ -49,6 +49,11 @@ _CLOUD_METADATA_HOSTS = {
     "metadata.internal",
 }
 
+# Cloud metadata IPs -- block hostnames that resolve to these
+_CLOUD_METADATA_IPS = {
+    ipaddress.ip_address("169.254.169.254"),
+}
+
 
 def _is_private_ip(hostname: str) -> bool:
     """Check if a hostname resolves to any private/reserved IP address.
@@ -114,9 +119,21 @@ def _validate_base_url(url: str) -> str:
 
     hostname = parsed.hostname.lower()
 
-    # Always block cloud metadata endpoints
+    # Always block cloud metadata endpoints (hostname check)
     if hostname in _CLOUD_METADATA_HOSTS:
         raise ValueError("base_url must not target cloud metadata services")
+
+    # Always resolve DNS and block cloud metadata IPs (prevents bypass via aliases)
+    try:
+        resolved = socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
+        for entry in resolved:
+            addr = ipaddress.ip_address(entry[4][0])
+            if addr in _CLOUD_METADATA_IPS:
+                raise ValueError("base_url must not target cloud metadata services")
+    except (socket.gaierror, OSError):
+        pass  # DNS failure for metadata check is non-fatal; _is_private_ip handles it
 
     # Block private IPs when not allowed
     if not settings.allow_private_ai_urls and _is_private_ip(hostname):

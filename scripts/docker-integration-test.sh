@@ -76,6 +76,7 @@ api_post() {
     -d "$2" "$API_URL$1" 2>/dev/null || echo "000"
 }
 
+# shellcheck disable=SC2329  # kept for completeness alongside api_post/api_patch
 api_put() {
   local csrf; csrf=$(get_csrf_token)
   curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 \

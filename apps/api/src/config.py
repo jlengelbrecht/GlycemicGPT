@@ -96,7 +96,9 @@ class Settings(BaseSettings):
     ai_sidecar_api_key: str = ""  # SIDECAR_API_KEY for inter-service auth
 
     # SSRF Prevention (Story 28.9)
-    allow_private_ai_urls: bool = True  # Default True for homelab deployments
+    # Default True: this is a homelab-first app where AI providers (Ollama, etc.)
+    # run on the same LAN. Cloud deployments should set ALLOW_PRIVATE_AI_URLS=false.
+    allow_private_ai_urls: bool = True
 
     # Testing
     testing: bool = False  # Set to True during tests to disable connection pooling

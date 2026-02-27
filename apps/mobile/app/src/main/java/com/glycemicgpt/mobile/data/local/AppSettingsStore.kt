@@ -3,7 +3,7 @@ package com.glycemicgpt.mobile.data.local
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import javax.inject.Inject
@@ -21,11 +21,13 @@ class AppSettingsStore @Inject constructor(
 ) {
 
     private val prefs: SharedPreferences by lazy {
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
         val encPrefs = EncryptedSharedPreferences.create(
+            context,
             ENCRYPTED_PREFS_NAME,
             masterKey,
-            context,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
@@ -54,17 +56,17 @@ class AppSettingsStore @Inject constructor(
         if (token != null) {
             editor.putString(KEY_DEVICE_TOKEN, token)
         }
-        editor.apply()
-
-        deleteOldPrefs(context)
-        Timber.i("Migration complete; old plain prefs deleted")
+        val migrated = editor.commit()
+        if (migrated) {
+            deleteOldPrefs(context)
+            Timber.i("Migration complete; old plain prefs deleted")
+        } else {
+            Timber.w("Failed to commit migrated prefs; will retry on next launch")
+        }
     }
 
     private fun deleteOldPrefs(context: Context) {
-        val file = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$OLD_PREFS_NAME.xml")
-        if (file.exists()) {
-            file.delete()
-        }
+        context.deleteSharedPreferences(OLD_PREFS_NAME)
     }
 
     var onboardingComplete: Boolean

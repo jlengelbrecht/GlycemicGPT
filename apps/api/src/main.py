@@ -83,7 +83,14 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Middleware (order matters: last added = first executed on incoming requests)
-# Add CORS middleware (tightened per Story 28.4)
+# Add correlation ID middleware for request tracing (Story 1.5)
+app.add_middleware(CorrelationIdMiddleware)
+
+# Add CSRF protection middleware (Story 28.4)
+app.add_middleware(CSRFMiddleware)
+
+# Add CORS middleware as outermost (added last) so all responses carry CORS
+# headers -- including CSRF 403 rejections that short-circuit inner middleware.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -97,12 +104,6 @@ app.add_middleware(
         "X-Correlation-ID",
     ],
 )
-
-# Add CSRF protection middleware (Story 28.4)
-app.add_middleware(CSRFMiddleware)
-
-# Add correlation ID middleware for request tracing (Story 1.5)
-app.add_middleware(CorrelationIdMiddleware)
 
 # Include routers
 app.include_router(health.router)

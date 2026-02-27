@@ -97,11 +97,15 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         return response
 
     def _set_csrf_cookie(self, request: Request, response: Response) -> None:
-        """Set or refresh the CSRF cookie on the response.
+        """Set the CSRF cookie on the response if not already present.
 
-        Sets the cookie on every response (not just when absent) to ensure
-        periodic rotation. Aligned with session cookie max_age.
+        Only sets a new token when the client has no existing CSRF cookie,
+        avoiding race conditions where concurrent requests invalidate each
+        other's tokens.
         """
+        if request.cookies.get(_CSRF_COOKIE_NAME):
+            return
+
         token = secrets.token_urlsafe(32)
         response.set_cookie(
             key=_CSRF_COOKIE_NAME,

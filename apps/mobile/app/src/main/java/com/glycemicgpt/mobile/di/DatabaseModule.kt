@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.glycemicgpt.mobile.data.local.AppDatabase
 import com.glycemicgpt.mobile.data.local.dao.AlertDao
@@ -67,11 +67,13 @@ object DatabaseModule {
      * rest and the key is hardware-backed where possible.
      */
     private fun getOrCreatePassphrase(context: Context): ByteArray {
-        val masterKey = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
         val prefs = EncryptedSharedPreferences.create(
+            context,
             PASSPHRASE_PREFS,
             masterKey,
-            context,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
@@ -88,7 +90,8 @@ object DatabaseModule {
         // Encode as hex for safe storage and SQLCipher compatibility
         val passphrase = bytes.joinToString("") { "%02x".format(it) }
 
-        prefs.edit().putString(PASSPHRASE_KEY, passphrase).commit()
+        val saved = prefs.edit().putString(PASSPHRASE_KEY, passphrase).commit()
+        check(saved) { "Failed to persist SQLCipher passphrase" }
         Timber.i("Generated new database encryption passphrase")
 
         return passphrase.toByteArray(Charsets.UTF_8)
