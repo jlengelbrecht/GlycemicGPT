@@ -1,0 +1,10 @@
+# OSV-Scanner configuration
+# https://google.github.io/osv-scanner/configuration/
+
+# Suppress known false positives or accepted risks here.
+# Each entry requires a reason explaining why it's safe to ignore.
+#
+# Example:
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-yyyy-zzzz"
+# reason = "Not exploitable in our usage -- only affects feature X which we don't use"
