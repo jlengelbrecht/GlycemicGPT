@@ -1410,6 +1410,7 @@ async def update_tandem_upload_settings(
         200: {"description": "Upload triggered"},
         401: {"model": ErrorResponse, "description": "Not authenticated"},
         404: {"model": ErrorResponse, "description": "Tandem not configured"},
+        500: {"model": ErrorResponse, "description": "Upload failed"},
     },
 )
 async def trigger_tandem_upload(
@@ -1449,8 +1450,7 @@ async def trigger_tandem_upload(
             user_id=str(current_user.id),
             error=str(e),
         )
-        return TandemUploadTriggerResponse(
-            message=f"Upload failed: {e!s}",
-            events_uploaded=0,
-            status="error",
-        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Upload failed. Please try again later.",
+        ) from e

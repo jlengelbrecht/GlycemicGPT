@@ -94,11 +94,9 @@ export default function CaregiversPage() {
     try {
       const data = await listLinkedCaregivers();
       setLinkedCaregivers(data.caregivers);
-    } catch (err) {
-      // Non-auth errors are surfaced; 401/fetch failures are expected when API is down
-      if (err instanceof Error && !err.message.includes("401")) {
-        console.error("Failed to load linked caregivers:", err.message);
-      }
+    } catch {
+      // Non-critical: linked caregivers section is supplementary.
+      // 401/fetch failures are expected when API is down.
     }
   }, []);
 

@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,12 +51,16 @@ class AuthManager @Inject constructor(
 
     private var refreshJob: Job? = null
     private val refreshMutex = Mutex()
+    /** Retained scope for scheduling proactive refreshes from non-coroutine contexts. */
+    @Volatile
+    private var retainedScope: CoroutineScope? = null
 
     /**
      * Validates stored tokens on startup and schedules proactive refresh.
      * Call this from Application.onCreate() or the first ViewModel that loads.
      */
     fun validateOnStartup(scope: CoroutineScope) {
+        retainedScope = scope
         val refreshToken = authTokenStore.getRefreshToken()
         if (refreshToken == null) {
             _authState.value = AuthState.Unauthenticated
@@ -257,14 +262,19 @@ class AuthManager @Inject constructor(
 
     /** Called after a successful login to set the authenticated state. */
     fun onLoginSuccess(scope: CoroutineScope) {
+        // Prefer the app-lifetime scope set by validateOnStartup() over the
+        // caller-provided scope (which is often a ViewModel scope that dies
+        // when the UI is torn down, breaking proactive refresh scheduling).
+        val effectiveScope = retainedScope ?: scope.also { retainedScope = it }
         _authState.value = AuthState.Authenticated
-        scheduleProactiveRefresh(scope)
+        scheduleProactiveRefresh(effectiveScope)
     }
 
     /** Called on logout to reset state. */
     fun onLogout() {
         refreshJob?.cancel()
         refreshJob = null
+        retainedScope = null
         _authState.value = AuthState.Unauthenticated
     }
 
@@ -275,8 +285,18 @@ class AuthManager @Inject constructor(
     }
 
     /** Called by TokenRefreshInterceptor after a successful interceptor-driven refresh. */
-    fun onInterceptorRefreshSuccess(scope: CoroutineScope) {
+    fun onInterceptorRefreshSuccess() {
+        // Guard against a late interceptor callback racing with logout
+        if (_authState.value is AuthState.Unauthenticated) {
+            Timber.w("Ignoring interceptor refresh success after logout")
+            return
+        }
         _authState.value = AuthState.Authenticated
-        scheduleProactiveRefresh(scope)
+        val scope = retainedScope
+        if (scope?.isActive == true) {
+            scheduleProactiveRefresh(scope)
+        } else {
+            Timber.w("Skipping proactive refresh scheduling: retained scope unavailable or inactive")
+        }
     }
 }
