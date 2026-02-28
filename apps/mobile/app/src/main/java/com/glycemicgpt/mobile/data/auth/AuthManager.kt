@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -284,7 +285,7 @@ class AuthManager @Inject constructor(
     fun onInterceptorRefreshSuccess() {
         _authState.value = AuthState.Authenticated
         val scope = retainedScope
-        if (scope?.coroutineContext?.get(Job)?.isActive == true) {
+        if (scope?.isActive == true) {
             scheduleProactiveRefresh(scope)
         } else {
             Timber.w("Skipping proactive refresh scheduling: retained scope unavailable or inactive")
