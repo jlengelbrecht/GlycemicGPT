@@ -372,7 +372,7 @@ class PumpPollingOrchestrator @Inject constructor(
                         )
                     }
                     rawHistoryLogDao.insertAll(entities)
-                    lastSequenceNumber = records.maxOf { it.sequenceNumber }
+                    lastSequenceNumber = records.maxOfOrNull { it.sequenceNumber } ?: lastSequenceNumber
                     backendSyncManager?.triggerSync()
                     Timber.d("Saved %d raw history log records", records.size)
 
