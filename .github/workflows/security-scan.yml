@@ -1,0 +1,151 @@
+name: Security Scan (DAST)
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'sidecar/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'scripts/security/**'
+      - '.github/workflows/security-scan.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/**'
+      - 'apps/web/**'
+      - 'sidecar/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.test.yml'
+      - 'scripts/security/**'
+      - '.github/workflows/security-scan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan:
+    name: DAST & Auth Penetration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install -r scripts/security/requirements.txt
+
+      - name: Install nuclei
+        run: |
+          go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.3.7
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Build & start Docker test stack
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+          DOCKER_BUILDKIT: 1
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml up --build -d
+
+      - name: Wait for services to be healthy
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: |
+          API_HEALTHY=false
+          echo "Waiting for API health..."
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8001/health > /dev/null 2>&1; then
+              echo "API healthy after ${i}s"
+              API_HEALTHY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$API_HEALTHY" != "true" ]; then
+            echo "FATAL: API not healthy after 90s"
+            docker compose -f docker-compose.yml -f docker-compose.test.yml logs api --tail=50
+            exit 1
+          fi
+
+          WEB_HEALTHY=false
+          echo "Waiting for Web health..."
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3001 > /dev/null 2>&1; then
+              echo "Web healthy after ${i}s"
+              WEB_HEALTHY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$WEB_HEALTHY" != "true" ]; then
+            echo "FATAL: Web not healthy after 90s"
+            docker compose -f docker-compose.yml -f docker-compose.test.yml logs web --tail=50
+            exit 1
+          fi
+
+      - name: Run auth flow tests
+        env:
+          API_URL: http://localhost:8001
+          WEB_URL: http://localhost:3001
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: |
+          # Read the test SECRET_KEY from the running API container
+          TEST_SECRET_KEY=$(docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T api printenv SECRET_KEY) || {
+            echo "FATAL: Could not read SECRET_KEY from API container"
+            docker compose -f docker-compose.yml -f docker-compose.test.yml ps
+            exit 1
+          }
+          export TEST_SECRET_KEY
+          python scripts/security/test-auth-flows.py
+
+      - name: Run API fuzzer
+        env:
+          API_URL: http://localhost:8001
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: python scripts/security/fuzz-api.py
+
+      - name: Run DAST scanner
+        env:
+          API_URL: http://localhost:8001
+          WEB_URL: http://localhost:3001
+        run: ./scripts/security/run-dast.sh
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: scripts/security/results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Show container logs on failure
+        if: failure()
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: |
+          echo "=== API Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs api --tail=100
+          echo ""
+          echo "=== Web Logs ==="
+          docker compose -f docker-compose.yml -f docker-compose.test.yml logs web --tail=50
+
+      - name: Tear down Docker stack
+        if: always()
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
