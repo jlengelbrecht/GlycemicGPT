@@ -262,9 +262,12 @@ class AuthManager @Inject constructor(
 
     /** Called after a successful login to set the authenticated state. */
     fun onLoginSuccess(scope: CoroutineScope) {
-        retainedScope = scope
+        // Prefer the app-lifetime scope set by validateOnStartup() over the
+        // caller-provided scope (which is often a ViewModel scope that dies
+        // when the UI is torn down, breaking proactive refresh scheduling).
+        val effectiveScope = retainedScope ?: scope.also { retainedScope = it }
         _authState.value = AuthState.Authenticated
-        scheduleProactiveRefresh(scope)
+        scheduleProactiveRefresh(effectiveScope)
     }
 
     /** Called on logout to reset state. */
@@ -283,6 +286,11 @@ class AuthManager @Inject constructor(
 
     /** Called by TokenRefreshInterceptor after a successful interceptor-driven refresh. */
     fun onInterceptorRefreshSuccess() {
+        // Guard against a late interceptor callback racing with logout
+        if (_authState.value is AuthState.Unauthenticated) {
+            Timber.w("Ignoring interceptor refresh success after logout")
+            return
+        }
         _authState.value = AuthState.Authenticated
         val scope = retainedScope
         if (scope?.isActive == true) {
