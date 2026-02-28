@@ -167,10 +167,16 @@ jobs:
     steps:
       - name: Evaluate result
         env:
+          DETECT_RESULT: ${{ needs.detect-changes.result }}
           SHOULD_SCAN: ${{ needs.detect-changes.outputs.should_scan }}
           SCAN_RESULT: ${{ needs.security-scan.result }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          if [ "$DETECT_RESULT" != "success" ]; then
+            echo "detect-changes failed (result: $DETECT_RESULT)"
+            exit 1
+          fi
+
           # workflow_dispatch always requires scan success
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             if [ "$SCAN_RESULT" = "success" ]; then

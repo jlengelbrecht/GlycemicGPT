@@ -37,7 +37,7 @@ Checks 1-7 are the original required checks. Checks 8-10 were added as part of E
 
 Each gate workflow (`security-scan.yml`, `android.yml`, `dependency-scan.yml`) has three jobs:
 
-```
+```text
 detect-changes  -->  actual-work (if relevant)  -->  gate (always)
 ```
 
