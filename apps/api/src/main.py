@@ -18,6 +18,7 @@ from src.routers import (
     alert_api,
     alert_stream,
     alerts,
+    api_keys,
     auth,
     briefs,
     caregivers,
@@ -102,6 +103,7 @@ app.add_middleware(
         "Accept",
         "X-CSRF-Token",
         "X-Correlation-ID",
+        "X-API-Key",
     ],
 )
 
@@ -125,6 +127,7 @@ app.include_router(escalation.router)
 app.include_router(telegram.router)
 app.include_router(caregivers.router)
 app.include_router(device_registration.router)
+app.include_router(api_keys.router)
 app.include_router(alert_stream.router)
 app.include_router(alert_api.router)
 app.include_router(treatment.router)
