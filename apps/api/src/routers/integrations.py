@@ -1410,6 +1410,7 @@ async def update_tandem_upload_settings(
         200: {"description": "Upload triggered"},
         401: {"model": ErrorResponse, "description": "Not authenticated"},
         404: {"model": ErrorResponse, "description": "Tandem not configured"},
+        500: {"model": ErrorResponse, "description": "Upload failed"},
     },
 )
 async def trigger_tandem_upload(

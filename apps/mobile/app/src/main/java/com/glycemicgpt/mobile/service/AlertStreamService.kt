@@ -91,7 +91,7 @@ class AlertStreamService : Service() {
         try {
             sseClient.dispatcher.executorService.awaitTermination(3, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
-            // Service is being destroyed; best-effort cleanup
+            Thread.currentThread().interrupt()
         }
         sseClient.connectionPool.evictAll()
         serviceScope.cancel()

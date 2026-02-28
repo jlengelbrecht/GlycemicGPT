@@ -51,6 +51,7 @@ class AuthManager @Inject constructor(
     private var refreshJob: Job? = null
     private val refreshMutex = Mutex()
     /** Retained scope for scheduling proactive refreshes from non-coroutine contexts. */
+    @Volatile
     private var retainedScope: CoroutineScope? = null
 
     /**
@@ -282,6 +283,11 @@ class AuthManager @Inject constructor(
     /** Called by TokenRefreshInterceptor after a successful interceptor-driven refresh. */
     fun onInterceptorRefreshSuccess() {
         _authState.value = AuthState.Authenticated
-        retainedScope?.let { scheduleProactiveRefresh(it) }
+        val scope = retainedScope
+        if (scope?.coroutineContext?.get(Job)?.isActive == true) {
+            scheduleProactiveRefresh(scope)
+        } else {
+            Timber.w("Skipping proactive refresh scheduling: retained scope unavailable or inactive")
+        }
     }
 }
