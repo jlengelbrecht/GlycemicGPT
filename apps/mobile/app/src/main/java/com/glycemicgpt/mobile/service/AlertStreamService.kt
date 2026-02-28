@@ -65,7 +65,7 @@ class AlertStreamService : Service() {
     private val sseClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS) // No timeout for SSE
+            .readTimeout(2, TimeUnit.MINUTES) // Detect dead SSE connections; heartbeats arrive more frequently
             .build()
     }
 
@@ -85,10 +85,16 @@ class AlertStreamService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        // Order matters: cancel SSE first (stops incoming events), then executor, then scope
         eventSource?.cancel()
-        serviceScope.cancel()
-        sseClient.dispatcher.executorService.shutdown()
+        sseClient.dispatcher.executorService.shutdownNow()
+        try {
+            sseClient.dispatcher.executorService.awaitTermination(3, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
         sseClient.connectionPool.evictAll()
+        serviceScope.cancel()
         Timber.d("AlertStreamService destroyed")
         super.onDestroy()
     }
