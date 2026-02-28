@@ -54,16 +54,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install OSV-Scanner
+        run: |
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.3
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
       - name: Run OSV-Scanner
-        uses: google/osv-scanner-action/scan@v2
-        with:
-          scan-args: |-
-            --lockfile=apps/api/uv.lock
-            --lockfile=apps/web/package-lock.json
-            --lockfile=sidecar/package-lock.json
-            --lockfile=scripts/security/requirements.txt
-            --recursive
-            --config=osv-scanner.toml
+        run: |
+          osv-scanner scan \
+            --lockfile=apps/api/uv.lock \
+            --lockfile=apps/web/package-lock.json \
+            --lockfile=sidecar/package-lock.json \
+            --lockfile=scripts/security/requirements.txt \
+            --recursive \
+            --config=osv-scanner.toml \
             .
 
   dep-scan-gate:

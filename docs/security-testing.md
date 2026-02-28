@@ -192,11 +192,12 @@ COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f do
 ### Dependency scan only
 
 ```bash
-# Install OSV-Scanner
-go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+# Install OSV-Scanner (same version as CI)
+go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.3
 
 # Scan all lockfiles
-osv-scanner --lockfile=apps/api/uv.lock \
+osv-scanner scan \
+  --lockfile=apps/api/uv.lock \
   --lockfile=apps/web/package-lock.json \
   --lockfile=sidecar/package-lock.json \
   --lockfile=scripts/security/requirements.txt \
