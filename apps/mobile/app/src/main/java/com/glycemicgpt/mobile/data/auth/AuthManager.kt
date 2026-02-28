@@ -50,12 +50,15 @@ class AuthManager @Inject constructor(
 
     private var refreshJob: Job? = null
     private val refreshMutex = Mutex()
+    /** Retained scope for scheduling proactive refreshes from non-coroutine contexts. */
+    private var retainedScope: CoroutineScope? = null
 
     /**
      * Validates stored tokens on startup and schedules proactive refresh.
      * Call this from Application.onCreate() or the first ViewModel that loads.
      */
     fun validateOnStartup(scope: CoroutineScope) {
+        retainedScope = scope
         val refreshToken = authTokenStore.getRefreshToken()
         if (refreshToken == null) {
             _authState.value = AuthState.Unauthenticated
@@ -257,6 +260,7 @@ class AuthManager @Inject constructor(
 
     /** Called after a successful login to set the authenticated state. */
     fun onLoginSuccess(scope: CoroutineScope) {
+        retainedScope = scope
         _authState.value = AuthState.Authenticated
         scheduleProactiveRefresh(scope)
     }
@@ -265,6 +269,7 @@ class AuthManager @Inject constructor(
     fun onLogout() {
         refreshJob?.cancel()
         refreshJob = null
+        retainedScope = null
         _authState.value = AuthState.Unauthenticated
     }
 
@@ -275,8 +280,8 @@ class AuthManager @Inject constructor(
     }
 
     /** Called by TokenRefreshInterceptor after a successful interceptor-driven refresh. */
-    fun onInterceptorRefreshSuccess(scope: CoroutineScope) {
+    fun onInterceptorRefreshSuccess() {
         _authState.value = AuthState.Authenticated
-        scheduleProactiveRefresh(scope)
+        retainedScope?.let { scheduleProactiveRefresh(it) }
     }
 }

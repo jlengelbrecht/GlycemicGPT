@@ -341,7 +341,10 @@ class AuthManagerTest {
         val manager = createManager()
         every { authTokenStore.getTokenExpiresAtMs() } returns System.currentTimeMillis() + 3_600_000
 
-        manager.onInterceptorRefreshSuccess(testScope)
+        // Simulate a prior login so retainedScope is set
+        manager.onLoginSuccess(testScope)
+
+        manager.onInterceptorRefreshSuccess()
 
         assertEquals(AuthState.Authenticated, manager.authState.value)
     }
