@@ -175,7 +175,7 @@ curl -sf http://localhost:8001/health
 curl -sf http://localhost:3001
 
 # Run auth tests
-TEST_SECRET_KEY=$(docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T api printenv SECRET_KEY) \
+TEST_SECRET_KEY=$(COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T api printenv SECRET_KEY) \
   API_URL=http://localhost:8001 WEB_URL=http://localhost:3001 \
   python scripts/security/test-auth-flows.py
 
