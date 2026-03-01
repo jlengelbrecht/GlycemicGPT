@@ -285,3 +285,53 @@ class TandemUploadTriggerResponse(BaseModel):
     message: str
     events_uploaded: int = 0
     status: str = "pending"
+
+
+# --- Story 30.1: Aggregate stats schemas ---
+
+
+class InsulinSummaryResponse(BaseModel):
+    """Response schema for insulin delivery summary (Story 30.1).
+
+    Unit fields (tdd, basal_units, bolus_units, correction_units) are
+    daily averages over the requested period. Count fields (bolus_count,
+    correction_count) are totals for the full period.
+    """
+
+    tdd: float = Field(..., ge=0, description="Average total daily dose (units/day)")
+    basal_units: float = Field(..., ge=0, description="Average daily basal insulin (units/day)")
+    bolus_units: float = Field(
+        ..., ge=0, description="Average daily bolus + correction insulin (units/day)"
+    )
+    correction_units: float = Field(
+        ..., ge=0, description="Average daily automated correction insulin (units/day)"
+    )
+    basal_pct: float = Field(..., ge=0, le=100, description="Basal percentage of TDD (0 if no data)")
+    bolus_pct: float = Field(..., ge=0, le=100, description="Bolus percentage of TDD (0 if no data)")
+    bolus_count: int = Field(..., ge=0, description="Total bolus deliveries in period")
+    correction_count: int = Field(
+        ..., ge=0, description="Total automated corrections in period"
+    )
+    period_days: int = Field(..., ge=1, description="Number of days analyzed")
+
+
+class BolusReviewItem(BaseModel):
+    """A single bolus event for the review table."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    event_timestamp: datetime
+    units: float = Field(..., ge=0)
+    is_automated: bool = False
+    control_iq_reason: str | None = None
+    control_iq_mode: str | None = None
+    iob_at_event: float | None = None
+    bg_at_event: int | None = None
+
+
+class BolusReviewResponse(BaseModel):
+    """Response schema for bolus review list (Story 30.1)."""
+
+    boluses: list[BolusReviewItem]
+    total_count: int = Field(..., ge=0, description="Total bolus events in period")
+    period_days: int = Field(..., ge=1, description="Number of days analyzed")
