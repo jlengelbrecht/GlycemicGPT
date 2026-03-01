@@ -109,9 +109,12 @@ async def register_device(
             raise ValueError("Device token is already registered to another user")
         existing.device_name = device_name
         existing.platform = platform
-        existing.device_fingerprint = device_fingerprint
-        existing.app_version = app_version
-        existing.build_type = build_type
+        if device_fingerprint is not None:
+            existing.device_fingerprint = device_fingerprint
+        if app_version is not None:
+            existing.app_version = app_version
+        if build_type is not None:
+            existing.build_type = build_type
         existing.last_seen_at = now
         await db.flush()
         logger.info(

@@ -65,6 +65,7 @@ Each example includes a `docker-compose.yml` and `.env.example`. See [`examples/
 | `IMAGE_TAG` | No | `latest` | Container image version |
 | `CORS_ORIGINS` | No | `[]` | JSON array of allowed CORS origins |
 | `SIDECAR_API_KEY` | No | (none) | Shared key between API and AI sidecar |
+| `ALLOW_PRIVATE_AI_URLS` | No | `true` | Set `false` for cloud deployments to block private-network AI URLs |
 | `LOG_FORMAT` | No | `json` | `json` or `text` |
 
 ## Updating

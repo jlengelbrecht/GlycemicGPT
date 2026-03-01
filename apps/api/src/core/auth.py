@@ -116,7 +116,9 @@ async def get_current_user(
                 detail="User account is disabled",
             )
         # Stash scopes and build_type on request.state for downstream checks
-        request.state._api_key_scopes = {s for s in api_key_obj.scopes.split(",") if s}
+        request.state._api_key_scopes = {
+            s.strip() for s in api_key_obj.scopes.split(",") if s.strip()
+        }
         request.state._api_key_build_type = api_key_obj.build_type
         return user
 

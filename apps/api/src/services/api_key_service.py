@@ -7,6 +7,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.scopes import VALID_SCOPES
@@ -56,22 +57,31 @@ async def create_api_key(
     if count_result.scalar_one() >= _MAX_KEYS_PER_USER:
         raise ValueError(f"Maximum of {_MAX_KEYS_PER_USER} API keys per user reached")
 
-    raw_key = _KEY_PREFIX + secrets.token_urlsafe(32)
-    prefix = raw_key[:12]
-    key_hash = _hash_key(raw_key)
+    max_prefix_retries = 3
+    for attempt in range(max_prefix_retries):
+        raw_key = _KEY_PREFIX + secrets.token_urlsafe(32)
+        prefix = raw_key[:12]
+        key_hash = _hash_key(raw_key)
 
-    api_key = ApiKey(
-        user_id=user_id,
-        name=name,
-        prefix=prefix,
-        key_hash=key_hash,
-        scopes=",".join(sorted(scopes)),
-        build_type=build_type,
-        expires_at=expires_at,
-    )
-    db.add(api_key)
-    await db.flush()
-    await db.refresh(api_key)
+        api_key = ApiKey(
+            user_id=user_id,
+            name=name,
+            prefix=prefix,
+            key_hash=key_hash,
+            scopes=",".join(sorted(scopes)),
+            build_type=build_type,
+            expires_at=expires_at,
+        )
+        db.add(api_key)
+        try:
+            await db.flush()
+        except IntegrityError:
+            await db.rollback()
+            if attempt == max_prefix_retries - 1:
+                raise
+            continue
+        await db.refresh(api_key)
+        break
 
     logger.info(
         "API key created",

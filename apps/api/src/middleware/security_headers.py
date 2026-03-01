@@ -29,6 +29,9 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
 ]
 
+# Header names we manage -- used to strip duplicates from upstream responses.
+_MANAGED_HEADER_NAMES: set[bytes] = {h[0] for h in _SECURITY_HEADERS}
+
 
 class SecurityHeadersMiddleware:
     """Pure ASGI middleware that injects security headers into every response."""
@@ -43,7 +46,13 @@ class SecurityHeadersMiddleware:
 
         async def send_with_headers(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
-                headers = list(message.get("headers", []))
+                # Strip any existing values for headers we manage to avoid
+                # duplicates when a reverse proxy also sets them.
+                headers = [
+                    (k, v)
+                    for k, v in message.get("headers", [])
+                    if k not in _MANAGED_HEADER_NAMES
+                ]
                 headers.extend(_SECURITY_HEADERS)
                 message["headers"] = headers
             await send(message)

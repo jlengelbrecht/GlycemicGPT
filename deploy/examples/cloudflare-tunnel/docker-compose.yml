@@ -76,6 +76,7 @@ services:
       AI_SIDECAR_URL: http://ai-sidecar:3456
       AI_SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      ALLOW_PRIVATE_AI_URLS: "false"
     depends_on:
       db:
         condition: service_healthy
