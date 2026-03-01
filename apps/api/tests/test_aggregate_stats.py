@@ -41,15 +41,26 @@ async def register_and_login(client: AsyncClient) -> tuple[str, str]:
     return cookie, user_id
 
 
-async def seed_glucose(db: AsyncSession, user_id: str, count: int = 50):
-    """Insert test glucose readings spanning the last 24h."""
+async def seed_glucose(
+    db: AsyncSession,
+    user_id: str,
+    count: int = 50,
+    extra_values: list[int] | None = None,
+):
+    """Insert test glucose readings spanning the last 24h.
+
+    Args:
+        extra_values: Additional explicit glucose values to insert
+            (e.g., boundary values like 40, 400).
+    """
     now = datetime.now(UTC)
+    uid = uuid.UUID(user_id)
     for i in range(count):
         ts = now - timedelta(minutes=i * 5)
         # Vary values: 80-200 range
         value = 80 + (i * 3) % 120
         reading = GlucoseReading(
-            user_id=uuid.UUID(user_id),
+            user_id=uid,
             value=value,
             reading_timestamp=ts,
             trend=TrendDirection.FLAT,
@@ -58,6 +69,18 @@ async def seed_glucose(db: AsyncSession, user_id: str, count: int = 50):
             source="test",
         )
         db.add(reading)
+    # Insert explicit extra values (for boundary testing)
+    for j, val in enumerate(extra_values or []):
+        ts = now - timedelta(minutes=(count + j) * 5)
+        db.add(GlucoseReading(
+            user_id=uid,
+            value=val,
+            reading_timestamp=ts,
+            trend=TrendDirection.FLAT,
+            trend_rate=0.0,
+            received_at=ts,
+            source="test",
+        ))
     await db.commit()
 
 
@@ -171,6 +194,51 @@ class TestGlucoseStats:
             )
         assert resp.status_code == 422
 
+    async def test_glucose_stats_boundary_values(self):
+        """Verify 40 and 400 mg/dL boundary values are included in stats."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            cookie, user_id = await register_and_login(client)
+
+            async for db in get_db():
+                await seed_glucose(db, user_id, count=0, extra_values=[40, 400])
+                break
+
+            resp = await client.get(
+                "/api/integrations/glucose/stats?minutes=1440",
+                cookies={settings.jwt_cookie_name: cookie},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["readings_count"] == 2
+        # Mean of 40 and 400 = 220
+        assert abs(data["mean_glucose"] - 220.0) < 1.0
+
+    async def test_glucose_stats_out_of_range_excluded(self):
+        """Verify readings outside 20-500 mg/dL are excluded from stats."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            cookie, user_id = await register_and_login(client)
+
+            # Insert readings: 10 (below range), 100 (valid), 600 (above range)
+            async for db in get_db():
+                await seed_glucose(
+                    db, user_id, count=0, extra_values=[10, 100, 600]
+                )
+                break
+
+            resp = await client.get(
+                "/api/integrations/glucose/stats?minutes=1440",
+                cookies={settings.jwt_cookie_name: cookie},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        # Only the 100 mg/dL reading should be counted
+        assert data["readings_count"] == 1
+        assert abs(data["mean_glucose"] - 100.0) < 1.0
+
     async def test_glucose_stats_minutes_above_maximum(self):
         """Verify minutes > 43200 returns 422."""
         async with AsyncClient(
@@ -225,6 +293,32 @@ class TestGlucosePercentiles:
                 assert bucket["p25"] <= bucket["p50"]
                 assert bucket["p50"] <= bucket["p75"]
                 assert bucket["p75"] <= bucket["p90"]
+
+    async def test_percentiles_boundary_values(self):
+        """Verify 40 and 400 mg/dL boundary values appear in percentiles."""
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            cookie, user_id = await register_and_login(client)
+
+            async for db in get_db():
+                await seed_glucose(
+                    db, user_id, count=50, extra_values=[40, 400]
+                )
+                break
+
+            resp = await client.get(
+                "/api/integrations/glucose/percentiles?days=7",
+                cookies={settings.jwt_cookie_name: cookie},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["readings_count"] == 52  # 50 + 2 boundary values
+        # At least one bucket should have p10 <= 40 or p90 >= 400
+        all_p10 = [b["p10"] for b in data["buckets"] if b["count"] > 0]
+        all_p90 = [b["p90"] for b in data["buckets"] if b["count"] > 0]
+        assert min(all_p10) <= 80  # 40 or normal low end
+        assert max(all_p90) >= 180  # 400 or normal high end
 
     async def test_percentiles_with_timezone(self):
         """Verify tz parameter is accepted and produces valid results."""

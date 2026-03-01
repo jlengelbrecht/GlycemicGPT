@@ -321,12 +321,14 @@ class BolusReviewItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     event_timestamp: datetime
-    units: float = Field(..., ge=0)
+    units: float = Field(..., ge=0, le=25, description="Bolus units (hard safety cap 25U)")
     is_automated: bool = False
     control_iq_reason: str | None = None
     control_iq_mode: str | None = None
     iob_at_event: float | None = None
-    bg_at_event: int | None = None
+    bg_at_event: int | None = Field(
+        None, ge=20, le=500, description="Glucose at bolus event (mg/dL)"
+    )
 
 
 class BolusReviewResponse(BaseModel):

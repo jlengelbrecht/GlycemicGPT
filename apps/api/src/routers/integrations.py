@@ -1529,6 +1529,8 @@ async def get_glucose_stats(
         ).where(
             GlucoseReading.user_id == current_user.id,
             GlucoseReading.reading_timestamp >= cutoff,
+            GlucoseReading.value >= 20,
+            GlucoseReading.value <= 500,
         )
     )
     row = result.one()
@@ -1617,6 +1619,8 @@ async def get_glucose_percentiles(
         .where(
             GlucoseReading.user_id == current_user.id,
             GlucoseReading.reading_timestamp >= cutoff,
+            GlucoseReading.value >= 20,
+            GlucoseReading.value <= 500,
         )
         .order_by(GlucoseReading.reading_timestamp)
         .limit(_AGP_MAX_ROWS)
@@ -1694,6 +1698,9 @@ async def get_insulin_summary(
         .where(
             PumpEvent.user_id == current_user.id,
             PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.units.is_not(None),
+            PumpEvent.units >= 0,
+            PumpEvent.units <= 25,
             PumpEvent.event_type.in_([
                 PumpEventType.BASAL,
                 PumpEventType.BOLUS,
@@ -1774,6 +1781,9 @@ async def get_bolus_review(
         select(func.count()).where(
             PumpEvent.user_id == current_user.id,
             PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.units.is_not(None),
+            PumpEvent.units >= 0,
+            PumpEvent.units <= 25,
             PumpEvent.event_type.in_([
                 PumpEventType.BOLUS,
                 PumpEventType.CORRECTION,
@@ -1788,12 +1798,15 @@ async def get_bolus_review(
         .where(
             PumpEvent.user_id == current_user.id,
             PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.units.is_not(None),
+            PumpEvent.units >= 0,
+            PumpEvent.units <= 25,
             PumpEvent.event_type.in_([
                 PumpEventType.BOLUS,
                 PumpEventType.CORRECTION,
             ]),
         )
-        .order_by(PumpEvent.event_timestamp.desc())
+        .order_by(PumpEvent.event_timestamp.desc(), PumpEvent.id.desc())
         .offset(offset)
         .limit(limit)
     )
