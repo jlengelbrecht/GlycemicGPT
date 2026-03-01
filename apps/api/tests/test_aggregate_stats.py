@@ -33,9 +33,7 @@ async def register_and_login(client: AsyncClient) -> tuple[str, str]:
     cookie = login.cookies.get(settings.jwt_cookie_name)
     assert cookie is not None, "No session cookie returned"
     # Get user ID from /me endpoint
-    me = await client.get(
-        "/api/auth/me", cookies={settings.jwt_cookie_name: cookie}
-    )
+    me = await client.get("/api/auth/me", cookies={settings.jwt_cookie_name: cookie})
     assert me.status_code == 200, f"Failed to get user: {me.text}"
     user_id = me.json()["id"]
     return cookie, user_id
@@ -72,15 +70,17 @@ async def seed_glucose(
     # Insert explicit extra values (for boundary testing)
     for j, val in enumerate(extra_values or []):
         ts = now - timedelta(minutes=(count + j) * 5)
-        db.add(GlucoseReading(
-            user_id=uid,
-            value=val,
-            reading_timestamp=ts,
-            trend=TrendDirection.FLAT,
-            trend_rate=0.0,
-            received_at=ts,
-            source="test",
-        ))
+        db.add(
+            GlucoseReading(
+                user_id=uid,
+                value=val,
+                reading_timestamp=ts,
+                trend=TrendDirection.FLAT,
+                trend_rate=0.0,
+                received_at=ts,
+                source="test",
+            )
+        )
     await db.commit()
 
 
@@ -92,44 +92,50 @@ async def seed_pump_events(db: AsyncSession, user_id: str):
     # Basal events (one per hour for 7 days)
     for h in range(168):
         ts = now - timedelta(hours=h)
-        db.add(PumpEvent(
-            user_id=uid,
-            event_type=PumpEventType.BASAL,
-            event_timestamp=ts,
-            units=0.8,
-            is_automated=True,
-            received_at=ts,
-            source="test",
-        ))
+        db.add(
+            PumpEvent(
+                user_id=uid,
+                event_type=PumpEventType.BASAL,
+                event_timestamp=ts,
+                units=0.8,
+                is_automated=True,
+                received_at=ts,
+                source="test",
+            )
+        )
 
     # Bolus events (3 per day for 7 days)
     for d in range(7):
         for meal_h in [8, 12, 18]:
             ts = now - timedelta(days=d, hours=24 - meal_h)
-            db.add(PumpEvent(
-                user_id=uid,
-                event_type=PumpEventType.BOLUS,
-                event_timestamp=ts,
-                units=4.5,
-                is_automated=False,
-                received_at=ts,
-                source="test",
-            ))
+            db.add(
+                PumpEvent(
+                    user_id=uid,
+                    event_type=PumpEventType.BOLUS,
+                    event_timestamp=ts,
+                    units=4.5,
+                    is_automated=False,
+                    received_at=ts,
+                    source="test",
+                )
+            )
 
     # Correction events (2 per day)
     for d in range(7):
         for h_offset in [10, 15]:
             ts = now - timedelta(days=d, hours=24 - h_offset)
-            db.add(PumpEvent(
-                user_id=uid,
-                event_type=PumpEventType.CORRECTION,
-                event_timestamp=ts,
-                units=1.2,
-                is_automated=True,
-                control_iq_reason="high_bg",
-                received_at=ts,
-                source="test",
-            ))
+            db.add(
+                PumpEvent(
+                    user_id=uid,
+                    event_type=PumpEventType.CORRECTION,
+                    event_timestamp=ts,
+                    units=1.2,
+                    is_automated=True,
+                    control_iq_reason="high_bg",
+                    received_at=ts,
+                    source="test",
+                )
+            )
 
     await db.commit()
 
@@ -224,9 +230,7 @@ class TestGlucoseStats:
 
             # Insert readings: 10 (below range), 100 (valid), 600 (above range)
             async for db in get_db():
-                await seed_glucose(
-                    db, user_id, count=0, extra_values=[10, 100, 600]
-                )
+                await seed_glucose(db, user_id, count=0, extra_values=[10, 100, 600])
                 break
 
             resp = await client.get(
@@ -302,9 +306,7 @@ class TestGlucosePercentiles:
             cookie, user_id = await register_and_login(client)
 
             async for db in get_db():
-                await seed_glucose(
-                    db, user_id, count=50, extra_values=[40, 400]
-                )
+                await seed_glucose(db, user_id, count=50, extra_values=[40, 400])
                 break
 
             resp = await client.get(

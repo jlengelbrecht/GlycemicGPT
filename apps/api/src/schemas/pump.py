@@ -299,15 +299,21 @@ class InsulinSummaryResponse(BaseModel):
     """
 
     tdd: float = Field(..., ge=0, description="Average total daily dose (units/day)")
-    basal_units: float = Field(..., ge=0, description="Average daily basal insulin (units/day)")
+    basal_units: float = Field(
+        ..., ge=0, description="Average daily basal insulin (units/day)"
+    )
     bolus_units: float = Field(
         ..., ge=0, description="Average daily bolus + correction insulin (units/day)"
     )
     correction_units: float = Field(
         ..., ge=0, description="Average daily automated correction insulin (units/day)"
     )
-    basal_pct: float = Field(..., ge=0, le=100, description="Basal percentage of TDD (0 if no data)")
-    bolus_pct: float = Field(..., ge=0, le=100, description="Bolus percentage of TDD (0 if no data)")
+    basal_pct: float = Field(
+        ..., ge=0, le=100, description="Basal percentage of TDD (0 if no data)"
+    )
+    bolus_pct: float = Field(
+        ..., ge=0, le=100, description="Bolus percentage of TDD (0 if no data)"
+    )
     bolus_count: int = Field(..., ge=0, description="Total bolus deliveries in period")
     correction_count: int = Field(
         ..., ge=0, description="Total automated corrections in period"
@@ -321,7 +327,9 @@ class BolusReviewItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     event_timestamp: datetime
-    units: float = Field(..., ge=0, le=25, description="Bolus units (hard safety cap 25U)")
+    units: float = Field(
+        ..., ge=0, le=25, description="Bolus units (hard safety cap 25U)"
+    )
     is_automated: bool = False
     control_iq_reason: str | None = None
     control_iq_mode: str | None = None

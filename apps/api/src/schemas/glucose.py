@@ -60,9 +60,13 @@ class GlucoseStatsResponse(BaseModel):
     mean_glucose: float = Field(..., ge=0, le=500, description="Mean glucose in mg/dL")
     std_dev: float = Field(..., ge=0, le=500, description="Standard deviation in mg/dL")
     cv_pct: float = Field(..., ge=0, description="Coefficient of variation (%)")
-    gmi: float = Field(..., ge=0, description="Glucose Management Indicator (est. A1C %)")
+    gmi: float = Field(
+        ..., ge=0, description="Glucose Management Indicator (est. A1C %)"
+    )
     cgm_active_pct: float = Field(
-        ..., ge=0, le=100,
+        ...,
+        ge=0,
+        le=100,
         description="CGM active time as % of period (assumes 5-min intervals, capped at 100)",
     )
     readings_count: int = Field(..., ge=0, description="Total readings in period")

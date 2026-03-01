@@ -736,7 +736,9 @@ async def get_glucose_history(
     request: Request,
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    minutes: int = Query(default=180, ge=5, le=43200, description="Minutes of history (max 30d)"),
+    minutes: int = Query(
+        default=180, ge=5, le=43200, description="Minutes of history (max 30d)"
+    ),
     limit: int = Query(default=36, ge=1, le=8640, description="Max readings to return"),
 ) -> GlucoseHistoryResponse:
     """Get glucose reading history.
@@ -987,7 +989,9 @@ async def get_pump_event_history(
     request: Request,
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    minutes: int = Query(default=180, ge=5, le=43200, description="Minutes of history (max 30d)"),
+    minutes: int = Query(
+        default=180, ge=5, le=43200, description="Minutes of history (max 30d)"
+    ),
     limit: int = Query(default=500, ge=1, le=5000, description="Max events to return"),
     event_type: PumpEventType | None = Query(default=None),
 ) -> PumpEventHistoryResponse:
@@ -1476,6 +1480,7 @@ async def trigger_tandem_upload(
 # Maximum rows to load into memory for percentile calculation
 _AGP_MAX_ROWS = 50_000
 
+
 def _compute_percentile(data: list[float], pct: float) -> float:
     """Compute percentile using linear interpolation (matching numpy default)."""
     if not data:
@@ -1486,9 +1491,7 @@ def _compute_percentile(data: list[float], pct: float) -> float:
     c = math.ceil(k)
     if f == c:
         return round(sorted_data[int(k)], 1)
-    return round(
-        sorted_data[f] * (c - k) + sorted_data[c] * (k - f), 1
-    )
+    return round(sorted_data[f] * (c - k) + sorted_data[c] * (k - f), 1)
 
 
 @router.get(
@@ -1701,11 +1704,13 @@ async def get_insulin_summary(
             PumpEvent.units.is_not(None),
             PumpEvent.units >= 0,
             PumpEvent.units <= 25,
-            PumpEvent.event_type.in_([
-                PumpEventType.BASAL,
-                PumpEventType.BOLUS,
-                PumpEventType.CORRECTION,
-            ]),
+            PumpEvent.event_type.in_(
+                [
+                    PumpEventType.BASAL,
+                    PumpEventType.BOLUS,
+                    PumpEventType.CORRECTION,
+                ]
+            ),
         )
         .group_by(PumpEvent.event_type, PumpEvent.is_automated)
     )
@@ -1784,10 +1789,12 @@ async def get_bolus_review(
             PumpEvent.units.is_not(None),
             PumpEvent.units >= 0,
             PumpEvent.units <= 25,
-            PumpEvent.event_type.in_([
-                PumpEventType.BOLUS,
-                PumpEventType.CORRECTION,
-            ]),
+            PumpEvent.event_type.in_(
+                [
+                    PumpEventType.BOLUS,
+                    PumpEventType.CORRECTION,
+                ]
+            ),
         )
     )
     total = count_result.scalar() or 0
@@ -1801,10 +1808,12 @@ async def get_bolus_review(
             PumpEvent.units.is_not(None),
             PumpEvent.units >= 0,
             PumpEvent.units <= 25,
-            PumpEvent.event_type.in_([
-                PumpEventType.BOLUS,
-                PumpEventType.CORRECTION,
-            ]),
+            PumpEvent.event_type.in_(
+                [
+                    PumpEventType.BOLUS,
+                    PumpEventType.CORRECTION,
+                ]
+            ),
         )
         .order_by(PumpEvent.event_timestamp.desc(), PumpEvent.id.desc())
         .offset(offset)
