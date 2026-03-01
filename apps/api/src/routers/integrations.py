@@ -731,16 +731,20 @@ async def get_current_glucose(
         403: {"model": ErrorResponse, "description": "Permission denied"},
     },
 )
+@limiter.limit("30/minute")
 async def get_glucose_history(
+    request: Request,
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    minutes: int = Query(default=180, ge=5, le=1440, description="Minutes of history"),
-    limit: int = Query(default=36, ge=1, le=288, description="Max readings to return"),
+    minutes: int = Query(default=180, ge=5, le=43200, description="Minutes of history (max 30d)"),
+    limit: int = Query(default=36, ge=1, le=8640, description="Max readings to return"),
 ) -> GlucoseHistoryResponse:
     """Get glucose reading history.
 
     Returns recent glucose readings for the specified time period.
-    Default is 3 hours (180 minutes), max is 24 hours (1440 minutes).
+    Default is 3 hours (180 minutes), max is 30 days (43200 minutes).
+    For longer periods, consider using fewer readings with client-side
+    downsampling (e.g., LTTB) for chart rendering.
     """
     readings = await get_glucose_readings(
         db, current_user.id, minutes=minutes, limit=limit
@@ -978,17 +982,20 @@ async def get_tandem_sync_status(
         403: {"model": ErrorResponse, "description": "Permission denied"},
     },
 )
+@limiter.limit("30/minute")
 async def get_pump_event_history(
+    request: Request,
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    minutes: int = Query(default=180, ge=1, le=1440),
-    limit: int = Query(default=500, ge=1, le=2000),
+    minutes: int = Query(default=180, ge=5, le=43200, description="Minutes of history (max 30d)"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Max events to return"),
     event_type: PumpEventType | None = Query(default=None),
 ) -> PumpEventHistoryResponse:
     """Get pump event history for the current user.
 
     Returns bolus, basal, and other pump events within the specified time window.
-    Used by the dashboard chart to overlay insulin delivery on the glucose graph.
+    Max 30 days (43200 minutes). Used by the dashboard chart to overlay
+    insulin delivery on the glucose graph.
     """
     events = await get_pump_events(
         db, current_user.id, hours=minutes / 60, limit=limit, event_type=event_type
