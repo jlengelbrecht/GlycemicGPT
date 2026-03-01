@@ -54,6 +54,43 @@ class TimeInRangeResponse(BaseModel):
     high_threshold: float = Field(..., description="High target threshold (mg/dL)")
 
 
+class GlucoseStatsResponse(BaseModel):
+    """Response schema for aggregate glucose statistics (Story 30.1)."""
+
+    mean_glucose: float = Field(..., ge=0, description="Mean glucose in mg/dL")
+    std_dev: float = Field(..., ge=0, description="Standard deviation in mg/dL")
+    cv_pct: float = Field(..., ge=0, description="Coefficient of variation (%)")
+    gmi: float = Field(..., ge=0, description="Glucose Management Indicator (est. A1C %)")
+    cgm_active_pct: float = Field(
+        ..., ge=0, le=100,
+        description="CGM active time as % of period (assumes 5-min intervals, capped at 100)",
+    )
+    readings_count: int = Field(..., ge=0, description="Total readings in period")
+    period_minutes: int = Field(..., ge=1, description="Analysis window in minutes")
+
+
+class AGPBucket(BaseModel):
+    """A single hourly AGP bucket with percentile values."""
+
+    hour: int = Field(..., description="Hour of day (0-23)", ge=0, le=23)
+    p10: float = Field(..., ge=0, description="10th percentile glucose (mg/dL)")
+    p25: float = Field(..., ge=0, description="25th percentile glucose (mg/dL)")
+    p50: float = Field(..., ge=0, description="Median glucose (mg/dL)")
+    p75: float = Field(..., ge=0, description="75th percentile glucose (mg/dL)")
+    p90: float = Field(..., ge=0, description="90th percentile glucose (mg/dL)")
+    count: int = Field(..., ge=0, description="Number of readings in this hour")
+
+
+class GlucosePercentilesResponse(BaseModel):
+    """Response schema for AGP percentile bands (Story 30.1)."""
+
+    buckets: list[AGPBucket] = Field(
+        ..., description="Hourly AGP percentile buckets (0-23)"
+    )
+    period_days: int = Field(..., ge=1, description="Number of days analyzed")
+    readings_count: int = Field(..., ge=0, description="Total readings used")
+
+
 class SyncResponse(BaseModel):
     """Response schema for sync operation."""
 

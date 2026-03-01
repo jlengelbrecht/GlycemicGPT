@@ -3,6 +3,8 @@
 API endpoints for managing third-party integrations (Dexcom, Tandem) and data sync.
 """
 
+import math
+import zoneinfo
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -31,9 +33,12 @@ from src.models.pump_raw_event import PumpRawEvent
 from src.models.tandem_upload_state import TandemUploadState
 from src.schemas.auth import ErrorResponse
 from src.schemas.glucose import (
+    AGPBucket,
     CurrentGlucoseResponse,
     GlucoseHistoryResponse,
+    GlucosePercentilesResponse,
     GlucoseReadingResponse,
+    GlucoseStatsResponse,
     SyncResponse,
     SyncStatusResponse,
     TimeInRangeResponse,
@@ -47,7 +52,10 @@ from src.schemas.integration import (
     TandemCredentialsRequest,
 )
 from src.schemas.pump import (
+    BolusReviewItem,
+    BolusReviewResponse,
     ControlIQActivityResponse,
+    InsulinSummaryResponse,
     IoBProjectionResponse,
     PumpEventHistoryResponse,
     PumpEventResponse,
@@ -1454,3 +1462,349 @@ async def trigger_tandem_upload(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Upload failed. Please try again later.",
         ) from e
+
+
+# --- Story 30.1: Aggregate statistics endpoints ---
+
+# Maximum rows to load into memory for percentile calculation
+_AGP_MAX_ROWS = 50_000
+
+def _compute_percentile(data: list[float], pct: float) -> float:
+    """Compute percentile using linear interpolation (matching numpy default)."""
+    if not data:
+        return 0.0
+    sorted_data = sorted(data)
+    k = (len(sorted_data) - 1) * (pct / 100)
+    f = math.floor(k)
+    c = math.ceil(k)
+    if f == c:
+        return round(sorted_data[int(k)], 1)
+    return round(
+        sorted_data[f] * (c - k) + sorted_data[c] * (k - f), 1
+    )
+
+
+@router.get(
+    "/glucose/stats",
+    response_model=GlucoseStatsResponse,
+    responses={
+        200: {"description": "Aggregate glucose statistics"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+@limiter.limit("30/minute")
+async def get_glucose_stats(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    minutes: int = Query(
+        default=1440,
+        ge=60,
+        le=43200,
+        description="Analysis window in minutes (max 30d)",
+    ),
+) -> GlucoseStatsResponse:
+    """Get aggregate glucose statistics: mean, SD, CV%, GMI, CGM active%.
+
+    GMI (Glucose Management Indicator) estimates A1C from mean glucose
+    using the formula: GMI = 3.31 + (0.02392 * mean_glucose_mg_dl).
+
+    CGM active % assumes 5-minute reading intervals (standard for Dexcom G6/G7).
+    """
+    cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
+
+    result = await db.execute(
+        select(
+            func.count().label("total"),
+            func.avg(GlucoseReading.value).label("mean"),
+            func.stddev_pop(GlucoseReading.value).label("stddev"),
+        ).where(
+            GlucoseReading.user_id == current_user.id,
+            GlucoseReading.reading_timestamp >= cutoff,
+        )
+    )
+    row = result.one()
+    count = row.total or 0
+    mean = float(row.mean) if row.mean is not None else 0.0
+    sd = float(row.stddev) if row.stddev is not None else 0.0
+
+    if count == 0:
+        return GlucoseStatsResponse(
+            mean_glucose=0.0,
+            std_dev=0.0,
+            cv_pct=0.0,
+            gmi=0.0,
+            cgm_active_pct=0.0,
+            readings_count=0,
+            period_minutes=minutes,
+        )
+
+    cv = round((sd / mean) * 100, 1) if mean > 0 else 0.0
+    # GMI formula: Bergenstal et al. 2018
+    gmi = round(3.31 + (0.02392 * mean), 1)
+    # CGM active %: readings / expected readings (1 per 5 min, Dexcom standard)
+    expected_readings = minutes / 5
+    cgm_active = round(min((count / expected_readings) * 100, 100.0), 1)
+
+    return GlucoseStatsResponse(
+        mean_glucose=round(mean, 1),
+        std_dev=round(sd, 1),
+        cv_pct=cv,
+        gmi=gmi,
+        cgm_active_pct=cgm_active,
+        readings_count=count,
+        period_minutes=minutes,
+    )
+
+
+@router.get(
+    "/glucose/percentiles",
+    response_model=GlucosePercentilesResponse,
+    responses={
+        200: {"description": "AGP percentile bands by hour of day"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+@limiter.limit("15/minute")
+async def get_glucose_percentiles(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(
+        default=14,
+        ge=7,
+        le=90,
+        description="Number of days to analyze (min 7 for AGP)",
+    ),
+    tz: str = Query(
+        default="UTC",
+        max_length=50,
+        description="IANA timezone for hour grouping (e.g. America/Chicago)",
+    ),
+) -> GlucosePercentilesResponse:
+    """Get AGP (Ambulatory Glucose Profile) percentile bands.
+
+    Returns 10th, 25th, 50th, 75th, and 90th percentile glucose values
+    grouped by hour of day in the specified timezone.
+    Requires at least 7 days of data.
+    """
+    # Validate timezone
+    try:
+        user_tz = zoneinfo.ZoneInfo(tz)
+    except (KeyError, zoneinfo.ZoneInfoNotFoundError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid timezone: {tz}",
+        ) from e
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # Fetch readings with a hard row cap to prevent memory issues
+    result = await db.execute(
+        select(
+            GlucoseReading.reading_timestamp,
+            GlucoseReading.value,
+        )
+        .where(
+            GlucoseReading.user_id == current_user.id,
+            GlucoseReading.reading_timestamp >= cutoff,
+        )
+        .order_by(GlucoseReading.reading_timestamp)
+        .limit(_AGP_MAX_ROWS)
+    )
+    rows = result.all()
+
+    # Group values by hour in the user's timezone
+    hourly: dict[int, list[float]] = {h: [] for h in range(24)}
+    for row in rows:
+        ts = row.reading_timestamp
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        local_ts = ts.astimezone(user_tz)
+        hourly[local_ts.hour].append(float(row.value))
+
+    buckets = []
+    for h in range(24):
+        vals = hourly[h]
+        buckets.append(
+            AGPBucket(
+                hour=h,
+                p10=_compute_percentile(vals, 10),
+                p25=_compute_percentile(vals, 25),
+                p50=_compute_percentile(vals, 50),
+                p75=_compute_percentile(vals, 75),
+                p90=_compute_percentile(vals, 90),
+                count=len(vals),
+            )
+        )
+
+    return GlucosePercentilesResponse(
+        buckets=buckets,
+        period_days=days,
+        readings_count=len(rows),
+    )
+
+
+@router.get(
+    "/insulin/summary",
+    response_model=InsulinSummaryResponse,
+    responses={
+        200: {"description": "Insulin delivery summary"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+@limiter.limit("30/minute")
+async def get_insulin_summary(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(
+        default=14,
+        ge=1,
+        le=90,
+        description="Number of days to analyze",
+    ),
+) -> InsulinSummaryResponse:
+    """Get insulin delivery summary: TDD, basal/bolus split, bolus count.
+
+    All unit values (tdd, basal_units, bolus_units, correction_units) are
+    daily averages over the requested period. Counts (bolus_count,
+    correction_count) are totals for the full period.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # Aggregate insulin by event type in SQL
+    result = await db.execute(
+        select(
+            PumpEvent.event_type,
+            PumpEvent.is_automated,
+            func.coalesce(func.sum(PumpEvent.units), 0).label("total_units"),
+            func.count().label("event_count"),
+        )
+        .where(
+            PumpEvent.user_id == current_user.id,
+            PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.event_type.in_([
+                PumpEventType.BASAL,
+                PumpEventType.BOLUS,
+                PumpEventType.CORRECTION,
+            ]),
+        )
+        .group_by(PumpEvent.event_type, PumpEvent.is_automated)
+    )
+    rows = result.all()
+
+    basal_units = 0.0
+    bolus_units = 0.0
+    correction_units = 0.0
+    bolus_count = 0
+    correction_count = 0
+
+    for row in rows:
+        units = float(row.total_units)
+        if row.event_type == PumpEventType.BASAL:
+            basal_units += units
+        elif row.event_type == PumpEventType.BOLUS:
+            bolus_units += units
+            bolus_count += int(row.event_count)
+        elif row.event_type == PumpEventType.CORRECTION:
+            correction_units += units
+            correction_count += int(row.event_count)
+
+    tdd_total = basal_units + bolus_units + correction_units
+    # Average per day
+    tdd = round(tdd_total / max(days, 1), 1)
+    basal_avg = round(basal_units / max(days, 1), 1)
+    bolus_avg = round((bolus_units + correction_units) / max(days, 1), 1)
+    correction_avg = round(correction_units / max(days, 1), 1)
+
+    if tdd > 0:
+        basal_pct = round((basal_avg / tdd) * 100, 1)
+        bolus_pct = round(100 - basal_pct, 1)
+    else:
+        basal_pct = 0.0
+        bolus_pct = 0.0
+
+    return InsulinSummaryResponse(
+        tdd=tdd,
+        basal_units=basal_avg,
+        bolus_units=bolus_avg,
+        correction_units=correction_avg,
+        basal_pct=basal_pct,
+        bolus_pct=bolus_pct,
+        bolus_count=bolus_count,
+        correction_count=correction_count,
+        period_days=days,
+    )
+
+
+@router.get(
+    "/bolus/review",
+    response_model=BolusReviewResponse,
+    responses={
+        200: {"description": "Bolus delivery review list"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        403: {"model": ErrorResponse, "description": "Permission denied"},
+    },
+)
+@limiter.limit("15/minute")
+async def get_bolus_review(
+    request: Request,
+    current_user: DiabeticOrAdminUser,
+    db: AsyncSession = Depends(get_db),
+    days: int = Query(default=7, ge=1, le=30, description="Number of days"),
+    limit: int = Query(default=100, ge=1, le=500, description="Max results"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+) -> BolusReviewResponse:
+    """Get paginated list of bolus events for review."""
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+
+    # Count total
+    count_result = await db.execute(
+        select(func.count()).where(
+            PumpEvent.user_id == current_user.id,
+            PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.event_type.in_([
+                PumpEventType.BOLUS,
+                PumpEventType.CORRECTION,
+            ]),
+        )
+    )
+    total = count_result.scalar() or 0
+
+    # Fetch page
+    result = await db.execute(
+        select(PumpEvent)
+        .where(
+            PumpEvent.user_id == current_user.id,
+            PumpEvent.event_timestamp >= cutoff,
+            PumpEvent.event_type.in_([
+                PumpEventType.BOLUS,
+                PumpEventType.CORRECTION,
+            ]),
+        )
+        .order_by(PumpEvent.event_timestamp.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    events = result.scalars().all()
+
+    return BolusReviewResponse(
+        boluses=[
+            BolusReviewItem(
+                event_timestamp=e.event_timestamp,
+                units=e.units or 0.0,
+                is_automated=e.is_automated,
+                control_iq_reason=e.control_iq_reason,
+                control_iq_mode=e.control_iq_mode,
+                iob_at_event=e.iob_at_event,
+                bg_at_event=e.bg_at_event,
+            )
+            for e in events
+        ],
+        total_count=total,
+        period_days=days,
+    )
