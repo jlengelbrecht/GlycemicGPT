@@ -16,7 +16,6 @@ Usage:
 Requires: Pillow (pip install Pillow)
 """
 
-import os
 import sys
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -55,14 +54,9 @@ def load_icon_only(logo_path: Path) -> Image.Image:
         count = sum(1 for x in range(width) if pixels[x, y][3] > 10)
         row_counts.append(count)
 
-    # Icon ends at the gap (rows with 0 opaque pixels after content)
+    # Find gap between icon and text: scan from top, find first empty
+    # stretch after content starts. icon_bottom tracks the last row with pixels.
     icon_bottom = 0
-    for y in range(height - 1, 0, -1):
-        if row_counts[y] > 50:
-            # Found substantial content - walk down to find the icon/text gap
-            break
-
-    # Find gap: scan from top, find first empty stretch after content
     in_content = False
     for y in range(height):
         if row_counts[y] > 5:
@@ -74,7 +68,13 @@ def load_icon_only(logo_path: Path) -> Image.Image:
 
     # Find horizontal bounds for icon portion
     min_x, max_x = width, 0
-    first_row = next(y for y in range(height) if row_counts[y] > 5)
+    try:
+        first_row = next(y for y in range(height) if row_counts[y] > 5)
+    except StopIteration:
+        raise ValueError(
+            f"No opaque icon content found in {logo_path}. "
+            "Expected a logo image with visible pixels."
+        )
     for y in range(first_row, icon_bottom + 1):
         for x in range(width):
             if pixels[x, y][3] > 10:
@@ -198,9 +198,12 @@ def make_round_launcher(icon: Image.Image, size: int) -> Image.Image:
 
 
 def optimize_png(img: Image.Image) -> Image.Image:
-    """Optimize PNG by quantizing to reduce file size."""
-    # Convert to P mode (palette) if the image has few unique colors
-    # For icons with gradients, keep as RGBA but ensure we strip metadata
+    """Pass-through for future PNG optimization (quantization, metadata stripping).
+
+    Currently a no-op -- Pillow's save(..., optimize=True) in save_png()
+    handles basic compression. Full palette quantization deferred until
+    icon file sizes become a concern.
+    """
     return img
 
 
