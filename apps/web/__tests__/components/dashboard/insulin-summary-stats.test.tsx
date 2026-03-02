@@ -28,7 +28,7 @@ let mockHookReturn: {
   } | null;
   isLoading: boolean;
   error: string | null;
-  period: "7d" | "14d" | "30d" | "90d";
+  period: "24h" | "3d" | "7d" | "14d" | "30d" | "90d";
   setPeriod: typeof mockSetPeriod;
   refetch: typeof mockRefetch;
 };
@@ -36,6 +36,8 @@ let mockHookReturn: {
 jest.mock("../../../src/hooks/use-insulin-summary", () => ({
   useInsulinSummary: () => mockHookReturn,
   INSULIN_PERIOD_LABELS: {
+    "24h": "24 Hours",
+    "3d": "3 Days",
     "7d": "7 Days",
     "14d": "14 Days",
     "30d": "30 Days",
@@ -253,8 +255,10 @@ describe("InsulinSummaryStats", () => {
       mockHookReturn.data = makeData();
     });
 
-    it("renders all 4 period options", () => {
+    it("renders all 6 period options", () => {
       renderComponent();
+      expect(screen.getByRole("radio", { name: "24 Hours" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "3 Days" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "7 Days" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "14 Days" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "30 Days" })).toBeInTheDocument();
