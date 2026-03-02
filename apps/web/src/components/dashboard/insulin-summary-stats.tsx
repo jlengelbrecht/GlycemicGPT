@@ -35,13 +35,17 @@ function getBasalSplitAssessment(basalPct: number): { label: string; color: stri
   return { label: "Review", color: "text-red-400" };
 }
 
+const MAX_DOSE_DISPLAY = 200;
+
 function safeFixed1(value: number): string {
-  if (!Number.isFinite(value)) return "--";
+  if (!Number.isFinite(value) || value < 0) return "--";
+  if (value > MAX_DOSE_DISPLAY) return `>${MAX_DOSE_DISPLAY}`;
   return value.toFixed(1);
 }
 
 function safeRound(value: number): string {
-  if (!Number.isFinite(value)) return "--";
+  if (!Number.isFinite(value) || value < 0) return "--";
+  if (value > MAX_DOSE_DISPLAY) return `>${MAX_DOSE_DISPLAY}`;
   return String(Math.round(value));
 }
 
@@ -108,7 +112,7 @@ export function InsulinSummaryStats({ className }: InsulinSummaryStatsProps) {
     buttonsRef.current[newIndex]?.focus();
   };
 
-  const noData = !data || !Number.isFinite(data.tdd) || data.tdd <= 0 || !data.period_days;
+  const noData = !data || !Number.isFinite(data.tdd) || data.tdd <= 0 || !Number.isFinite(data.period_days) || data.period_days <= 0;
   const splitAssessment = data && Number.isFinite(data.basal_pct)
     ? getBasalSplitAssessment(data.basal_pct)
     : null;

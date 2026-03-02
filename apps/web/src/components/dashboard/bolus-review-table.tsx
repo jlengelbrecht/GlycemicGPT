@@ -56,6 +56,22 @@ function SkeletonRow() {
   );
 }
 
+const MAX_BOLUS_DISPLAY = 50;
+const BG_MIN = 20;
+const BG_MAX = 500;
+
+function formatUnits(value: number | null | undefined, decimals: number): string {
+  if (value == null || !Number.isFinite(value) || value < 0) return "---";
+  if (value > MAX_BOLUS_DISPLAY) return `>${MAX_BOLUS_DISPLAY}`;
+  return `${value.toFixed(decimals)} U`;
+}
+
+function formatBg(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "---";
+  const clamped = Math.min(BG_MAX, Math.max(BG_MIN, Math.round(value)));
+  return `${clamped} mg/dL`;
+}
+
 function BolusRow({ bolus }: { bolus: BolusReviewItem }) {
   return (
     <tr
@@ -66,7 +82,7 @@ function BolusRow({ bolus }: { bolus: BolusReviewItem }) {
         {formatDateTime(bolus.event_timestamp)}
       </td>
       <td className="px-4 py-3 text-sm text-white font-medium whitespace-nowrap">
-        {Number.isFinite(bolus.units) && bolus.units >= 0 ? bolus.units.toFixed(2) : "---"} U
+        {formatUnits(bolus.units, 2)}
       </td>
       <td className="px-4 py-3 whitespace-nowrap">
         {bolus.is_automated ? (
@@ -80,14 +96,10 @@ function BolusRow({ bolus }: { bolus: BolusReviewItem }) {
         )}
       </td>
       <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
-        {bolus.bg_at_event != null && Number.isFinite(bolus.bg_at_event)
-          ? `${Math.round(bolus.bg_at_event)} mg/dL`
-          : "---"}
+        {formatBg(bolus.bg_at_event)}
       </td>
       <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
-        {bolus.iob_at_event != null && Number.isFinite(bolus.iob_at_event)
-          ? `${bolus.iob_at_event.toFixed(1)} U`
-          : "---"}
+        {formatUnits(bolus.iob_at_event, 1)}
       </td>
       <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap max-w-[200px] truncate">
         {bolus.is_automated
