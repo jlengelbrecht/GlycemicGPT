@@ -32,10 +32,8 @@ export {
 export {
   TimeInRangeBar,
   type TimeInRangeBarProps,
-  type RangeData,
   type TimePeriod,
-  normalizePercentages,
-  sanitizeRangeData,
+  normalizeBuckets,
   formatPercentage,
   getQualityAssessment,
   PERIOD_LABELS,
@@ -68,7 +66,3 @@ export {
   type CgmSummaryStatsProps,
 } from "./cgm-summary-stats";
 
-export {
-  TirDonutChart,
-  type TirDonutChartProps,
-} from "./tir-donut-chart";
