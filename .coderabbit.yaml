@@ -2,11 +2,9 @@
 
 language: "en-US"
 tone_instructions: >
-  Be direct, technically precise, and concise. Focus on correctness, security,
-  and safety. Only comment on issues that affect correctness, security, performance,
-  or maintainability. Do not comment on style preferences, naming conventions, or
-  formatting unless they introduce ambiguity or bugs. Do not suggest refactors
-  unless the current code has a clear defect.
+  Be direct and precise. Focus on correctness, security, safety, performance,
+  and maintainability. Ignore style, naming, and formatting unless they cause
+  ambiguity or defects. Suggest refactors only for clear defects.
 early_access: false
 enable_free_tier: true
 
