@@ -20,6 +20,8 @@ export interface InsulinSummaryStatsProps {
 }
 
 const PERIOD_OPTIONS: { value: InsulinPeriod; label: string }[] = [
+  { value: "24h", label: "24H" },
+  { value: "3d", label: "3D" },
   { value: "7d", label: "7D" },
   { value: "14d", label: "14D" },
   { value: "30d", label: "30D" },

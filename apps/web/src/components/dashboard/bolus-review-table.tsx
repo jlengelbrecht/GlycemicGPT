@@ -21,10 +21,11 @@ export interface BolusReviewTableProps {
 }
 
 const PERIOD_OPTIONS: { value: BolusReviewPeriod; label: string }[] = [
-  { value: "1d", label: "1D" },
+  { value: "24h", label: "24H" },
   { value: "3d", label: "3D" },
   { value: "7d", label: "7D" },
   { value: "14d", label: "14D" },
+  { value: "30d", label: "30D" },
 ];
 
 function formatDateTime(iso: string): string {
@@ -89,11 +90,9 @@ function BolusRow({ bolus }: { bolus: BolusReviewItem }) {
           : "---"}
       </td>
       <td className="px-4 py-3 text-sm text-slate-400 whitespace-nowrap max-w-[200px] truncate">
-        {bolus.is_automated && bolus.control_iq_reason
-          ? bolus.control_iq_reason
-          : bolus.is_automated && bolus.control_iq_mode
-            ? bolus.control_iq_mode
-            : ""}
+        {bolus.is_automated
+          ? (bolus.control_iq_reason || bolus.control_iq_mode || "Auto correction")
+          : ""}
       </td>
     </tr>
   );

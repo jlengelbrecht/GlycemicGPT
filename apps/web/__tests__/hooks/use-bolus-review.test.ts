@@ -70,10 +70,11 @@ describe("useBolusReview", () => {
 
   it("maps each period to correct days", async () => {
     const periods: [BolusReviewPeriod, number][] = [
-      ["1d", 1],
+      ["24h", 1],
       ["3d", 3],
       ["7d", 7],
       ["14d", 14],
+      ["30d", 30],
     ];
 
     for (const [period, expectedDays] of periods) {
@@ -210,9 +211,10 @@ describe("useBolusReview", () => {
   });
 
   it("exports BOLUS_PERIOD_LABELS with correct values", () => {
-    expect(BOLUS_PERIOD_LABELS["1d"]).toBe("1 Day");
+    expect(BOLUS_PERIOD_LABELS["24h"]).toBe("24 Hours");
     expect(BOLUS_PERIOD_LABELS["3d"]).toBe("3 Days");
     expect(BOLUS_PERIOD_LABELS["7d"]).toBe("7 Days");
     expect(BOLUS_PERIOD_LABELS["14d"]).toBe("14 Days");
+    expect(BOLUS_PERIOD_LABELS["30d"]).toBe("30 Days");
   });
 });

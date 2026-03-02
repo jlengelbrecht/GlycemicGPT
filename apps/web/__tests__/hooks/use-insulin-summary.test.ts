@@ -57,6 +57,8 @@ describe("useInsulinSummary", () => {
 
   it("maps each period to correct days", async () => {
     const periods: [InsulinPeriod, number][] = [
+      ["24h", 1],
+      ["3d", 3],
       ["7d", 7],
       ["14d", 14],
       ["30d", 30],
@@ -197,6 +199,8 @@ describe("useInsulinSummary", () => {
   });
 
   it("exports INSULIN_PERIOD_LABELS with correct values", () => {
+    expect(INSULIN_PERIOD_LABELS["24h"]).toBe("24 Hours");
+    expect(INSULIN_PERIOD_LABELS["3d"]).toBe("3 Days");
     expect(INSULIN_PERIOD_LABELS["7d"]).toBe("7 Days");
     expect(INSULIN_PERIOD_LABELS["14d"]).toBe("14 Days");
     expect(INSULIN_PERIOD_LABELS["30d"]).toBe("30 Days");

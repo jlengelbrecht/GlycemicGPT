@@ -14,20 +14,22 @@ import {
   type BolusReviewResponse,
 } from "@/lib/api";
 
-export type BolusReviewPeriod = "1d" | "3d" | "7d" | "14d";
+export type BolusReviewPeriod = "24h" | "3d" | "7d" | "14d" | "30d";
 
 const PERIOD_TO_DAYS: Record<BolusReviewPeriod, number> = {
-  "1d": 1,
+  "24h": 1,
   "3d": 3,
   "7d": 7,
   "14d": 14,
+  "30d": 30,
 };
 
 export const BOLUS_PERIOD_LABELS: Record<BolusReviewPeriod, string> = {
-  "1d": "1 Day",
+  "24h": "24 Hours",
   "3d": "3 Days",
   "7d": "7 Days",
   "14d": "14 Days",
+  "30d": "30 Days",
 };
 
 export interface UseBolusReviewReturn {

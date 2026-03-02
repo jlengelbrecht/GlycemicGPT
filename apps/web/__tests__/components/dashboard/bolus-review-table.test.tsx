@@ -30,7 +30,7 @@ let mockHookReturn: {
   } | null;
   isLoading: boolean;
   error: string | null;
-  period: "1d" | "3d" | "7d" | "14d";
+  period: "24h" | "3d" | "7d" | "14d" | "30d";
   setPeriod: typeof mockSetPeriod;
   refetch: typeof mockRefetch;
 };
@@ -38,10 +38,11 @@ let mockHookReturn: {
 jest.mock("../../../src/hooks/use-bolus-review", () => ({
   useBolusReview: () => mockHookReturn,
   BOLUS_PERIOD_LABELS: {
-    "1d": "1 Day",
+    "24h": "24 Hours",
     "3d": "3 Days",
     "7d": "7 Days",
     "14d": "14 Days",
+    "30d": "30 Days",
   },
 }));
 
@@ -242,6 +243,25 @@ describe("BolusReviewTable", () => {
       expect(screen.getByText("Correction")).toBeInTheDocument();
     });
 
+    it("shows Auto correction fallback when reason and mode are null", () => {
+      mockHookReturn.data = makeData({
+        boluses: [
+          {
+            event_timestamp: "2026-03-01T14:30:00Z",
+            units: 1.2,
+            is_automated: true,
+            control_iq_reason: null,
+            control_iq_mode: null,
+            iob_at_event: null,
+            bg_at_event: null,
+          },
+        ],
+        total_count: 1,
+      });
+      renderComponent();
+      expect(screen.getByText("Auto correction")).toBeInTheDocument();
+    });
+
     it("shows heading text", () => {
       renderComponent();
       expect(screen.getByText("Recent Boluses")).toBeInTheDocument();
@@ -264,12 +284,13 @@ describe("BolusReviewTable", () => {
       mockHookReturn.data = makeData();
     });
 
-    it("renders all 4 period options", () => {
+    it("renders all 5 period options", () => {
       renderComponent();
-      expect(screen.getByRole("radio", { name: "1 Day" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "24 Hours" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "3 Days" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "7 Days" })).toBeInTheDocument();
       expect(screen.getByRole("radio", { name: "14 Days" })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: "30 Days" })).toBeInTheDocument();
     });
 
     it("marks the active period as checked", () => {
@@ -278,7 +299,7 @@ describe("BolusReviewTable", () => {
         "aria-checked",
         "true"
       );
-      expect(screen.getByRole("radio", { name: "1 Day" })).toHaveAttribute(
+      expect(screen.getByRole("radio", { name: "24 Hours" })).toHaveAttribute(
         "aria-checked",
         "false"
       );

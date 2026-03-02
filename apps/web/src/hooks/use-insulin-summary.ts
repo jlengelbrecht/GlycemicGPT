@@ -14,9 +14,11 @@ import {
   type InsulinSummaryResponse,
 } from "@/lib/api";
 
-export type InsulinPeriod = "7d" | "14d" | "30d" | "90d";
+export type InsulinPeriod = "24h" | "3d" | "7d" | "14d" | "30d" | "90d";
 
 const PERIOD_TO_DAYS: Record<InsulinPeriod, number> = {
+  "24h": 1,
+  "3d": 3,
   "7d": 7,
   "14d": 14,
   "30d": 30,
@@ -24,6 +26,8 @@ const PERIOD_TO_DAYS: Record<InsulinPeriod, number> = {
 };
 
 export const INSULIN_PERIOD_LABELS: Record<InsulinPeriod, string> = {
+  "24h": "24 Hours",
+  "3d": "3 Days",
   "7d": "7 Days",
   "14d": "14 Days",
   "30d": "30 Days",
