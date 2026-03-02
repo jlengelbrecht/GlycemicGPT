@@ -33,6 +33,9 @@ const TEAL = "rgb(20, 184, 166)";
 const TEAL_OUTER = "rgba(20, 184, 166, 0.15)";
 const TEAL_INNER = "rgba(20, 184, 166, 0.30)";
 
+/** Clamp a glucose mg/dL value to physiological bounds. */
+const clampMgdl = (v: number): number => Math.max(20, Math.min(500, v));
+
 const AGP_PERIODS: { value: AgpPeriod; label: string }[] = [
   { value: "7d", label: "7D" },
   { value: "14d", label: "14D" },
@@ -75,21 +78,28 @@ export function formatHour(hour: number): string {
 }
 
 export function transformBuckets(buckets: AGPBucket[]): AgpChartPoint[] {
-  return buckets.map((b) => ({
-    hour: b.hour,
-    label: formatHour(b.hour),
-    base: Math.round(b.p10),
-    band_p10_p25: Math.max(0, Math.round(b.p25 - b.p10)),
-    band_p25_p50: Math.max(0, Math.round(b.p50 - b.p25)),
-    band_p50_p75: Math.max(0, Math.round(b.p75 - b.p50)),
-    band_p75_p90: Math.max(0, Math.round(b.p90 - b.p75)),
-    p10: b.p10,
-    p25: b.p25,
-    p50: b.p50,
-    p75: b.p75,
-    p90: b.p90,
-    count: b.count,
-  }));
+  return buckets.map((b) => {
+    const p10 = clampMgdl(b.p10);
+    const p25 = clampMgdl(b.p25);
+    const p50 = clampMgdl(b.p50);
+    const p75 = clampMgdl(b.p75);
+    const p90 = clampMgdl(b.p90);
+    return {
+      hour: b.hour,
+      label: formatHour(b.hour),
+      base: Math.round(p10),
+      band_p10_p25: Math.max(0, Math.round(p25 - p10)),
+      band_p25_p50: Math.max(0, Math.round(p50 - p25)),
+      band_p50_p75: Math.max(0, Math.round(p75 - p50)),
+      band_p75_p90: Math.max(0, Math.round(p90 - p75)),
+      p10,
+      p25,
+      p50,
+      p75,
+      p90,
+      count: b.count,
+    };
+  });
 }
 
 // --- Custom tooltip ---
@@ -172,8 +182,8 @@ export function AgpChart({ className, thresholds }: AgpChartProps) {
     refetch,
   } = useGlucosePercentiles("14d");
 
-  const low = thresholds?.low ?? 70;
-  const high = thresholds?.high ?? 180;
+  const low = clampMgdl(thresholds?.low ?? 70);
+  const high = clampMgdl(thresholds?.high ?? 180);
 
   const chartData = useMemo(() => {
     if (!data?.buckets?.length) return [];

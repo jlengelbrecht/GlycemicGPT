@@ -406,4 +406,16 @@ describe("transformBuckets", () => {
     expect(result[0].hour).toBe(0);
     expect(result[23].hour).toBe(23);
   });
+
+  it("clamps out-of-range glucose values to 20-500 mg/dL", () => {
+    const buckets = [
+      { hour: 0, p10: 5, p25: 15, p50: 100, p75: 200, p90: 600, count: 10 },
+    ];
+    const result = transformBuckets(buckets);
+    expect(result[0].p10).toBe(20);  // clamped from 5
+    expect(result[0].p25).toBe(20);  // clamped from 15
+    expect(result[0].p50).toBe(100); // within range
+    expect(result[0].p90).toBe(500); // clamped from 600
+    expect(result[0].base).toBe(20); // based on clamped p10
+  });
 });

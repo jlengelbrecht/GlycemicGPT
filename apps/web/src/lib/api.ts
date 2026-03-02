@@ -2532,7 +2532,8 @@ export async function getGlucosePercentiles(
   days: number = 14,
   tz?: string
 ): Promise<GlucosePercentilesResponse> {
-  const clampedDays = Math.max(7, Math.min(90, Math.round(days)));
+  const safeDays = Number.isFinite(days) ? days : 14;
+  const clampedDays = Math.max(7, Math.min(90, Math.round(safeDays)));
   const timezone = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const response = await apiFetch(
     `${API_BASE_URL}/api/integrations/glucose/percentiles?days=${clampedDays}&tz=${encodeURIComponent(timezone)}`
