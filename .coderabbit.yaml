@@ -1,13 +1,18 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 
 language: "en-US"
-tone_instructions: "Be direct, technically precise, and concise. Focus on correctness and safety."
+tone_instructions: >
+  Be direct, technically precise, and concise. Focus on correctness, security,
+  and safety. Only comment on issues that affect correctness, security, performance,
+  or maintainability. Do not comment on style preferences, naming conventions, or
+  formatting unless they introduce ambiguity or bugs. Do not suggest refactors
+  unless the current code has a clear defect.
 early_access: false
 enable_free_tier: true
 
 reviews:
-  profile: "assertive"
-  request_changes_workflow: false
+  profile: "chill"
+  request_changes_workflow: true
   high_level_summary: true
   high_level_summary_placeholder: "@coderabbitai summary"
   high_level_summary_in_walkthrough: false
@@ -236,7 +241,7 @@ reviews:
   auto_review:
     enabled: true
     auto_incremental_review: true
-    auto_pause_after_reviewed_commits: 5
+    auto_pause_after_reviewed_commits: 3
     ignore_title_keywords:
       - "WIP"
       - "DO NOT MERGE"
@@ -252,9 +257,9 @@ reviews:
 
   finishing_touches:
     docstrings:
-      enabled: true
+      enabled: false
     unit_tests:
-      enabled: true
+      enabled: false
 
   pre_merge_checks:
     title:
