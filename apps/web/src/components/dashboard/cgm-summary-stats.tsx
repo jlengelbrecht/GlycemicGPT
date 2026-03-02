@@ -42,6 +42,11 @@ function getCgmActiveAssessment(pct: number): { label: string; color: string } {
   return { label: "Low coverage", color: "text-red-400" };
 }
 
+/** Check if a glucose value is within reasonable physiological range. */
+function isReasonableGlucose(value: number): boolean {
+  return Number.isFinite(value) && value >= 20 && value <= 500;
+}
+
 /** Safely format a number, returning "--" for NaN/Infinity. */
 function safeRound(value: number): string {
   if (!Number.isFinite(value)) return "--";
@@ -183,17 +188,17 @@ export function CgmSummaryStats({
           <StatCard
             icon={<TrendingUp className="h-4 w-4 text-blue-400" aria-hidden="true" />}
             label="Avg Glucose"
-            value={safeRound(stats.mean_glucose)}
+            value={isReasonableGlucose(stats.mean_glucose) ? safeRound(stats.mean_glucose) : "--"}
             subtitle="mg/dL"
-            ariaLabel={`Average glucose: ${safeRound(stats.mean_glucose)} mg/dL`}
+            ariaLabel={`Average glucose: ${isReasonableGlucose(stats.mean_glucose) ? `${safeRound(stats.mean_glucose)} mg/dL` : "unavailable"}`}
           />
 
           <StatCard
             icon={<BarChart3 className="h-4 w-4 text-purple-400" aria-hidden="true" />}
             label="Std Dev"
-            value={safeRound(stats.std_dev)}
+            value={isReasonableGlucose(stats.std_dev) ? safeRound(stats.std_dev) : "--"}
             subtitle="mg/dL"
-            ariaLabel={`Standard deviation: ${safeRound(stats.std_dev)} mg/dL`}
+            ariaLabel={`Standard deviation: ${isReasonableGlucose(stats.std_dev) ? `${safeRound(stats.std_dev)} mg/dL` : "unavailable"}`}
           />
 
           <StatCard
