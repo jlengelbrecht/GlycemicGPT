@@ -113,7 +113,7 @@ interface BolusPoint {
   isAutomated: boolean;
   isCorrection: boolean;
   label: string;
-  controlIqMode: string | null;
+  pumpActivityMode: string | null;
   iobAtEvent: number | null;
   bgAtEvent: number | null;
 }
@@ -123,7 +123,7 @@ interface BasalPoint {
   rate: number;
   value: number; // alias for rate -- LTTB compatibility
   isAutomated: boolean;
-  controlIqMode: string | null;
+  pumpActivityMode: string | null;
   basalAdjustmentPct: number | null;
 }
 
@@ -132,29 +132,25 @@ const MODE_COLORS: Record<string, string> = {
   sleep: "#7E57C2",      // Purple
   exercise: "#FF9800",   // Orange
   activity: "#FF9800",   // Orange (alias for pumps that call it "activity")
-  auto: "#00BCD4",       // Teal
-  standard: "#00BCD4",   // Teal (alias)
-  profile: "#78909C",    // Blue-grey
+  automated: "#00BCD4",  // Teal
+  manual: "#78909C",     // Blue-grey
 };
 
 // Pump-agnostic mode display labels
 const MODE_LABELS: Record<string, string> = {
-  sleep: "Sleep Mode",
-  exercise: "Activity Mode",
-  activity: "Activity Mode",
-  auto: "Auto",
-  standard: "Auto",
-  profile: "Profile",
+  sleep: "Sleep",
+  exercise: "Activity",
+  activity: "Activity",
 };
 
 function getBasalModeColor(mode: string | null, isAutomated: boolean): string {
-  if (mode && MODE_COLORS[mode]) return MODE_COLORS[mode];
-  return isAutomated ? MODE_COLORS.auto : MODE_COLORS.profile;
+  if (mode && mode !== "none" && MODE_COLORS[mode]) return MODE_COLORS[mode];
+  return isAutomated ? MODE_COLORS.automated : MODE_COLORS.manual;
 }
 
 function getBasalModeLabel(mode: string | null, isAutomated: boolean): string {
-  if (mode && MODE_LABELS[mode]) return MODE_LABELS[mode];
-  return isAutomated ? "Auto" : "Profile";
+  if (mode && mode !== "none" && MODE_LABELS[mode]) return MODE_LABELS[mode];
+  return isAutomated ? "Automated" : "Manual";
 }
 
 /** Convert hex color to rgba with alpha (avoids fragile hex+alpha string concatenation) */
@@ -174,7 +170,7 @@ function transformBolusEvents(events: PumpEventReading[]): BolusPoint[] {
       isAutomated: e.is_automated,
       isCorrection: e.event_type === "correction",
       label: `${e.units!.toFixed(1)}u`,
-      controlIqMode: e.control_iq_mode,
+      pumpActivityMode: e.pump_activity_mode,
       iobAtEvent: e.iob_at_event,
       bgAtEvent: e.bg_at_event,
     }))
@@ -189,7 +185,7 @@ function transformBasalEvents(events: PumpEventReading[]): BasalPoint[] {
       rate: e.units!,
       value: e.units!, // LTTB needs `value`
       isAutomated: e.is_automated,
-      controlIqMode: e.control_iq_mode,
+      pumpActivityMode: e.pump_activity_mode,
       basalAdjustmentPct: e.basal_adjustment_pct,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -224,7 +220,7 @@ function ChartTooltip({
     const isAuto = typeof point.isAutomated === "boolean" ? point.isAutomated : false;
     const bolusType = isAuto ? "Auto Correction" : "Manual Bolus";
     const typeColor = isAuto ? "#3b82f6" : "#8b5cf6";
-    const mode = typeof point.controlIqMode === "string" ? point.controlIqMode : null;
+    const mode = typeof point.pumpActivityMode === "string" ? point.pumpActivityMode : null;
     const iob = typeof point.iobAtEvent === "number" ? point.iobAtEvent : null;
     const bg = typeof point.bgAtEvent === "number" ? point.bgAtEvent : null;
     const ts = typeof point.timestamp === "number" ? point.timestamp : null;
@@ -233,7 +229,8 @@ function ChartTooltip({
         <p className="font-semibold" style={{ color: typeColor }}>
           {point.units.toFixed(1)}u {bolusType}
         </p>
-        {mode && mode !== "standard" && (
+        {/* "standard" guard: pre-migration data may still have this value */}
+        {mode && mode !== "none" && mode !== "standard" && (
           <p className="text-slate-400 text-xs">{getBasalModeLabel(mode, isAuto)}</p>
         )}
         {iob != null && (
@@ -249,7 +246,7 @@ function ChartTooltip({
 
   // Basal data point (has `rate` field)
   if ("rate" in point && typeof point.rate === "number") {
-    const mode = typeof point.controlIqMode === "string" ? point.controlIqMode : null;
+    const mode = typeof point.pumpActivityMode === "string" ? point.pumpActivityMode : null;
     const isAuto = typeof point.isAutomated === "boolean" ? point.isAutomated : false;
     const modeColor = getBasalModeColor(mode, isAuto);
     const modeLabel = getBasalModeLabel(mode, isAuto);
@@ -636,11 +633,11 @@ export function GlucoseTrendChart({
   const basalModesPresent = useMemo(() => {
     const modes = new Set<string>();
     for (const b of basalData) {
-      const m = b.controlIqMode;
+      const m = b.pumpActivityMode;
       if (m === "sleep") modes.add("sleep");
       else if (m === "exercise" || m === "activity") modes.add("exercise");
-      else if (b.isAutomated) modes.add("auto");
-      else modes.add("profile");
+      else if (b.isAutomated) modes.add("automated");
+      else modes.add("manual");
     }
     return modes;
   }, [basalData]);
@@ -989,7 +986,7 @@ export function GlucoseTrendChart({
 
             {/* Mode overlay bands -- full-height colored bands for sleep/exercise modes */}
             {basalData.map((b, i) => {
-              const m = b.controlIqMode;
+              const m = b.pumpActivityMode;
               if (m !== "sleep" && m !== "exercise" && m !== "activity") return null;
               const nextTs = i + 1 < basalData.length ? basalData[i + 1].timestamp : xDomain[1];
               const color = m === "sleep" ? MODE_COLORS.sleep : MODE_COLORS.exercise;
@@ -1011,7 +1008,7 @@ export function GlucoseTrendChart({
             {/* Basal rate segments -- color-coded by pump mode */}
             {basalData.map((b, i) => {
               const nextTs = i + 1 < basalData.length ? basalData[i + 1].timestamp : xDomain[1];
-              const color = getBasalModeColor(b.controlIqMode, b.isAutomated);
+              const color = getBasalModeColor(b.pumpActivityMode, b.isAutomated);
               return (
                 <ReferenceArea
                   key={`basal-${b.timestamp}`}
@@ -1117,24 +1114,24 @@ export function GlucoseTrendChart({
           </span>
         )}
         {/* Basal mode legend entries */}
-        {basalModesPresent.has("auto") && (
+        {basalModesPresent.has("automated") && (
           <span className="flex items-center gap-1">
             <span
               className="w-3 h-2 inline-block"
-              style={{ backgroundColor: hexToRgba(MODE_COLORS.auto, 0.15), border: `1px solid ${MODE_COLORS.auto}` }}
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.automated, 0.15), border: `1px solid ${MODE_COLORS.automated}` }}
               aria-hidden="true"
             />
-            Auto
+            Automated
           </span>
         )}
-        {basalModesPresent.has("profile") && (
+        {basalModesPresent.has("manual") && (
           <span className="flex items-center gap-1">
             <span
               className="w-3 h-2 inline-block"
-              style={{ backgroundColor: hexToRgba(MODE_COLORS.profile, 0.15), border: `1px solid ${MODE_COLORS.profile}` }}
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.manual, 0.15), border: `1px solid ${MODE_COLORS.manual}` }}
               aria-hidden="true"
             />
-            Profile
+            Manual
           </span>
         )}
         {basalModesPresent.has("sleep") && (
@@ -1144,7 +1141,7 @@ export function GlucoseTrendChart({
               style={{ backgroundColor: hexToRgba(MODE_COLORS.sleep, 0.15), border: `1px solid ${MODE_COLORS.sleep}` }}
               aria-hidden="true"
             />
-            Sleep Mode
+            Sleep
           </span>
         )}
         {basalModesPresent.has("exercise") && (
@@ -1154,7 +1151,7 @@ export function GlucoseTrendChart({
               style={{ backgroundColor: hexToRgba(MODE_COLORS.exercise, 0.15), border: `1px solid ${MODE_COLORS.exercise}` }}
               aria-hidden="true"
             />
-            Activity Mode
+            Activity
           </span>
         )}
       </div>
