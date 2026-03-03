@@ -181,8 +181,9 @@ class PumpEventPushItem(BaseModel):
             old = data.get("control_iq_mode")
             new = data.get("pump_activity_mode")
             if old and not new:
-                # Map legacy "standard" -> "none"
-                data["pump_activity_mode"] = "none" if old == "standard" else old
+                # Map legacy "standard"/"Standard"/"STANDARD" -> "none"
+                old_lower = old.lower() if isinstance(old, str) else old
+                data["pump_activity_mode"] = "none" if old_lower == "standard" else old
                 data.pop("control_iq_mode", None)
         return data
 

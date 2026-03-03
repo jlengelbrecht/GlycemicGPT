@@ -38,6 +38,7 @@ class PumpEventMapperTest {
         assertEquals(0.8f, dto.units!!, 0.001f)
         assertEquals(true, dto.isAutomated)
         assertEquals("sleep", dto.pumpActivityMode)
+        assertEquals("sleep", dto.controlIqMode) // backwards compat field
     }
 
     @Test

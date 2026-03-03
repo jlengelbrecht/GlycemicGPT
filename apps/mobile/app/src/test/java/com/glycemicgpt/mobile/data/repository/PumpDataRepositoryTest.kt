@@ -117,6 +117,22 @@ class PumpDataRepositoryTest {
         assertEquals(PumpActivityMode.NONE, result!!.activityMode)
     }
 
+    @Test
+    fun `observeLatestBasal maps legacy STANDARD mode to NONE`() = runTest {
+        val entity = BasalReadingEntity(
+            id = 1,
+            rate = 0.5f,
+            isAutomated = true,
+            activityMode = "STANDARD",
+            timestampMs = 1000L,
+        )
+        coEvery { pumpDao.observeLatestBasal() } returns flowOf(entity)
+
+        val result = repository.observeLatestBasal().first()
+        assertNotNull(result)
+        assertEquals(PumpActivityMode.NONE, result!!.activityMode)
+    }
+
     // -- Battery --------------------------------------------------------------
 
     @Test
