@@ -12,13 +12,11 @@ import {
   ResponsiveContainer,
   ComposedChart,
   Scatter,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ReferenceArea,
-  ReferenceLine,
   Cell,
 } from "recharts";
 import { ZoomIn, ZoomOut } from "lucide-react";
@@ -30,6 +28,8 @@ import { type ChartTimePeriod, PERIOD_TO_MS, isMultiDay } from "@/lib/chart-peri
 import { GLUCOSE_THRESHOLDS } from "./glucose-hero";
 import { useGlucoseHistory } from "@/hooks/use-glucose-history";
 import { usePumpEvents } from "@/hooks/use-pump-events";
+import { TREND_ARROWS, TREND_DESCRIPTIONS, type TrendDirection } from "./trend-arrow";
+import { mapBackendTrendToFrontend } from "@/hooks/use-glucose-stream";
 
 // --- Color mapping by glucose classification ---
 
@@ -79,6 +79,8 @@ interface ChartPoint {
   value: number;
   color: string;
   iso: string;
+  trend: TrendDirection;
+  trendRate: number | null;
 }
 
 function transformReadings(
@@ -91,10 +93,13 @@ function transformReadings(
       value: r.value,
       color: getPointColor(r.value, thresholds),
       iso: r.reading_timestamp,
+      trend: mapBackendTrendToFrontend(r.trend),
+      trendRate: r.trend_rate,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   // Apply LTTB downsampling for large datasets (multi-day views)
+  // LTTB selects original objects so extra fields survive downsampling
   return lttbDownsample(sorted, MAX_CHART_POINTS);
 }
 
@@ -106,12 +111,56 @@ interface BolusPoint {
   isAutomated: boolean;
   isCorrection: boolean;
   label: string;
+  controlIqMode: string | null;
+  iobAtEvent: number | null;
+  bgAtEvent: number | null;
 }
 
 interface BasalPoint {
   timestamp: number;
   rate: number;
   value: number; // alias for rate -- LTTB compatibility
+  isAutomated: boolean;
+  controlIqMode: string | null;
+  basalAdjustmentPct: number | null;
+}
+
+// Pump-agnostic mode colors (matches mobile ChartColors)
+const MODE_COLORS: Record<string, string> = {
+  sleep: "#7E57C2",      // Purple
+  exercise: "#FF9800",   // Orange
+  activity: "#FF9800",   // Orange (alias for pumps that call it "activity")
+  auto: "#00BCD4",       // Teal
+  standard: "#00BCD4",   // Teal (alias)
+  profile: "#78909C",    // Blue-grey
+};
+
+// Pump-agnostic mode display labels
+const MODE_LABELS: Record<string, string> = {
+  sleep: "Sleep Mode",
+  exercise: "Activity Mode",
+  activity: "Activity Mode",
+  auto: "Auto",
+  standard: "Auto",
+  profile: "Profile",
+};
+
+function getBasalModeColor(mode: string | null, isAutomated: boolean): string {
+  if (mode && MODE_COLORS[mode]) return MODE_COLORS[mode];
+  return isAutomated ? MODE_COLORS.auto : MODE_COLORS.profile;
+}
+
+function getBasalModeLabel(mode: string | null, isAutomated: boolean): string {
+  if (mode && MODE_LABELS[mode]) return MODE_LABELS[mode];
+  return isAutomated ? "Auto" : "Profile";
+}
+
+/** Convert hex color to rgba with alpha (avoids fragile hex+alpha string concatenation) */
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function transformBolusEvents(events: PumpEventReading[]): BolusPoint[] {
@@ -123,6 +172,9 @@ function transformBolusEvents(events: PumpEventReading[]): BolusPoint[] {
       isAutomated: e.is_automated,
       isCorrection: e.event_type === "correction",
       label: `${e.units!.toFixed(1)}u`,
+      controlIqMode: e.control_iq_mode,
+      iobAtEvent: e.iob_at_event,
+      bgAtEvent: e.bg_at_event,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -134,6 +186,9 @@ function transformBasalEvents(events: PumpEventReading[]): BasalPoint[] {
       timestamp: new Date(e.event_timestamp).getTime(),
       rate: e.units!,
       value: e.units!, // LTTB needs `value`
+      isAutomated: e.is_automated,
+      controlIqMode: e.control_iq_mode,
+      basalAdjustmentPct: e.basal_adjustment_pct,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
@@ -162,25 +217,74 @@ function ChartTooltip({
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   };
 
+  // Bolus scatter point (has `units` field but no `rate`)
+  if ("units" in point && typeof point.units === "number" && !("rate" in point)) {
+    const isAuto = typeof point.isAutomated === "boolean" ? point.isAutomated : false;
+    const bolusType = isAuto ? "Auto Correction" : "Manual Bolus";
+    const typeColor = isAuto ? "#3b82f6" : "#8b5cf6";
+    const mode = typeof point.controlIqMode === "string" ? point.controlIqMode : null;
+    const iob = typeof point.iobAtEvent === "number" ? point.iobAtEvent : null;
+    const bg = typeof point.bgAtEvent === "number" ? point.bgAtEvent : null;
+    const ts = typeof point.timestamp === "number" ? point.timestamp : null;
+    return (
+      <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm shadow-lg max-w-[200px]">
+        <p className="font-semibold" style={{ color: typeColor }}>
+          {point.units.toFixed(1)}u {bolusType}
+        </p>
+        {mode && mode !== "standard" && (
+          <p className="text-slate-400 text-xs">{getBasalModeLabel(mode, isAuto)}</p>
+        )}
+        {iob != null && (
+          <p className="text-slate-400 text-xs">IoB: {iob.toFixed(1)}u</p>
+        )}
+        {bg != null && (
+          <p className="text-slate-400 text-xs">BG: {bg} mg/dL</p>
+        )}
+        {ts != null && <p className="text-slate-400 text-xs">{formatTime(ts)}</p>}
+      </div>
+    );
+  }
+
   // Basal data point (has `rate` field)
   if ("rate" in point && typeof point.rate === "number") {
+    const mode = typeof point.controlIqMode === "string" ? point.controlIqMode : null;
+    const isAuto = typeof point.isAutomated === "boolean" ? point.isAutomated : false;
+    const modeColor = getBasalModeColor(mode, isAuto);
+    const modeLabel = getBasalModeLabel(mode, isAuto);
+    const adjustPct = typeof point.basalAdjustmentPct === "number" ? point.basalAdjustmentPct : null;
+    const ts = typeof point.timestamp === "number" ? point.timestamp : null;
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm shadow-lg">
-        <p className="font-semibold text-blue-400">
+        <p className="font-semibold" style={{ color: modeColor }}>
           Basal: {point.rate.toFixed(2)} u/hr
         </p>
-        <p className="text-slate-400 text-xs">{formatTime(point.timestamp as number)}</p>
+        <p className="text-slate-400 text-xs">{modeLabel}</p>
+        {adjustPct != null && adjustPct !== 0 && (
+          <p className="text-slate-400 text-xs">
+            {adjustPct > 0 ? "+" : ""}{adjustPct}% from profile
+          </p>
+        )}
+        {ts != null && <p className="text-slate-400 text-xs">{formatTime(ts)}</p>}
       </div>
     );
   }
 
   // Glucose data point (has `iso` and `value` fields)
   if (!point.iso || typeof point.value !== "number") return null;
+  const trend = point.trend as TrendDirection | undefined;
+  const trendArrow = trend ? TREND_ARROWS[trend] : null;
+  const trendLabel = trend ? TREND_DESCRIPTIONS[trend] : null;
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm shadow-lg">
       <p className="font-semibold" style={{ color: point.color as string }}>
         {point.value} mg/dL
+        {trendArrow && trendArrow !== "?" && (
+          <span className="ml-1">{trendArrow}</span>
+        )}
       </p>
+      {trendLabel && trendLabel !== "unknown trend" && (
+        <p className="text-slate-400 text-xs capitalize">{trendLabel}</p>
+      )}
       <p className="text-slate-400 text-xs">{formatTime(point.iso as string)}</p>
     </div>
   );
@@ -370,6 +474,53 @@ function BrushSlider({ fullDomain, zoomDomain, onZoomChange }: BrushSliderProps)
   );
 }
 
+// --- Custom bolus marker for Scatter shape ---
+
+// Recharts Scatter shape prop types are loosely typed -- narrow as much as possible
+function renderBolusMarker(props: { cx?: number; cy?: number; payload?: Record<string, unknown> }) {
+  const { cx, cy, payload } = props;
+  if (cx == null || cy == null || !payload) return <g />;
+  const p = payload as unknown as BolusPoint;
+  const isAuto = p.isAutomated;
+  const color = isAuto ? "#3b82f6" : "#8b5cf6";
+  const r = 5;
+  return (
+    <g>
+      {isAuto ? (
+        <polygon
+          points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+          fill={color}
+          opacity={0.9}
+        />
+      ) : (
+        <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.9} />
+      )}
+      <text
+        x={cx}
+        y={cy - r - 3}
+        textAnchor="middle"
+        fill={color}
+        fontSize={9}
+        fontWeight={600}
+      >
+        {p.label}
+      </text>
+      {isAuto && (
+        <text
+          x={cx}
+          y={cy - r - 13}
+          textAnchor="middle"
+          fill={color}
+          fontSize={7}
+          opacity={0.8}
+        >
+          AUTO
+        </text>
+      )}
+    </g>
+  );
+}
+
 // --- Main component ---
 
 export interface GlucoseTrendChartProps {
@@ -419,8 +570,12 @@ export function GlucoseTrendChart({
   const bolusData = useMemo(() => transformBolusEvents(pumpEvents), [pumpEvents]);
   const basalData = useMemo(() => {
     const points = transformBasalEvents(pumpEvents);
-    // Downsample basal for multi-day views to avoid SVG overload
-    return lttbDownsample(points, MAX_CHART_POINTS);
+    // NOTE: Do NOT LTTB-downsample basal data. LTTB selects points based on
+    // rate value changes and would silently drop mode transitions (e.g., auto
+    // -> sleep) when the rate doesn't change. We keep all points to preserve
+    // accurate mode overlay coloring. The per-segment ReferenceArea rendering
+    // naturally clips to the visible domain.
+    return points;
   }, [pumpEvents]);
 
   const displayBolus = useMemo(() => {
@@ -428,6 +583,28 @@ export function GlucoseTrendChart({
     // Keep the largest boluses when there are too many markers
     return [...bolusData].sort((a, b) => b.units - a.units).slice(0, MAX_BOLUS_MARKERS);
   }, [bolusData]);
+
+  // Compute which bolus types and basal modes are present (for legend)
+  const bolusTypesPresent = useMemo(() => {
+    const types = new Set<string>();
+    for (const b of displayBolus) {
+      if (b.isAutomated) types.add("auto_correction");
+      else types.add("manual_bolus");
+    }
+    return types;
+  }, [displayBolus]);
+
+  const basalModesPresent = useMemo(() => {
+    const modes = new Set<string>();
+    for (const b of basalData) {
+      const m = b.controlIqMode;
+      if (m === "sleep") modes.add("sleep");
+      else if (m === "exercise" || m === "activity") modes.add("exercise");
+      else if (b.isAutomated) modes.add("auto");
+      else modes.add("profile");
+    }
+    return modes;
+  }, [basalData]);
 
   // Full time window for the selected period.
   // Depends on `data` so it recomputes with fresh Date.now() on refetch.
@@ -560,6 +737,15 @@ export function GlucoseTrendChart({
     }
     return [Math.min(40, min - 10), Math.max(300, max + 10)];
   }, [data]);
+
+  // Bolus scatter data with y-position for chart rendering
+  // Memoized to avoid recreating array on every render (adversarial fix #1)
+  const bolusScatterData = useMemo(() => {
+    // Place bolus markers at 95% of the y-range to avoid overlapping glucose dots
+    const yOffset = (yDomain[1] - yDomain[0]) * 0.05;
+    const bolusY = yDomain[1] - yOffset;
+    return displayBolus.map((b) => ({ ...b, value: bolusY }));
+  }, [displayBolus, yDomain]);
 
   // Insulin Y-axis domain for basal area (right side)
   const insulinDomain = useMemo(() => {
@@ -740,20 +926,47 @@ export function GlucoseTrendChart({
               hide
             />
 
-            {/* Basal rate area (bottom portion of chart) */}
-            {basalData.length > 0 && (
-              <Area
-                yAxisId="insulin"
-                data={basalData}
-                dataKey="rate"
-                type="stepAfter"
-                fill="rgba(59,130,246,0.15)"
-                stroke="rgb(59,130,246)"
-                strokeWidth={1}
-                dot={false}
-                isAnimationActive={false}
-              />
-            )}
+            {/* Mode overlay bands -- full-height colored bands for sleep/exercise modes */}
+            {basalData.map((b, i) => {
+              const m = b.controlIqMode;
+              if (m !== "sleep" && m !== "exercise" && m !== "activity") return null;
+              const nextTs = i + 1 < basalData.length ? basalData[i + 1].timestamp : xDomain[1];
+              const color = m === "sleep" ? MODE_COLORS.sleep : MODE_COLORS.exercise;
+              return (
+                <ReferenceArea
+                  key={`mode-${b.timestamp}`}
+                  yAxisId="glucose"
+                  x1={b.timestamp}
+                  x2={nextTs}
+                  y1={yDomain[0]}
+                  y2={yDomain[1]}
+                  fill={color}
+                  fillOpacity={0.06}
+                  stroke="none"
+                />
+              );
+            })}
+
+            {/* Basal rate segments -- color-coded by pump mode */}
+            {basalData.map((b, i) => {
+              const nextTs = i + 1 < basalData.length ? basalData[i + 1].timestamp : xDomain[1];
+              const color = getBasalModeColor(b.controlIqMode, b.isAutomated);
+              return (
+                <ReferenceArea
+                  key={`basal-${b.timestamp}`}
+                  yAxisId="insulin"
+                  x1={b.timestamp}
+                  x2={nextTs}
+                  y1={0}
+                  y2={b.rate}
+                  fill={color}
+                  fillOpacity={0.15}
+                  stroke={color}
+                  strokeOpacity={0.6}
+                  strokeWidth={1}
+                />
+              );
+            })}
 
             {/* Glucose scatter points -- smaller dots for multi-day views */}
             <Scatter yAxisId="glucose" data={data} shape="circle" isAnimationActive={false}>
@@ -762,24 +975,15 @@ export function GlucoseTrendChart({
               ))}
             </Scatter>
 
-            {/* Bolus delivery markers (capped for multi-day readability) */}
-            {displayBolus.map((b, i) => (
-              <ReferenceLine
-                key={`bolus-${b.timestamp}-${i}`}
+            {/* Bolus markers as hoverable scatter points near chart top */}
+            {bolusScatterData.length > 0 && (
+              <Scatter
                 yAxisId="glucose"
-                x={b.timestamp}
-                stroke={b.isCorrection ? "#3b82f6" : "#8b5cf6"}
-                strokeDasharray="4 3"
-                strokeWidth={1.5}
-                label={{
-                  value: b.label,
-                  position: "top",
-                  fill: b.isCorrection ? "#3b82f6" : "#8b5cf6",
-                  fontSize: 10,
-                  fontWeight: 600,
-                }}
+                data={bolusScatterData}
+                shape={renderBolusMarker}
+                isAnimationActive={false}
               />
-            ))}
+            )}
 
             {/* Drag-select zoom overlay */}
             {selectionStart != null && selectionEnd != null && (
@@ -832,22 +1036,64 @@ export function GlucoseTrendChart({
           />
           Urgent
         </span>
-        {displayBolus.length > 0 && (
+        {/* Bolus type legend entries */}
+        {bolusTypesPresent.has("auto_correction") && (
           <span className="flex items-center gap-1">
-            <span
-              className="w-3 h-0 border-t-2 border-dashed border-violet-500 inline-block"
-              aria-hidden="true"
-            />
-            Bolus
+            <svg width="10" height="10" aria-hidden="true" className="inline-block">
+              <polygon points="5,0 10,5 5,10 0,5" fill="#3b82f6" />
+            </svg>
+            Auto Correction
           </span>
         )}
-        {basalData.length > 0 && (
+        {bolusTypesPresent.has("manual_bolus") && (
           <span className="flex items-center gap-1">
             <span
-              className="w-3 h-2 bg-blue-500/20 border border-blue-500 inline-block"
+              className="w-2.5 h-2.5 rounded-full inline-block"
+              style={{ backgroundColor: "#8b5cf6" }}
               aria-hidden="true"
             />
-            Basal
+            Manual Bolus
+          </span>
+        )}
+        {/* Basal mode legend entries */}
+        {basalModesPresent.has("auto") && (
+          <span className="flex items-center gap-1">
+            <span
+              className="w-3 h-2 inline-block"
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.auto, 0.15), border: `1px solid ${MODE_COLORS.auto}` }}
+              aria-hidden="true"
+            />
+            Auto
+          </span>
+        )}
+        {basalModesPresent.has("profile") && (
+          <span className="flex items-center gap-1">
+            <span
+              className="w-3 h-2 inline-block"
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.profile, 0.15), border: `1px solid ${MODE_COLORS.profile}` }}
+              aria-hidden="true"
+            />
+            Profile
+          </span>
+        )}
+        {basalModesPresent.has("sleep") && (
+          <span className="flex items-center gap-1">
+            <span
+              className="w-3 h-2 inline-block"
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.sleep, 0.15), border: `1px solid ${MODE_COLORS.sleep}` }}
+              aria-hidden="true"
+            />
+            Sleep Mode
+          </span>
+        )}
+        {basalModesPresent.has("exercise") && (
+          <span className="flex items-center gap-1">
+            <span
+              className="w-3 h-2 inline-block"
+              style={{ backgroundColor: hexToRgba(MODE_COLORS.exercise, 0.15), border: `1px solid ${MODE_COLORS.exercise}` }}
+              aria-hidden="true"
+            />
+            Activity Mode
           </span>
         )}
       </div>
