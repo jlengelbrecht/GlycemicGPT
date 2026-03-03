@@ -388,6 +388,7 @@ function BrushSlider({ fullDomain, zoomDomain, onZoomChange }: BrushSliderProps)
     if (!dragType) return;
 
     const onMove = (e: MouseEvent | TouchEvent) => {
+      if ("touches" in e) e.preventDefault(); // Prevent page scroll during brush drag
       const touch = "touches" in e ? (e.touches[0] ?? e.changedTouches?.[0]) : null;
       const clientX = touch ? touch.clientX : (e as MouseEvent).clientX;
       if (clientX == null) return;

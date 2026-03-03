@@ -218,7 +218,7 @@ private fun ChartLegend(
         if ("sleep" in basalModesPresent) LegendItem(color = ChartColors.BasalSleep, label = "Sleep")
         if ("exercise" in basalModesPresent) LegendItem(color = ChartColors.BasalExercise, label = "Exercise")
         if ("auto_correction" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "Auto Correction")
-        if ("manual_correction" in bolusTypesPresent) LegendItem(color = ChartColors.ManualCorrection, label = "Correction")
+        if ("manual_correction" in bolusTypesPresent) LegendItem(color = ChartColors.ManualCorrection, label = "Manual Correction")
         if ("meal_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Bolus, label = "Meal Bolus")
         if (hasIob) LegendItem(color = iobColor.copy(alpha = 0.7f), label = "IoB")
     }
