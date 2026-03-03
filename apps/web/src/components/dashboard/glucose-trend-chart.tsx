@@ -161,9 +161,20 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+const MAX_BOLUS_UNITS = 25; // align with backend safety limits
+const MAX_BASAL_U_PER_HR = 15; // align with backend safety limits
+const MIN_GLUCOSE_MGDL = 20;
+const MAX_GLUCOSE_MGDL = 500;
+
 function transformBolusEvents(events: PumpEventReading[]): BolusPoint[] {
   return events
-    .filter((e) => (e.event_type === "bolus" || e.event_type === "correction") && e.units != null && e.units > 0)
+    .filter(
+      (e) =>
+        (e.event_type === "bolus" || e.event_type === "correction") &&
+        e.units != null &&
+        e.units > 0 &&
+        e.units <= MAX_BOLUS_UNITS,
+    )
     .map((e) => ({
       timestamp: new Date(e.event_timestamp).getTime(),
       units: e.units!,
@@ -172,14 +183,25 @@ function transformBolusEvents(events: PumpEventReading[]): BolusPoint[] {
       label: `${e.units!.toFixed(1)}u`,
       pumpActivityMode: e.pump_activity_mode,
       iobAtEvent: e.iob_at_event,
-      bgAtEvent: e.bg_at_event,
+      bgAtEvent:
+        typeof e.bg_at_event === "number" &&
+        e.bg_at_event >= MIN_GLUCOSE_MGDL &&
+        e.bg_at_event <= MAX_GLUCOSE_MGDL
+          ? e.bg_at_event
+          : null,
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 
 function transformBasalEvents(events: PumpEventReading[]): BasalPoint[] {
   return events
-    .filter((e) => e.event_type === "basal" && e.units != null)
+    .filter(
+      (e) =>
+        e.event_type === "basal" &&
+        e.units != null &&
+        e.units >= 0 &&
+        e.units <= MAX_BASAL_U_PER_HR,
+    )
     .map((e) => ({
       timestamp: new Date(e.event_timestamp).getTime(),
       rate: e.units!,

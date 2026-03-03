@@ -64,7 +64,7 @@ function makeBoluses() {
       units: 0.8,
       is_automated: true,
       control_iq_reason: "Correction",
-      pump_activity_mode: "Auto",
+      pump_activity_mode: "none",
       iob_at_event: 1.5,
       bg_at_event: 210,
     },
@@ -243,7 +243,7 @@ describe("BolusReviewTable", () => {
       expect(screen.getByText("Correction")).toBeInTheDocument();
     });
 
-    it("shows Auto correction fallback when reason and mode are null", () => {
+    it("shows Automated correction fallback when reason and mode are null", () => {
       mockHookReturn.data = makeData({
         boluses: [
           {
@@ -259,7 +259,7 @@ describe("BolusReviewTable", () => {
         total_count: 1,
       });
       renderComponent();
-      expect(screen.getByText("Auto correction")).toBeInTheDocument();
+      expect(screen.getByText("Automated correction")).toBeInTheDocument();
     });
 
     it("shows heading text", () => {

@@ -183,8 +183,9 @@ fun GlucoseTrendChart(
                     buildSet {
                         for (b in bolusEvents) {
                             when {
-                                b.isAutomated -> add("auto_correction")
+                                b.isAutomated && b.isCorrection -> add("auto_correction")
                                 b.isCorrection -> add("manual_correction")
+                                b.isAutomated -> add("auto_correction")
                                 else -> add("meal_bolus")
                             }
                         }
@@ -616,9 +617,10 @@ private fun DrawScope.drawBolusMarkers(
         prevX = x
 
         val color = when {
-            event.isAutomated -> ChartColors.Correction        // Pink: pump auto-correction
-            event.isCorrection -> ChartColors.ManualCorrection  // Deep orange: user correction
-            else -> ChartColors.Bolus                           // Purple: meal bolus
+            event.isAutomated && event.isCorrection -> ChartColors.Correction        // Pink: pump auto-correction
+            event.isCorrection -> ChartColors.ManualCorrection                        // Deep orange: user correction
+            event.isAutomated -> ChartColors.Correction                               // Pink: other automated bolus
+            else -> ChartColors.Bolus                                                 // Purple: meal bolus
         }
 
         val markerY = baseMarkerY + staggerLevel * staggerStep

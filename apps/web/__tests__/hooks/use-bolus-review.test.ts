@@ -37,7 +37,7 @@ function makeResponse(overrides?: Partial<BolusReviewResponse>): BolusReviewResp
         units: 0.8,
         is_automated: true,
         control_iq_reason: "Correction",
-        pump_activity_mode: "Auto",
+        pump_activity_mode: "none",
         iob_at_event: 1.5,
         bg_at_event: 210,
       },

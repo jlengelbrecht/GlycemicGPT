@@ -6,6 +6,7 @@ import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
+import java.util.Locale
 
 /**
  * Maps domain models to [PumpEventDto] for backend sync.
@@ -20,7 +21,7 @@ object PumpEventMapper {
         )
 
     fun fromBasal(reading: BasalReading): PumpEventDto {
-        val mode = reading.activityMode.name.lowercase()
+        val mode = reading.activityMode.name.lowercase(Locale.ROOT)
         return PumpEventDto(
             eventType = "basal",
             eventTimestamp = reading.timestamp,
