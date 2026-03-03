@@ -87,7 +87,9 @@ function transformReadings(
   readings: GlucoseHistoryReading[],
   thresholds?: { urgentLow: number; low: number; high: number; urgentHigh: number }
 ): ChartPoint[] {
+  // Filter to physiological bounds (20-500 mg/dL) -- matches SSE validation
   const sorted = readings
+    .filter((r) => r.value >= 20 && r.value <= 500)
     .map((r) => ({
       timestamp: new Date(r.reading_timestamp).getTime(),
       value: r.value,
@@ -337,6 +339,10 @@ function formatXTick(epoch: number, multiDay: boolean): string {
 
 // --- Brush slider for zoom pan ---
 
+// Keyboard step sizes for brush slider arrow key navigation
+const KEY_STEP_MS = 5 * 60 * 1000;       // 5 minutes per arrow key
+const KEY_STEP_SHIFT_MS = 30 * 60 * 1000; // 30 minutes with Shift
+
 interface BrushSliderProps {
   fullDomain: [number, number];
   zoomDomain: [number, number] | null;
@@ -382,6 +388,24 @@ function BrushSlider({ fullDomain, zoomDomain, onZoomChange }: BrushSliderProps)
       dragStartRef.current = { clientX, domain: [...zoomRef.current] as [number, number] };
     },
     [],
+  );
+
+  const handleHandleKeyDown = useCallback(
+    (edge: "left" | "right", e: React.KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const step = e.shiftKey ? KEY_STEP_SHIFT_MS : KEY_STEP_MS;
+      const delta = e.key === "ArrowRight" ? step : -step;
+      const current = zoomRef.current;
+      if (edge === "left") {
+        const newLeft = Math.max(fullDomain[0], Math.min(current[0] + delta, current[1] - MIN_ZOOM_MS));
+        onZoomChange([newLeft, current[1]]);
+      } else {
+        const newRight = Math.min(fullDomain[1], Math.max(current[1] + delta, current[0] + MIN_ZOOM_MS));
+        onZoomChange([current[0], newRight]);
+      }
+    },
+    [fullDomain, onZoomChange],
   );
 
   useEffect(() => {
@@ -452,21 +476,35 @@ function BrushSlider({ fullDomain, zoomDomain, onZoomChange }: BrushSliderProps)
         onMouseDown={(e) => handlePointerDown("pan", e)}
         onTouchStart={(e) => handlePointerDown("pan", e)}
       >
-        {/* Left handle -- FIX #9: 16px touch target via padding, 8px visual */}
+        {/* Left handle -- focusable with keyboard support */}
         <div
-          className="absolute left-0 top-0 h-full w-4 flex justify-start"
+          role="slider"
+          tabIndex={0}
+          aria-label="Adjust zoom start"
+          aria-valuemin={fullDomain[0]}
+          aria-valuemax={fullDomain[1]}
+          aria-valuenow={zoom[0]}
+          className="absolute left-0 top-0 h-full w-4 flex justify-start focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-l-sm"
           style={{ cursor: "col-resize", marginLeft: "-4px" }}
           onMouseDown={(e) => handlePointerDown("left", e)}
           onTouchStart={(e) => handlePointerDown("left", e)}
+          onKeyDown={(e) => handleHandleKeyDown("left", e)}
         >
           <div className="h-full w-2 bg-slate-400 rounded-l-sm hover:bg-slate-300 transition-colors" />
         </div>
-        {/* Right handle -- FIX #9: 16px touch target via padding, 8px visual */}
+        {/* Right handle -- focusable with keyboard support */}
         <div
-          className="absolute right-0 top-0 h-full w-4 flex justify-end"
+          role="slider"
+          tabIndex={0}
+          aria-label="Adjust zoom end"
+          aria-valuemin={fullDomain[0]}
+          aria-valuemax={fullDomain[1]}
+          aria-valuenow={zoom[1]}
+          className="absolute right-0 top-0 h-full w-4 flex justify-end focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-r-sm"
           style={{ cursor: "col-resize", marginRight: "-4px" }}
           onMouseDown={(e) => handlePointerDown("right", e)}
           onTouchStart={(e) => handlePointerDown("right", e)}
+          onKeyDown={(e) => handleHandleKeyDown("right", e)}
         >
           <div className="h-full w-2 bg-slate-400 rounded-r-sm hover:bg-slate-300 transition-colors" />
         </div>
@@ -694,13 +732,12 @@ export function GlucoseTrendChart({
     [pixelToTimestamp, getClientX],
   );
 
-  // Compute final zoom from refs + event directly to avoid stale closure issues
-  const handleChartMouseUp = useCallback(
-    (_nextState: MouseHandlerDataParam, event: React.SyntheticEvent) => {
+  // Shared cleanup: finalize zoom selection and clear drag state
+  const finalizeSelection = useCallback(
+    (clientX: number | null) => {
       const startTs = selectionStartRef.current;
-      if (startTs != null) {
-        const clientX = getClientX(event);
-        const endTs = clientX != null ? pixelToTimestamp(clientX) : null;
+      if (startTs != null && clientX != null) {
+        const endTs = pixelToTimestamp(clientX);
         if (endTs != null) {
           const full = currentDomainRef.current;
           const lo = Math.max(full[0], Math.min(startTs, endTs));
@@ -714,8 +751,31 @@ export function GlucoseTrendChart({
       setSelectionStart(null);
       setSelectionEnd(null);
     },
-    [pixelToTimestamp, getClientX],
+    [pixelToTimestamp],
   );
+
+  const handleChartMouseUp = useCallback(
+    (_nextState: MouseHandlerDataParam, event: React.SyntheticEvent) => {
+      finalizeSelection(getClientX(event));
+    },
+    [finalizeSelection, getClientX],
+  );
+
+  // Global window listener: clear drag-selection if pointer-up occurs outside chart
+  useEffect(() => {
+    if (selectionStartRef.current == null) return;
+    const onWindowUp = (e: MouseEvent | TouchEvent) => {
+      const touch = "changedTouches" in e ? e.changedTouches[0] : null;
+      const clientX = touch ? touch.clientX : "clientX" in e ? e.clientX : null;
+      finalizeSelection(clientX);
+    };
+    window.addEventListener("mouseup", onWindowUp);
+    window.addEventListener("touchend", onWindowUp);
+    return () => {
+      window.removeEventListener("mouseup", onWindowUp);
+      window.removeEventListener("touchend", onWindowUp);
+    };
+  }, [finalizeSelection, selectionStart]);
 
   const handleChartDoubleClick = useCallback(
     (_nextState: MouseHandlerDataParam, _event: React.SyntheticEvent) => {
