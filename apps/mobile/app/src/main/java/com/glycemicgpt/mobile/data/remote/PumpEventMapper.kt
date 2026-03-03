@@ -19,14 +19,17 @@ object PumpEventMapper {
             iobAtEvent = reading.iob,
         )
 
-    fun fromBasal(reading: BasalReading): PumpEventDto =
-        PumpEventDto(
+    fun fromBasal(reading: BasalReading): PumpEventDto {
+        val mode = reading.activityMode.name.lowercase()
+        return PumpEventDto(
             eventType = "basal",
             eventTimestamp = reading.timestamp,
             units = reading.rate,
             isAutomated = reading.isAutomated,
-            controlIqMode = reading.controlIqMode.name.lowercase(),
+            pumpActivityMode = mode,
+            controlIqMode = mode, // backwards compat for older backends
         )
+    }
 
     fun fromBolus(event: BolusEvent): PumpEventDto {
         val type = if (event.isCorrection) "correction" else "bolus"
