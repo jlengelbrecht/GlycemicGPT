@@ -907,7 +907,6 @@ private fun DrawScope.drawBolusMarkers(
         prevX = x
 
         val bolusType = DashboardComputations.deriveBolusType(event)
-        val isCombo = bolusType == BolusType.MEAL_WITH_CORRECTION
         val color = when (bolusType) {
             BolusType.AUTO_CORRECTION -> ChartColors.Correction       // Pink: pump auto-correction
             BolusType.MEAL_WITH_CORRECTION -> ChartColors.MealWithCorrection // Purple: meal + correction combo
