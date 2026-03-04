@@ -335,14 +335,20 @@ internal object StatusResponseParser {
         if (timestamp.isBefore(since)) return emptyList()
 
         val units = deliveredMilliUnits / 1000f
-        val isAutomated = bolusSourceId == 1 // AUTO_PILOT
-        val isCorrection = (bolusTypeBitmask and 0x08) != 0
+        // bolusSourceId uses same ID space as history logs: 7=Algorithm/Control-IQ
+        val isAutomated = bolusSourceId == 7
+        // Correction flag: bit 0x08 in history logs, bit 0x02 in status responses.
+        // Check both bits to handle either format consistently.
+        val isCorrection = (bolusTypeBitmask and 0x0A) != 0
 
         return listOf(
             BolusEvent(
                 units = units,
                 isAutomated = isAutomated,
                 isCorrection = isCorrection,
+                correctionUnits = 0f,
+                mealUnits = 0f,
+                source = "",
                 timestamp = timestamp,
             ),
         )
@@ -697,7 +703,7 @@ internal object StatusResponseParser {
      * Raw BLE payload layout (16 bytes, LE):
      *   bytes 0-1:   bolusId (uint16 LE)
      *   byte  2:     deliveryStatus (0=Completed, 1=Started)
-     *   byte  3:     bolusType (bitmask: 0x08 = correction component)
+     *   byte  3:     bolusType (bitmask: 0x02 = correction type, 0x08 = correction component)
      *   byte  4:     bolusSource (7=Algorithm/Control-IQ)
      *   byte  5:     remoteId
      *   bytes 6-7:   requestedNow (uint16 LE, milliunits)
@@ -723,15 +729,35 @@ internal object StatusResponseParser {
 
         val bolusTypeRaw = data[3].toInt() and 0xFF
         val bolusSourceRaw = data[4].toInt() and 0xFF
-        val isCorrection = (bolusTypeRaw and 0x08) != 0
+        // Correction flag: bit 0x08 (correction component) or bit 0x02 (correction type).
+        // Both bits indicate a correction bolus across different Tandem protocol formats.
+        val isCorrection = (bolusTypeRaw and 0x0A) != 0
         // Only bolusSource=7 (Algorithm) means the system initiated the bolus.
         // A user-initiated meal bolus with a correction component is NOT automated.
         val isAutomated = bolusSourceRaw == 7
+
+        // Extract dose breakdown from bytes 6-9
+        val correctionPortionMu = buf.getShort(8).toInt() and 0xFFFF
+
+        // Derive meal portion: delivered total minus correction portion.
+        // Uses deliveredTotal (not requestedNow) so parts never exceed the whole
+        // in partial delivery scenarios (user cancel, occlusion).
+        // Only compute meal portion for non-automated boluses (automated = system-initiated,
+        // no user meal component).
+        val correctionMuClamped = correctionPortionMu.coerceAtMost(deliveredTotalMu)
+        val mealPortionMu = if (!isAutomated && deliveredTotalMu > correctionMuClamped) {
+            deliveredTotalMu - correctionMuClamped
+        } else {
+            0
+        }
 
         return BolusEvent(
             units = deliveredTotalMu / 1000f,
             isAutomated = isAutomated,
             isCorrection = isCorrection,
+            correctionUnits = correctionMuClamped / 1000f,
+            mealUnits = mealPortionMu / 1000f,
+            source = "",
             timestamp = pumpTimeToInstant(pumpTimeSec),
         )
     }

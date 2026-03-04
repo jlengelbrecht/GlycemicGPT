@@ -67,6 +67,15 @@ object DatabaseModule {
         }
     }
 
+    /** Migration 9->10: add bolus dose breakdown columns (correctionUnits, mealUnits, source). */
+    private val MIGRATION_9_10 = object : Migration(9, 10) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE bolus_events ADD COLUMN correctionUnits REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE bolus_events ADD COLUMN mealUnits REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE bolus_events ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     /**
      * Retrieve or generate the database passphrase from EncryptedSharedPreferences.
      *
@@ -135,7 +144,7 @@ object DatabaseModule {
 
         return Room.databaseBuilder(context, AppDatabase::class.java, "glycemicgpt_encrypted.db")
             .openHelperFactory(factory)
-            .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+            .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             .fallbackToDestructiveMigration()
             .build()
     }

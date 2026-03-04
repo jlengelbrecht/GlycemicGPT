@@ -55,8 +55,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.glycemicgpt.mobile.domain.compute.DashboardComputations
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BolusEvent
+import com.glycemicgpt.mobile.domain.model.BolusType
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
 import com.glycemicgpt.mobile.domain.model.IoBReading
@@ -103,6 +105,7 @@ private object ChartColors {
     val Correction = Color(0xFFE91E63)    // Pink -- auto correction (pump-initiated)
     val ManualCorrection = Color(0xFFFF5722)  // Deep orange -- manual correction (user-initiated)
     val Bolus = Color(0xFF7C4DFF)         // Deep purple -- meal/standard bolus
+    val MealWithCorrection = Color(0xFFAB47BC) // Medium purple -- meal + correction combo
 }
 
 @Composable
@@ -443,11 +446,12 @@ private fun GlucoseTrendChartContent(
             val bolusTypesPresent = remember(bolusEvents) {
                 buildSet {
                     for (b in bolusEvents) {
-                        when {
-                            b.isAutomated && b.isCorrection -> add("auto_correction")
-                            b.isCorrection -> add("manual_correction")
-                            b.isAutomated -> add("auto_correction")
-                            else -> add("meal_bolus")
+                        when (DashboardComputations.deriveBolusType(b)) {
+                            BolusType.AUTO_CORRECTION -> add("auto_correction")
+                            BolusType.MEAL_WITH_CORRECTION -> add("meal_with_correction")
+                            BolusType.CORRECTION -> add("manual_correction")
+                            BolusType.AUTO -> add("auto_correction")
+                            BolusType.MEAL -> add("meal_bolus")
                         }
                     }
                 }
@@ -480,6 +484,7 @@ private fun ChartLegend(
         if ("exercise" in basalModesPresent) LegendItem(color = ChartColors.BasalExercise, label = "Exercise")
         if ("auto_correction" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "Auto Correction")
         if ("manual_correction" in bolusTypesPresent) LegendItem(color = ChartColors.ManualCorrection, label = "Manual Correction")
+        if ("meal_with_correction" in bolusTypesPresent) LegendItem(color = ChartColors.MealWithCorrection, label = "Meal + Corr")
         if ("meal_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Bolus, label = "Meal Bolus")
         if (hasIob) LegendItem(color = iobColor.copy(alpha = 0.7f), label = "IoB")
     }
@@ -901,11 +906,14 @@ private fun DrawScope.drawBolusMarkers(
         }
         prevX = x
 
-        val color = when {
-            event.isAutomated && event.isCorrection -> ChartColors.Correction        // Pink: pump auto-correction
-            event.isCorrection -> ChartColors.ManualCorrection                        // Deep orange: user correction
-            event.isAutomated -> ChartColors.Correction                               // Pink: other automated bolus
-            else -> ChartColors.Bolus                                                 // Purple: meal bolus
+        val bolusType = DashboardComputations.deriveBolusType(event)
+        val isCombo = bolusType == BolusType.MEAL_WITH_CORRECTION
+        val color = when (bolusType) {
+            BolusType.AUTO_CORRECTION -> ChartColors.Correction       // Pink: pump auto-correction
+            BolusType.MEAL_WITH_CORRECTION -> ChartColors.MealWithCorrection // Purple: meal + correction combo
+            BolusType.CORRECTION -> ChartColors.ManualCorrection      // Deep orange: user correction
+            BolusType.AUTO -> ChartColors.Correction                  // Pink: other automated bolus
+            BolusType.MEAL -> ChartColors.Bolus                       // Purple: meal bolus
         }
 
         val markerY = baseMarkerY + staggerLevel * staggerStep
@@ -919,15 +927,33 @@ private fun DrawScope.drawBolusMarkers(
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
         )
 
-        // Diamond marker
-        val diamond = Path().apply {
-            moveTo(x, markerY - markerRadius)          // top
-            lineTo(x + markerRadius, markerY)           // right
-            lineTo(x, markerY + markerRadius)           // bottom
-            lineTo(x - markerRadius, markerY)           // left
-            close()
+        if (isCombo) {
+            // Split diamond: top half = meal color, bottom half = correction color
+            val topHalf = Path().apply {
+                moveTo(x, markerY - markerRadius)
+                lineTo(x + markerRadius, markerY)
+                lineTo(x - markerRadius, markerY)
+                close()
+            }
+            drawPath(topHalf, ChartColors.Bolus, style = Fill)
+            val bottomHalf = Path().apply {
+                moveTo(x + markerRadius, markerY)
+                lineTo(x, markerY + markerRadius)
+                lineTo(x - markerRadius, markerY)
+                close()
+            }
+            drawPath(bottomHalf, ChartColors.ManualCorrection, style = Fill)
+        } else {
+            // Standard single-color diamond marker
+            val diamond = Path().apply {
+                moveTo(x, markerY - markerRadius)          // top
+                lineTo(x + markerRadius, markerY)           // right
+                lineTo(x, markerY + markerRadius)           // bottom
+                lineTo(x - markerRadius, markerY)           // left
+                close()
+            }
+            drawPath(diamond, color, style = Fill)
         }
-        drawPath(diamond, color, style = Fill)
 
         // Units label above the marker, clamped to canvas bounds
         val unitsLabel = textMeasurer.measure(

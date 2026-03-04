@@ -58,10 +58,10 @@ interface PumpDao {
 
     // -- Bolus ----------------------------------------------------------------
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBolus(event: BolusEventEntity)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBoluses(events: List<BolusEventEntity>)
 
     @Query("SELECT * FROM bolus_events WHERE timestampMs >= :sinceMs ORDER BY timestampMs DESC")

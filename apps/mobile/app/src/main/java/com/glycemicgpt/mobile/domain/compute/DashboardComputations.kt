@@ -11,6 +11,7 @@ import com.glycemicgpt.mobile.domain.model.EnrichedBolusEvent
 import com.glycemicgpt.mobile.domain.model.InsulinSummary
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import java.time.ZoneId
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -141,9 +142,13 @@ object DashboardComputations {
             val nearestCgm = findNearestCgm(sortedCgm, bolusMs)
             val nearestIoB = findNearestIoB(sortedIoB, bolusMs)
 
+            val type = deriveBolusType(bolus)
             EnrichedBolusEvent(
                 units = bolus.units,
-                bolusType = deriveBolusType(bolus),
+                bolusType = type,
+                reason = deriveBolusReason(type, bolus),
+                correctionUnits = bolus.correctionUnits,
+                mealUnits = bolus.mealUnits,
                 bgAtEvent = nearestCgm,
                 iobAtEvent = nearestIoB,
                 timestamp = bolus.timestamp,
@@ -214,10 +219,27 @@ object DashboardComputations {
         return true
     }
 
-    private fun deriveBolusType(bolus: BolusEvent): BolusType = when {
+    internal fun deriveBolusType(bolus: BolusEvent): BolusType = when {
         bolus.isAutomated && bolus.isCorrection -> BolusType.AUTO_CORRECTION
-        bolus.isCorrection -> BolusType.CORRECTION
+        bolus.mealUnits > 0f && bolus.correctionUnits > 0f -> BolusType.MEAL_WITH_CORRECTION
+        bolus.isCorrection && !bolus.isAutomated -> BolusType.CORRECTION
         bolus.isAutomated -> BolusType.AUTO
         else -> BolusType.MEAL
+    }
+
+    internal fun deriveBolusReason(type: BolusType, bolus: BolusEvent? = null): String = when (type) {
+        BolusType.AUTO_CORRECTION -> "Automated high BG correction"
+        BolusType.CORRECTION -> "Manual correction bolus"
+        BolusType.MEAL -> "Manual meal bolus"
+        BolusType.MEAL_WITH_CORRECTION -> {
+            val meal = bolus?.mealUnits ?: 0f
+            val corr = bolus?.correctionUnits ?: 0f
+            if (meal > 0f && corr > 0f) {
+                String.format(Locale.US, "Meal %.1fU + correction %.1fU", meal, corr)
+            } else {
+                "Meal bolus with correction"
+            }
+        }
+        BolusType.AUTO -> "Automated delivery"
     }
 }

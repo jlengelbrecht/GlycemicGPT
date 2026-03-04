@@ -201,36 +201,46 @@ private fun TableHeaderCell(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 internal fun BolusTableRow(bolus: EnrichedBolusEvent) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = BolusTimeFormatter.format(bolus.timestamp),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1.2f),
-        )
-        Text(
-            text = "%.2fU".format(bolus.units),
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(0.8f),
-        )
-        Box(modifier = Modifier.weight(1.2f)) {
-            BolusTypeBadge(bolus.bolusType)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = BolusTimeFormatter.format(bolus.timestamp),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1.2f),
+            )
+            Text(
+                text = "%.2fU".format(bolus.units),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(0.8f),
+            )
+            Box(modifier = Modifier.weight(1.2f)) {
+                BolusTypeBadge(bolus.bolusType)
+            }
+            Text(
+                text = bolus.bgAtEvent?.toString() ?: "--",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(0.8f),
+            )
+            Text(
+                text = bolus.iobAtEvent?.let { "%.1fU".format(it) } ?: "--",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(0.8f),
+            )
         }
         Text(
-            text = bolus.bgAtEvent?.toString() ?: "--",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(0.8f),
-        )
-        Text(
-            text = bolus.iobAtEvent?.let { "%.1fU".format(it) } ?: "--",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(0.8f),
+            text = bolus.reason,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 2.dp, top = 1.dp),
         )
     }
 }
@@ -241,6 +251,7 @@ private fun BolusTypeBadge(type: BolusType) {
         BolusType.AUTO_CORRECTION -> "A.Corr" to Color(0xFFE91E63)
         BolusType.CORRECTION -> "Corr" to Color(0xFFFF5722)
         BolusType.MEAL -> "Meal" to Color(0xFF7C4DFF)
+        BolusType.MEAL_WITH_CORRECTION -> "M+C" to Color(0xFFAB47BC)
         BolusType.AUTO -> "Auto" to Color(0xFFEC407A)
     }
 

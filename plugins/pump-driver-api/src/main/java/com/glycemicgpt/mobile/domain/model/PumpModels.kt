@@ -35,12 +35,23 @@ data class BolusEvent(
     val units: Float,
     val isAutomated: Boolean,
     val isCorrection: Boolean,
+    val correctionUnits: Float = 0f,
+    val mealUnits: Float = 0f,
+    val source: String = "",
     val timestamp: Instant,
 ) {
     init {
         require(units >= 0f) { "BolusEvent units must be non-negative, was $units" }
         require(units <= MAX_BOLUS_UNITS) {
             "BolusEvent units ($units) exceeds hard safety cap of $MAX_BOLUS_UNITS U"
+        }
+        require(correctionUnits >= 0f) { "correctionUnits must be non-negative" }
+        require(correctionUnits <= MAX_BOLUS_UNITS) {
+            "correctionUnits ($correctionUnits) exceeds hard safety cap of $MAX_BOLUS_UNITS U"
+        }
+        require(mealUnits >= 0f) { "mealUnits must be non-negative" }
+        require(mealUnits <= MAX_BOLUS_UNITS) {
+            "mealUnits ($mealUnits) exceeds hard safety cap of $MAX_BOLUS_UNITS U"
         }
     }
 

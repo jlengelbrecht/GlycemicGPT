@@ -28,7 +28,7 @@ import com.glycemicgpt.mobile.data.local.entity.SyncQueueEntity
         CgmReadingEntity::class,
         AlertEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {

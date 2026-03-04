@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -38,12 +39,21 @@ class DashboardComputationsTest {
         )
     }
 
-    private fun bolus(units: Float, minutesAgo: Long, isAutomated: Boolean = false, isCorrection: Boolean = false): BolusEvent {
+    private fun bolus(
+        units: Float,
+        minutesAgo: Long,
+        isAutomated: Boolean = false,
+        isCorrection: Boolean = false,
+        correctionUnits: Float = 0f,
+        mealUnits: Float = 0f,
+    ): BolusEvent {
         val ts = Instant.now().minusSeconds(minutesAgo * 60)
         return BolusEvent(
             units = units,
             isAutomated = isAutomated,
             isCorrection = isCorrection,
+            correctionUnits = correctionUnits,
+            mealUnits = mealUnits,
             timestamp = ts,
         )
     }
@@ -254,6 +264,96 @@ class DashboardComputationsTest {
         assertEquals(BolusType.CORRECTION, result[1].bolusType)
         assertEquals(BolusType.MEAL, result[2].bolusType)
         assertEquals(BolusType.AUTO, result[3].bolusType)
+    }
+
+    @Test
+    fun `enrichBoluses derives correct reasons for each type`() {
+        val autoCorr = bolus(0.5f, 10, isAutomated = true, isCorrection = true)
+        val corr = bolus(1f, 20, isAutomated = false, isCorrection = true)
+        val meal = bolus(3f, 30, isAutomated = false, isCorrection = false)
+        val auto = bolus(0.3f, 40, isAutomated = true, isCorrection = false)
+
+        val result = DashboardComputations.enrichBoluses(
+            listOf(autoCorr, corr, meal, auto),
+            emptyList(),
+            emptyList(),
+        )
+        assertEquals("Automated high BG correction", result[0].reason)
+        assertEquals("Manual correction bolus", result[1].reason)
+        assertEquals("Manual meal bolus", result[2].reason)
+        assertEquals("Automated delivery", result[3].reason)
+    }
+
+    // -- deriveBolusReason ----------------------------------------------------
+
+    @Test
+    fun `deriveBolusReason returns correct reason for each type`() {
+        assertEquals("Automated high BG correction", DashboardComputations.deriveBolusReason(BolusType.AUTO_CORRECTION))
+        assertEquals("Manual correction bolus", DashboardComputations.deriveBolusReason(BolusType.CORRECTION))
+        assertEquals("Manual meal bolus", DashboardComputations.deriveBolusReason(BolusType.MEAL))
+        assertEquals("Meal bolus with correction", DashboardComputations.deriveBolusReason(BolusType.MEAL_WITH_CORRECTION))
+        assertEquals("Automated delivery", DashboardComputations.deriveBolusReason(BolusType.AUTO))
+    }
+
+    // -- deriveBolusType with dose breakdown ------------------------------------
+
+    @Test
+    fun `deriveBolusType returns MEAL_WITH_CORRECTION when both portions present`() {
+        val combo = bolus(4f, 10, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f)
+        assertEquals(BolusType.MEAL_WITH_CORRECTION, DashboardComputations.deriveBolusType(combo))
+    }
+
+    @Test
+    fun `deriveBolusType returns MEAL when only mealUnits present`() {
+        val mealOnly = bolus(3f, 10, correctionUnits = 0f, mealUnits = 3f)
+        assertEquals(BolusType.MEAL, DashboardComputations.deriveBolusType(mealOnly))
+    }
+
+    @Test
+    fun `deriveBolusType returns CORRECTION when isCorrection and no breakdown`() {
+        // Status response fallback: no dose breakdown, flags only
+        val corr = bolus(1f, 10, isCorrection = true, correctionUnits = 0f, mealUnits = 0f)
+        assertEquals(BolusType.CORRECTION, DashboardComputations.deriveBolusType(corr))
+    }
+
+    @Test
+    fun `deriveBolusType prioritizes AUTO_CORRECTION over combo`() {
+        // Automated + correction flags take priority even if breakdown is present
+        val autoCorr = bolus(0.8f, 10, isAutomated = true, isCorrection = true, correctionUnits = 0.8f, mealUnits = 0f)
+        assertEquals(BolusType.AUTO_CORRECTION, DashboardComputations.deriveBolusType(autoCorr))
+    }
+
+    @Test
+    fun `deriveBolusReason for MEAL_WITH_CORRECTION includes dose breakdown`() {
+        val combo = bolus(4f, 10, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f)
+        val reason = DashboardComputations.deriveBolusReason(BolusType.MEAL_WITH_CORRECTION, combo)
+        assertEquals("Meal 3.5U + correction 0.5U", reason)
+    }
+
+    @Test
+    fun `deriveBolusReason uses no vendor-specific branding`() {
+        // Verify no "Control-IQ" appears in any reason string
+        val allReasons = listOf(
+            DashboardComputations.deriveBolusReason(BolusType.AUTO_CORRECTION),
+            DashboardComputations.deriveBolusReason(BolusType.CORRECTION),
+            DashboardComputations.deriveBolusReason(BolusType.MEAL),
+            DashboardComputations.deriveBolusReason(BolusType.MEAL_WITH_CORRECTION),
+            DashboardComputations.deriveBolusReason(BolusType.AUTO),
+        )
+        for (reason in allReasons) {
+            assertFalse("Reason should not contain 'Control-IQ': $reason", reason.contains("Control-IQ"))
+        }
+    }
+
+    @Test
+    fun `enrichBoluses passes through correctionUnits and mealUnits`() {
+        val combo = bolus(4f, 10, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f)
+        val result = DashboardComputations.enrichBoluses(listOf(combo), emptyList(), emptyList())
+        assertEquals(1, result.size)
+        assertEquals(BolusType.MEAL_WITH_CORRECTION, result[0].bolusType)
+        assertEquals(0.5f, result[0].correctionUnits, 0.001f)
+        assertEquals(3.5f, result[0].mealUnits, 0.001f)
+        assertEquals("Meal 3.5U + correction 0.5U", result[0].reason)
     }
 
     // -- percentile -----------------------------------------------------------
