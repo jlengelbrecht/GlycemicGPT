@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.glycemicgpt.mobile.domain.model.BolusType
 import com.glycemicgpt.mobile.domain.model.EnrichedBolusEvent
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -46,9 +45,6 @@ private val BolusTimePeriods = listOf(
     TirPeriod.THREE_DAYS,
     TirPeriod.SEVEN_DAYS,
 )
-
-private fun bolusTimeOnlyFormatter(): DateTimeFormatter =
-    DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault())
 
 private fun bolusDateTimeFormatter(): DateTimeFormatter =
     DateTimeFormatter.ofPattern("M/d h:mm a").withZone(ZoneId.systemDefault())
@@ -215,14 +211,8 @@ internal fun BolusTableRow(bolus: EnrichedBolusEvent) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val zone = ZoneId.systemDefault()
-            val isToday = bolus.timestamp.atZone(zone).toLocalDate() == LocalDate.now(zone)
             Text(
-                text = if (isToday) {
-                    bolusTimeOnlyFormatter().format(bolus.timestamp)
-                } else {
-                    bolusDateTimeFormatter().format(bolus.timestamp)
-                },
+                text = bolusDateTimeFormatter().format(bolus.timestamp),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1.2f),
             )
