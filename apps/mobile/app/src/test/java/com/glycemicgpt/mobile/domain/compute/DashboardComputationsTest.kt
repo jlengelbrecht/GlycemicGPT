@@ -153,7 +153,7 @@ class DashboardComputationsTest {
         // 1 U/hr for 2 hours = 2U basal
         val basals = listOf(basal(1.0f, 2), basal(1.0f, 0))
         val summary = DashboardComputations.computeInsulinSummary(basals, emptyList(), 24)!!
-        assertEquals(2f, summary.basalUnits * 1, 0.1f) // TDD = total/days, days=1
+        assertEquals(2f, summary.basalUnits, 0.1f) // TDD = total/days, days=1
         assertTrue(summary.basalPercent > 0f)
     }
 
@@ -195,16 +195,35 @@ class DashboardComputationsTest {
 
     @Test
     fun `enrichBoluses handles boundary of 5-minute window`() {
-        // Exactly 5 minutes = 300,000 ms -- should be within window
         val bolusTime = Instant.now()
         val b = BolusEvent(units = 2f, isAutomated = false, isCorrection = false, timestamp = bolusTime)
+
+        // 4:59 before -- inside window
         val cgmJustInside = CgmReading(
             glucoseMgDl = 150,
             trendArrow = CgmTrend.FLAT,
-            timestamp = bolusTime.minusSeconds(299), // 4:59 before
+            timestamp = bolusTime.minusSeconds(299),
         )
         val result = DashboardComputations.enrichBoluses(listOf(b), listOf(cgmJustInside), emptyList())
         assertEquals(150, result[0].bgAtEvent)
+
+        // Exactly 5:00 (300s = 300,000 ms) -- still inside window
+        val cgmExact = CgmReading(
+            glucoseMgDl = 160,
+            trendArrow = CgmTrend.FLAT,
+            timestamp = bolusTime.minusSeconds(300),
+        )
+        val resultExact = DashboardComputations.enrichBoluses(listOf(b), listOf(cgmExact), emptyList())
+        assertEquals(160, resultExact[0].bgAtEvent)
+
+        // 5:01 (301s) -- outside window
+        val cgmOutside = CgmReading(
+            glucoseMgDl = 170,
+            trendArrow = CgmTrend.FLAT,
+            timestamp = bolusTime.minusSeconds(301),
+        )
+        val resultOutside = DashboardComputations.enrichBoluses(listOf(b), listOf(cgmOutside), emptyList())
+        assertNull(resultOutside[0].bgAtEvent)
     }
 
     @Test

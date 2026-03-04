@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -88,7 +89,9 @@ fun BolusHistoryScreen(
                 BolusTableHeader()
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                val sorted = enrichedBoluses.sortedByDescending { it.timestamp }
+                val sorted = remember(enrichedBoluses) {
+                    enrichedBoluses.sortedByDescending { it.timestamp }
+                }
 
                 LazyColumn(
                     modifier = Modifier

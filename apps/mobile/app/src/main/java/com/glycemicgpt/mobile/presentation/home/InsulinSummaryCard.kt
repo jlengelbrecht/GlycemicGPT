@@ -189,10 +189,12 @@ private fun InsulinStackedBar(
             cornerRadius = cr,
         )
 
-        val total = basalPercent + bolusPercent
+        val safeBasal = basalPercent.coerceAtLeast(0f)
+        val safeBolus = bolusPercent.coerceAtLeast(0f)
+        val total = safeBasal + safeBolus
         if (total <= 0f) return@Canvas
 
-        val basalW = (basalPercent / total) * totalWidth
+        val basalW = (safeBasal / total) * totalWidth
         val bolusW = totalWidth - basalW
 
         if (basalW > 0f) {

@@ -22,11 +22,16 @@ object DashboardComputations {
     /** Maximum time delta (ms) for cross-referencing CGM/IoB to a bolus event. */
     private const val CROSS_REF_WINDOW_MS = 5L * 60_000L
 
+    /** Valid CGM glucose range (mg/dL) -- filters sensor noise and impossible values. */
+    private const val VALID_GLUCOSE_MIN = 20
+    private const val VALID_GLUCOSE_MAX = 500
+
     fun computeAgp(readings: List<CgmReading>, periodDays: Int): AgpProfile? {
-        if (readings.size < MIN_AGP_READINGS) return null
+        val valid = readings.filter { it.glucoseMgDl in VALID_GLUCOSE_MIN..VALID_GLUCOSE_MAX }
+        if (valid.size < MIN_AGP_READINGS) return null
 
         val zone = ZoneId.systemDefault()
-        val byHour = readings.groupBy { it.timestamp.atZone(zone).hour }
+        val byHour = valid.groupBy { it.timestamp.atZone(zone).hour }
 
         val buckets = (0..23).map { hour ->
             val hourReadings = byHour[hour]
@@ -48,15 +53,16 @@ object DashboardComputations {
 
         return AgpProfile(
             buckets = buckets,
-            totalReadings = readings.size,
+            totalReadings = valid.size,
             periodDays = periodDays,
         )
     }
 
     fun computeCgmStats(readings: List<CgmReading>): CgmStats? {
-        if (readings.isEmpty()) return null
+        val valid = readings.filter { it.glucoseMgDl in VALID_GLUCOSE_MIN..VALID_GLUCOSE_MAX }
+        if (valid.isEmpty()) return null
 
-        val values = readings.map { it.glucoseMgDl.toFloat() }
+        val values = valid.map { it.glucoseMgDl.toFloat() }
         val mean = values.sum() / values.size
         val denominator = if (values.size > 1) values.size - 1 else 1
         val variance = values.sumOf { ((it - mean) * (it - mean)).toDouble() } / denominator
@@ -69,7 +75,7 @@ object DashboardComputations {
             stdDev = stdDev,
             cvPercent = cvPercent,
             gmi = gmi,
-            readingsCount = readings.size,
+            readingsCount = valid.size,
         )
     }
 
