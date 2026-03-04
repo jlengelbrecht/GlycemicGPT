@@ -1,6 +1,6 @@
 # GlycemicGPT Implementation Progress
 
-> Last Updated: 2026-03-03
+> Last Updated: 2026-03-04
 
 ## Summary
 
@@ -36,7 +36,7 @@
 | 28 | Security Hardening & Penetration Testing | 17/17 | **Complete** |
 | 29 | App Icons & Branding | 3/3 | **Complete** |
 | 30 | Advanced Web Dashboard Visualization | 9/10 | **In Progress** |
-| 31 | Mobile Dashboard Parity & Hub-and-Spoke Redesign | 0/7 | Planned |
+| 31 | Mobile Dashboard Parity & Hub-and-Spoke Redesign | 2/7 | **In Progress** |
 | 33 | Data Source Abstraction & CGM Intelligence | 0/12 | Planned |
 | 34 | Code Quality & Technical Debt Elimination | 0/17 | Planned |
 
@@ -58,7 +58,7 @@
 **Epic 26 (Runtime Plugin Loading):** 7/7 complete
 **Epic 29 (App Icons & Branding):** 3/3 complete
 **Epic 30 (Web Dashboard Visualization):** 9/10 in progress
-**Epic 31 (Mobile Dashboard Parity):** 1/7 in progress
+**Epic 31 (Mobile Dashboard Parity):** 2/7 in progress
 **Epic 33 (Data Source Abstraction):** 0/12 planned
 **Epic 34 (Code Quality):** 0/17 planned
 **Overall Progress:** 158/207 stories complete
@@ -1044,9 +1044,9 @@ Any new stats calculations (CGM summary, insulin summary, AGP percentiles, 5-buc
 
 | Story | Title | Status | PR |
 |-------|-------|--------|-----|
-| 31.1 | Navigation Scaffold & Detail Page Architecture | Complete | #344 |
+| 31.1 | Navigation Scaffold & Detail Page Architecture | Complete | #345 |
 | 31.2 | Compact Card Grid Home Screen | Planned | |
-| 31.3 | Chart Detail Page with Landscape & Zoom/Pan/Brush | Planned | |
+| 31.3 | Chart Detail Page with Landscape & Zoom/Pan/Brush | Complete | #345 |
 | 31.4 | TIR Upgrade & CGM Stats Detail Page | Planned | |
 | 31.5 | Insulin Summary & Bolus Review Detail Page | Planned | |
 | 31.6 | Visual Polish, Animations & Label Refinement | Planned | |

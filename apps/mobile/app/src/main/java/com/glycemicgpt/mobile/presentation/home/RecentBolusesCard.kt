@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.OpenInFull
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.glycemicgpt.mobile.domain.model.BolusType
 import com.glycemicgpt.mobile.domain.model.EnrichedBolusEvent
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -47,8 +47,11 @@ private val BolusTimePeriods = listOf(
     TirPeriod.SEVEN_DAYS,
 )
 
-private val BolusTimeFormatter: DateTimeFormatter =
+private fun bolusTimeOnlyFormatter(): DateTimeFormatter =
     DateTimeFormatter.ofPattern("h:mm a").withZone(ZoneId.systemDefault())
+
+private fun bolusDateTimeFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("M/d h:mm a").withZone(ZoneId.systemDefault())
 
 private const val MAX_HOME_ROWS = 5
 
@@ -212,8 +215,14 @@ internal fun BolusTableRow(bolus: EnrichedBolusEvent) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val zone = ZoneId.systemDefault()
+            val isToday = bolus.timestamp.atZone(zone).toLocalDate() == LocalDate.now(zone)
             Text(
-                text = BolusTimeFormatter.format(bolus.timestamp),
+                text = if (isToday) {
+                    bolusTimeOnlyFormatter().format(bolus.timestamp)
+                } else {
+                    bolusDateTimeFormatter().format(bolus.timestamp)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1.2f),
             )
