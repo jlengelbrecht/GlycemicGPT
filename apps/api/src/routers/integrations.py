@@ -1746,6 +1746,35 @@ _BASAL_MAX_GAP_HOURS = 2.0
 _SOURCE_PRIORITY = ("mobile", "tandem")
 
 
+def _boundary_aligned_cutoff(
+    days: int,
+    boundary_hour: int,
+    now: datetime | None = None,
+) -> datetime:
+    """Compute the start of an analytics period aligned to the day boundary.
+
+    For days=1 (24H): returns today's boundary hour (or yesterday's if
+    we haven't passed it yet).  For days=3: returns the boundary 3-1=2
+    days before the effective boundary.  This matches the pump's Delivery
+    Summary which resets at midnight (boundary=0).
+
+    The ``days`` parameter follows the same semantics as the web API
+    ``days`` query parameter: days=1 means "current day period" (like 24H),
+    days=7 means "7-day period", etc.
+    """
+    utc_now = now or datetime.now(UTC)
+    today_boundary = utc_now.replace(
+        hour=boundary_hour, minute=0, second=0, microsecond=0
+    )
+    if utc_now < today_boundary:
+        effective_boundary = today_boundary - timedelta(days=1)
+    else:
+        effective_boundary = today_boundary
+    # days=1 means "since the current boundary" (daysBack=0 on mobile).
+    # days=7 means "since 6 days before the effective boundary".
+    return effective_boundary - timedelta(days=max(days - 1, 0))
+
+
 async def _best_source(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -1985,8 +2014,11 @@ async def get_insulin_summary(
     daily averages over the requested period. Counts (bolus_count,
     correction_count) are totals for the full period.
     """
+    from src.services.analytics_config import get_or_create_config
+
     now = datetime.now(UTC)
-    cutoff = now - timedelta(days=days)
+    config = await get_or_create_config(current_user.id, db)
+    cutoff = _boundary_aligned_cutoff(days, config.day_boundary_hour, now)
 
     # Determine best data source for bolus/correction events.
     bolus_source = await _best_source(
@@ -2182,8 +2214,11 @@ async def get_bolus_review(
     offset: int = Query(default=0, ge=0, description="Pagination offset"),
 ) -> BolusReviewResponse:
     """Get paginated list of bolus events for review."""
+    from src.services.analytics_config import get_or_create_config
+
     now = datetime.now(UTC)
-    cutoff = now - timedelta(days=days)
+    config = await get_or_create_config(current_user.id, db)
+    cutoff = _boundary_aligned_cutoff(days, config.day_boundary_hour, now)
 
     # Determine best source to avoid cross-source duplicates.
     review_source = await _best_source(
