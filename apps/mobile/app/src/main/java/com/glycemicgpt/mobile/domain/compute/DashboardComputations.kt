@@ -85,30 +85,51 @@ object DashboardComputations {
         boluses: List<BolusEvent>,
         periodHours: Long,
     ): InsulinSummary? {
-        val bolusUnits = boluses.sumOf { it.units.toDouble() }.toFloat()
-        val basalUnits = computeBasalIntegral(basals)
-        val total = basalUnits + bolusUnits
+        if (periodHours <= 0L) return null
+
+        val totalBolus = boluses.sumOf { it.units.toDouble() }.toFloat()
+        val totalBasal = computeBasalIntegral(basals)
+        val total = totalBasal + totalBolus
         if (total <= 0f) return null
 
-        // Use actual data span instead of selected period to avoid dividing
-        // 2 days of data by 7 days when user selects "7D" with limited history
+        // Divide by actual data span (oldest event to now), capped at the selected period.
+        // Uses nowMs (not newestMs) intentionally -- computeBasalIntegral also extends
+        // the last basal segment to now, so the denominator must match the numerator.
+        // Mobile only has ~7 days of local BLE data, so selecting "7D" with 1 day
+        // of data should still show the 1-day average, not dilute it by 7.
+        // Minimum 1 day to avoid inflating sub-day data into huge daily projections.
+        val nowMs = System.currentTimeMillis()
         val allTimestamps = basals.map { it.timestamp.toEpochMilli() } +
             boluses.map { it.timestamp.toEpochMilli() }
-        val dataSpanHours = if (allTimestamps.size >= 2) {
-            val spanMs = allTimestamps.max() - allTimestamps.min()
-            (spanMs / 3_600_000.0).toFloat()
-        } else {
-            periodHours.toFloat()
-        }
+        val oldestMs = allTimestamps.minOrNull() ?: nowMs
+        val dataSpanHours = ((nowMs - oldestMs) / 3_600_000.0).toFloat()
         val days = (dataSpanHours / 24f).coerceIn(1f, periodHours / 24f)
-        val tdd = total / days
 
+        val correctionBoluses = boluses.filter { it.isCorrection || it.correctionUnits > 0f }
+        // Use breakdown when available; fall back to full units for flag-only
+        // boluses (status response with no dose breakdown). This may overcount
+        // correction insulin if isCorrection is set on a combo bolus with no
+        // breakdown data, but that case does not occur with Tandem pump data.
+        val totalCorrection = correctionBoluses.sumOf {
+            if (it.correctionUnits > 0f) it.correctionUnits.toDouble() else it.units.toDouble()
+        }.toFloat()
+
+        val tdd = total / days
+        val basalPerDay = totalBasal / days
+        val bolusPerDay = totalBolus / days
+        val corrPerDay = totalCorrection / days
+
+        val basalPct = if (tdd > 0f) (basalPerDay / tdd) * 100f else 0f
         return InsulinSummary(
             totalDailyDose = tdd,
-            basalUnits = basalUnits / days,
-            bolusUnits = bolusUnits / days,
-            basalPercent = (basalUnits / total) * 100f,
-            bolusPercent = (bolusUnits / total) * 100f,
+            basalUnits = basalPerDay,
+            bolusUnits = bolusPerDay,
+            correctionUnits = corrPerDay,
+            basalPercent = basalPct,
+            bolusPercent = if (tdd > 0f) 100f - basalPct else 0f,
+            bolusCount = boluses.size,
+            correctionCount = correctionBoluses.size,
+            periodDays = days,
         )
     }
 

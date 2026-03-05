@@ -18,6 +18,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.glycemicgpt.mobile.domain.model.InsulinSummary
+import java.util.Locale
 
 private val BasalColor = Color(0xFF38BDF8)  // sky-400
 private val BolusColor = Color(0xFF8B5CF6)  // violet-500
@@ -54,15 +56,20 @@ fun InsulinSummaryCard(
     modifier: Modifier = Modifier,
 ) {
     val a11yDescription = if (summary != null) {
-        "Insulin summary: total daily dose %.1f units, " +
-            "basal %.1f units (%.0f%%), bolus %.1f units (%.0f%%)"
-                .format(
-                    summary.totalDailyDose,
-                    summary.basalUnits,
-                    summary.basalPercent,
-                    summary.bolusUnits,
-                    summary.bolusPercent,
-                )
+        String.format(
+            Locale.US,
+            "Insulin summary: total daily dose %.1f units, " +
+                "basal %.1f units (%.0f%%), bolus %.1f units (%.0f%%), " +
+                "corrections %.1f units per day, %d total boluses, %d total corrections",
+            summary.totalDailyDose,
+            summary.basalUnits,
+            summary.basalPercent,
+            summary.bolusUnits,
+            summary.bolusPercent,
+            summary.correctionUnits,
+            summary.bolusCount,
+            summary.correctionCount,
+        )
     } else {
         "Insulin summary: no data available"
     }
@@ -125,7 +132,7 @@ fun InsulinSummaryCard(
             } else {
                 // TDD large value
                 Text(
-                    text = "%.1f U/day".format(summary.totalDailyDose),
+                    text = String.format(Locale.US, "%.1f U/day", summary.totalDailyDose),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -151,12 +158,39 @@ fun InsulinSummaryCard(
                     InsulinLegend(
                         color = BasalColor,
                         label = "Basal",
-                        value = "%.1fU (%.0f%%)".format(summary.basalUnits, summary.basalPercent),
+                        value = String.format(Locale.US, "%.1fU (%.0f%%)", summary.basalUnits, summary.basalPercent),
                     )
                     InsulinLegend(
                         color = BolusColor,
                         label = "Bolus",
-                        value = "%.1fU (%.0f%%)".format(summary.bolusUnits, summary.bolusPercent),
+                        value = String.format(Locale.US, "%.1fU (%.0f%%)", summary.bolusUnits, summary.bolusPercent),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Detail stats row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("insulin_detail_stats"),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    DetailStat(
+                        label = "Corr/day",
+                        value = String.format(Locale.US, "%.1f U", summary.correctionUnits),
+                    )
+                    DetailStat(
+                        label = "Total Boluses",
+                        value = "%d".format(summary.bolusCount),
+                    )
+                    DetailStat(
+                        label = "Total Corr",
+                        value = "%d".format(summary.correctionCount),
                     )
                 }
             }
@@ -240,5 +274,27 @@ private fun InsulinLegend(
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
+    }
+}
+
+@Composable
+private fun DetailStat(label: String, value: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = "$label: $value"
+        },
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

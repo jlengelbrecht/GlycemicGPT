@@ -478,15 +478,15 @@ private fun ChartLegend(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if ("automated" in basalModesPresent) LegendItem(color = ChartColors.BasalAutomated, label = "Automated")
+        if ("automated" in basalModesPresent) LegendItem(color = ChartColors.BasalAutomated, label = "Auto")
         if ("manual" in basalModesPresent) LegendItem(color = ChartColors.BasalManual, label = "Manual")
         if ("sleep" in basalModesPresent) LegendItem(color = ChartColors.BasalSleep, label = "Sleep")
         if ("exercise" in basalModesPresent) LegendItem(color = ChartColors.BasalExercise, label = "Exercise")
-        if ("auto_correction" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "Auto Correction")
-        if ("auto_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "Auto Bolus")
-        if ("manual_correction" in bolusTypesPresent) LegendItem(color = ChartColors.ManualCorrection, label = "Manual Correction")
-        if ("meal_with_correction" in bolusTypesPresent) LegendItem(color = ChartColors.MealWithCorrection, label = "Meal + Corr")
-        if ("meal_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Bolus, label = "Meal Bolus")
+        if ("auto_correction" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "A.Corr")
+        if ("auto_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Correction, label = "A.Bolus")
+        if ("manual_correction" in bolusTypesPresent) LegendItem(color = ChartColors.ManualCorrection, label = "M.Corr")
+        if ("meal_with_correction" in bolusTypesPresent) LegendItem(color = ChartColors.MealWithCorrection, label = "M+C")
+        if ("meal_bolus" in bolusTypesPresent) LegendItem(color = ChartColors.Bolus, label = "Meal")
         if (hasIob) LegendItem(color = iobColor.copy(alpha = 0.7f), label = "IoB")
     }
 }
@@ -952,14 +952,21 @@ private fun DrawScope.drawBolusMarkers(
             ),
         )
 
-        // "AUTO" tag above units label for automated corrections
-        if (event.isAutomated) {
-            val autoTagStyle = TextStyle(fontSize = 7.sp, color = color.copy(alpha = 0.8f))
-            val autoTag = textMeasurer.measure("AUTO", autoTagStyle)
-            val autoTagY = (labelY - autoTag.size.height - 1.dp.toPx()).coerceAtLeast(0f)
+        // Type tag above units label -- skip plain MEAL (most common) to reduce clutter
+        val tagText = when (bolusType) {
+            BolusType.AUTO_CORRECTION -> "A.CORR"
+            BolusType.CORRECTION -> "CORR"
+            BolusType.MEAL_WITH_CORRECTION -> "M+C"
+            BolusType.AUTO -> "AUTO"
+            BolusType.MEAL -> null
+        }
+        if (tagText != null) {
+            val tagStyle = TextStyle(fontSize = 7.sp, color = color.copy(alpha = 0.8f))
+            val tag = textMeasurer.measure(tagText, tagStyle)
+            val tagY = (labelY - tag.size.height - 1.dp.toPx()).coerceAtLeast(0f)
             drawText(
-                autoTag,
-                topLeft = Offset(x - autoTag.size.width / 2f, autoTagY),
+                tag,
+                topLeft = Offset(x - tag.size.width / 2f, tagY),
             )
         }
     }

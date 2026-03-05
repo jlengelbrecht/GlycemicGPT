@@ -148,7 +148,20 @@ class DashboardComputationsTest {
     }
 
     @Test
+    fun `computeInsulinSummary returns null for zero periodHours`() {
+        val boluses = listOf(bolus(5f, 60))
+        assertNull(DashboardComputations.computeInsulinSummary(emptyList(), boluses, 0))
+    }
+
+    @Test
+    fun `computeInsulinSummary returns null for negative periodHours`() {
+        val boluses = listOf(bolus(5f, 60))
+        assertNull(DashboardComputations.computeInsulinSummary(emptyList(), boluses, -24))
+    }
+
+    @Test
     fun `computeInsulinSummary bolus only`() {
+        // Boluses 1-2 hours ago -> data span < 1 day -> clamped to 1 day
         val boluses = listOf(bolus(5f, 60), bolus(3f, 120))
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
         assertEquals(8f, summary.totalDailyDose, 0.01f)
@@ -156,23 +169,103 @@ class DashboardComputationsTest {
         assertEquals(8f, summary.bolusUnits, 0.01f)
         assertEquals(0f, summary.basalPercent, 0.01f)
         assertEquals(100f, summary.bolusPercent, 0.01f)
+        assertEquals(2, summary.bolusCount)
+        assertEquals(0, summary.correctionCount)
+        assertEquals(0f, summary.correctionUnits, 0.01f)
+        assertEquals(1f, summary.periodDays, 0.01f)
     }
 
     @Test
     fun `computeInsulinSummary basal integral`() {
-        // 1 U/hr for 2 hours = 2U basal
+        // 1 U/hr for 2 hours = 2U basal, data span 2h -> clamped to 1 day
         val basals = listOf(basal(1.0f, 2), basal(1.0f, 0))
         val summary = DashboardComputations.computeInsulinSummary(basals, emptyList(), 24)!!
         assertEquals(2f, summary.basalUnits, 0.1f) // TDD = total/days, days=1
         assertTrue(summary.basalPercent > 0f)
+        assertEquals(1f, summary.periodDays, 0.01f)
     }
 
     @Test
-    fun `computeInsulinSummary multi-day averaging`() {
+    fun `computeInsulinSummary multi-day uses actual data span`() {
+        // Bolus 1 hour ago, selected period 48h -> data span ~1h, clamped to 1 day
+        // Since there's only 1 hour of data, dividing by 2 days would be misleading
         val boluses = listOf(bolus(10f, 60))
-        // 48 hours = 2 days
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 48)!!
-        assertEquals(5f, summary.totalDailyDose, 0.01f) // 10U / 2 days
+        assertEquals(10f, summary.totalDailyDose, 0.01f) // 10U / 1 day (not 2)
+        assertEquals(1f, summary.periodDays, 0.01f)
+    }
+
+    @Test
+    fun `computeInsulinSummary multi-day with actual multi-day data`() {
+        // Boluses spanning 2+ days -> should divide by actual span
+        val boluses = listOf(
+            bolus(10f, 60),          // 1 hour ago
+            bolus(10f, 60 * 49),     // 49 hours ago (~2 days)
+        )
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 72)!!
+        // Data span is ~49 hours = ~2.04 days, total = 20U, TDD ~ 9.8 U/day
+        assertTrue(summary.periodDays > 1.9f && summary.periodDays < 2.1f)
+        assertTrue(summary.totalDailyDose > 9f && summary.totalDailyDose < 11f)
+    }
+
+    @Test
+    fun `insulin summary same data same TDD regardless of selected period`() {
+        // Data only spans a few hours -- selecting 24H, 3D, or 7D should all
+        // produce the same TDD because we divide by actual data span (clamped to 1 day),
+        // not the selected period. This was the original normalization bug.
+        val boluses = listOf(
+            bolus(5f, 60),    // 1 hour ago
+            bolus(3f, 120),   // 2 hours ago
+            bolus(4f, 600),   // 10 hours ago
+        )
+        val summary24 = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
+        val summary72 = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 72)!!
+        assertEquals(
+            summary24.totalDailyDose,
+            summary72.totalDailyDose,
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `insulin summary counts corrections by flag and breakdown`() {
+        val boluses = listOf(
+            bolus(3f, 60, isCorrection = false, correctionUnits = 0f),          // meal only
+            bolus(1f, 120, isCorrection = true, correctionUnits = 0f),          // correction by flag
+            bolus(2f, 180, isCorrection = false, correctionUnits = 1.5f),       // correction by breakdown
+            bolus(4f, 240, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f), // combo
+        )
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
+        assertEquals(4, summary.bolusCount)
+        assertEquals(3, summary.correctionCount) // boluses[1], boluses[2], boluses[3]
+        // Correction units: bolus[1]=1.0 (full units, no breakdown), bolus[2]=1.5, bolus[3]=0.5
+        assertEquals(3f, summary.correctionUnits, 0.01f) // (1.0 + 1.5 + 0.5) / 1 day
+    }
+
+    @Test
+    fun `insulin summary correction fallback uses full units for combo with flag only`() {
+        // Edge case: isCorrection=true on a combo bolus with no correctionUnits breakdown.
+        // The fallback uses full units (3.0), which overcounts correction insulin by
+        // including the meal portion. This is documented acceptable behavior because
+        // Tandem pump data always provides the breakdown.
+        val combo = bolus(3f, 60, isCorrection = true, correctionUnits = 0f, mealUnits = 2f)
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), listOf(combo), 24)!!
+        assertEquals(1, summary.correctionCount)
+        // Falls back to full units (3.0) since correctionUnits == 0
+        assertEquals(3f, summary.correctionUnits, 0.01f)
+    }
+
+    @Test
+    fun `insulin summary periodDays capped at selected period`() {
+        // Data from 1h ago, all periods should clamp to 1 day (minimum)
+        val boluses = listOf(bolus(5f, 60))
+        val s24 = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
+        val s72 = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 72)!!
+        val s168 = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 168)!!
+        // All clamped to 1 day because data span < 1 day
+        assertEquals(1f, s24.periodDays, 0.01f)
+        assertEquals(1f, s72.periodDays, 0.01f)
+        assertEquals(1f, s168.periodDays, 0.01f)
     }
 
     // -- enrichBoluses --------------------------------------------------------
