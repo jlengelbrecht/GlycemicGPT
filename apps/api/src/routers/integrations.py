@@ -1771,8 +1771,8 @@ def _boundary_aligned_cutoff(
         boundary_hour = 0
     try:
         tz = zoneinfo.ZoneInfo(tz_name)
-    except (KeyError, ValueError):
-        tz = UTC
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"Invalid timezone: {tz_name}") from e
     local_now = (now or datetime.now(UTC)).astimezone(tz)
     today_boundary = local_now.replace(
         hour=boundary_hour, minute=0, second=0, microsecond=0
@@ -2021,6 +2021,7 @@ async def get_insulin_summary(
     ),
     tz: str = Query(
         default="UTC",
+        max_length=50,
         description="IANA timezone for day boundary (e.g. America/Chicago)",
     ),
 ) -> InsulinSummaryResponse:
@@ -2034,7 +2035,10 @@ async def get_insulin_summary(
 
     now = datetime.now(UTC)
     boundary_hour = await get_boundary_hour(current_user.id, db)
-    cutoff = _boundary_aligned_cutoff(days, boundary_hour, tz, now)
+    try:
+        cutoff = _boundary_aligned_cutoff(days, boundary_hour, tz, now)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     # Determine best data source for bolus/correction events.
     bolus_source = await _best_source(
@@ -2230,6 +2234,7 @@ async def get_bolus_review(
     offset: int = Query(default=0, ge=0, description="Pagination offset"),
     tz: str = Query(
         default="UTC",
+        max_length=50,
         description="IANA timezone for day boundary (e.g. America/Chicago)",
     ),
 ) -> BolusReviewResponse:
@@ -2238,7 +2243,10 @@ async def get_bolus_review(
 
     now = datetime.now(UTC)
     boundary_hour = await get_boundary_hour(current_user.id, db)
-    cutoff = _boundary_aligned_cutoff(days, boundary_hour, tz, now)
+    try:
+        cutoff = _boundary_aligned_cutoff(days, boundary_hour, tz, now)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     # Determine best source to avoid cross-source duplicates.
     review_source = await _best_source(

@@ -700,6 +700,7 @@ export default function DataRetentionPage() {
                     day_boundary_hour: boundaryHour,
                   });
                   setAnalyticsConfig(updated);
+                  setBoundaryHour(updated.day_boundary_hour);
                   setSuccess("Analytics day boundary updated successfully");
                 } catch (err) {
                   setError(
