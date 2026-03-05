@@ -28,6 +28,7 @@ class AnalyticsSettingsStore @Inject constructor(
         get() = prefs.getLong(KEY_LAST_FETCHED, 0L)
 
     fun updateAll(dayBoundaryHour: Int) {
+        require(dayBoundaryHour in 0..23) { "dayBoundaryHour must be 0-23, was $dayBoundaryHour" }
         prefs.edit()
             .putInt(KEY_DAY_BOUNDARY_HOUR, dayBoundaryHour)
             .putLong(KEY_LAST_FETCHED, System.currentTimeMillis())

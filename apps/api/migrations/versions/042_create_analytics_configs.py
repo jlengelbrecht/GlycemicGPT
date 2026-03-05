@@ -39,7 +39,6 @@ def upgrade() -> None:
             "updated_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
-            onupdate=sa.func.now(),
             nullable=False,
         ),
         sa.CheckConstraint(

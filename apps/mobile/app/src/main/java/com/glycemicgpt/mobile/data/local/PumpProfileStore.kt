@@ -43,6 +43,10 @@ class PumpProfileStore @Inject constructor(
         maxBolusUnits: Float,
         segmentCount: Int,
     ) {
+        require(diaMinutes >= 0) { "diaMinutes must be non-negative, was $diaMinutes" }
+        require(maxBolusUnits in 0f..MAX_BOLUS_UNITS_CAP) {
+            "maxBolusUnits must be 0-$MAX_BOLUS_UNITS_CAP, was $maxBolusUnits"
+        }
         prefs.edit()
             .putString(KEY_PROFILE_NAME, profileName)
             .putInt(KEY_DIA_MINUTES, diaMinutes)
@@ -63,6 +67,7 @@ class PumpProfileStore @Inject constructor(
 
     companion object {
         const val STALE_THRESHOLD_MS = 3_600_000L // 1 hour
+        private const val MAX_BOLUS_UNITS_CAP = 25f // Tandem hardware max
 
         private const val KEY_PROFILE_NAME = "profile_name"
         private const val KEY_DIA_MINUTES = "dia_minutes"

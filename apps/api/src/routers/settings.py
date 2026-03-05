@@ -7,10 +7,12 @@ profile summary.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import get_current_user, require_diabetic_or_admin
 from src.database import get_db
+from src.logging_config import get_logger
 from src.models.user import User
 from src.schemas.alert_threshold import (
     AlertThresholdDefaults,
@@ -94,6 +96,8 @@ from src.services.safety_limits import (
 )
 from src.services.settings_export import export_user_data
 from src.services.target_glucose_range import get_or_create_range, update_range
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -600,7 +604,13 @@ async def patch_analytics_config(
 
     Only provided fields are updated. day_boundary_hour must be 0-23.
     """
-    config = await update_analytics_config(user.id, body, db)
+    try:
+        config = await update_analytics_config(user.id, body, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        ) from e
     return AnalyticsConfigResponse.model_validate(config)
 
 
@@ -643,11 +653,26 @@ async def get_pump_profile(
         )
 
     segments: list[PumpProfileSegment] = []
+    skipped = 0
     for seg in profile.segments or []:
         try:
             segments.append(PumpProfileSegment(**seg))
-        except (TypeError, KeyError):
+        except (TypeError, KeyError, ValidationError) as e:
+            logger.warning(
+                "Skipped malformed pump segment",
+                user_id=str(user.id),
+                error=str(e),
+            )
+            skipped += 1
             continue
+
+    if skipped:
+        logger.warning(
+            "Pump profile had malformed segments",
+            user_id=str(user.id),
+            skipped=skipped,
+            total=len(profile.segments or []),
+        )
 
     return PumpProfileSummaryResponse(
         profile_name=profile.profile_name,
