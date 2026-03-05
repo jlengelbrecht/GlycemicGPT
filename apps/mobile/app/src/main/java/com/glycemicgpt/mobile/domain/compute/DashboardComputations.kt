@@ -3,13 +3,16 @@ package com.glycemicgpt.mobile.domain.compute
 import com.glycemicgpt.mobile.domain.model.AgpBucket
 import com.glycemicgpt.mobile.domain.model.AgpProfile
 import com.glycemicgpt.mobile.domain.model.BasalReading
+import com.glycemicgpt.mobile.domain.model.BolusCategory
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.BolusType
+import com.glycemicgpt.mobile.domain.model.CategoryStats
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmStats
 import com.glycemicgpt.mobile.domain.model.EnrichedBolusEvent
 import com.glycemicgpt.mobile.domain.model.InsulinSummary
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.plugin.capabilities.BolusCategoryProvider
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -115,6 +118,7 @@ object DashboardComputations {
         basals: List<BasalReading>,
         boluses: List<BolusEvent>,
         periodHours: Long,
+        categoryProvider: BolusCategoryProvider? = null,
     ): InsulinSummary? {
         if (periodHours <= 0L) return null
 
@@ -126,8 +130,6 @@ object DashboardComputations {
         // Divide by actual data span (oldest event to now), capped at the selected period.
         // Uses nowMs (not newestMs) intentionally -- computeBasalIntegral also extends
         // the last basal segment to now, so the denominator must match the numerator.
-        // Mobile only has ~7 days of local BLE data, so selecting "7D" with 1 day
-        // of data should still show the 1-day average, not dilute it by 7.
         // Minimum 1 day to avoid inflating sub-day data into huge daily projections.
         val nowMs = System.currentTimeMillis()
         val allTimestamps = basals.map { it.timestamp.toEpochMilli() } +
@@ -137,27 +139,57 @@ object DashboardComputations {
         val days = (dataSpanHours / 24f).coerceIn(1f, periodHours / 24f)
 
         val correctionBoluses = boluses.filter { it.isCorrection || it.correctionUnits > 0f }
-        // Use breakdown when available; fall back to full units for flag-only
-        // boluses (status response with no dose breakdown). This may overcount
-        // correction insulin if isCorrection is set on a combo bolus with no
-        // breakdown data, but that case does not occur with Tandem pump data.
         val totalCorrection = correctionBoluses.sumOf {
             if (it.correctionUnits > 0f) it.correctionUnits.toDouble() else it.units.toDouble()
         }.toFloat()
 
-        // Per-category breakdown (mirrors pump Delivery Summary)
-        var foodTotal = 0.0
-        var corrTotal = 0.0     // AUTO_CORRECTION + AUTO
-        var bgFoodTotal = 0.0   // MEAL_WITH_CORRECTION
-        var bgOnlyTotal = 0.0   // CORRECTION
+        // Portion-based accumulation: split each bolus into food and correction
+        // portions instead of putting the full amount into one category.
+        var foodPortionTotal = 0.0
+        var correctionPortionTotal = 0.0
+
+        // Category breakdown: count + portions per category
+        val categoryMap = mutableMapOf<BolusCategory, MutableCategoryAccum>()
 
         for (b in boluses) {
-            when (deriveBolusType(b)) {
-                BolusType.MEAL -> foodTotal += b.units.toDouble()
-                BolusType.AUTO_CORRECTION, BolusType.AUTO -> corrTotal += b.units.toDouble()
-                BolusType.MEAL_WITH_CORRECTION -> bgFoodTotal += b.units.toDouble()
-                BolusType.CORRECTION -> bgOnlyTotal += b.units.toDouble()
+            val category = BolusCategoryMapper.resolve(b, categoryProvider)
+            val accum = categoryMap.getOrPut(category) { MutableCategoryAccum() }
+            accum.count++
+            accum.totalUnits += b.units.toDouble()
+
+            if (b.isAutomated) {
+                // Automated boluses are always correction (no meal component)
+                val corrPortion = if (b.correctionUnits > 0f) {
+                    b.correctionUnits.toDouble()
+                } else {
+                    b.units.toDouble()
+                }
+                correctionPortionTotal += corrPortion
+                accum.correctionPortion += corrPortion
+            } else if (b.mealUnits > 0f || b.correctionUnits > 0f) {
+                // Has dose breakdown -- use the portions directly
+                foodPortionTotal += b.mealUnits.toDouble()
+                correctionPortionTotal += b.correctionUnits.toDouble()
+                accum.foodPortion += b.mealUnits.toDouble()
+                accum.correctionPortion += b.correctionUnits.toDouble()
+            } else if (b.isCorrection) {
+                // No breakdown, correction flag only -- full amount is correction
+                correctionPortionTotal += b.units.toDouble()
+                accum.correctionPortion += b.units.toDouble()
+            } else {
+                // No breakdown, no correction flag -- assume food
+                foodPortionTotal += b.units.toDouble()
+                accum.foodPortion += b.units.toDouble()
             }
+        }
+
+        val categoryBreakdown = categoryMap.mapValues { (_, accum) ->
+            CategoryStats(
+                count = accum.count,
+                totalUnits = accum.totalUnits.toFloat(),
+                foodPortion = accum.foodPortion.toFloat(),
+                correctionPortion = accum.correctionPortion.toFloat(),
+            )
         }
 
         val tdd = total / days
@@ -175,12 +207,18 @@ object DashboardComputations {
             bolusPercent = if (tdd > 0f) 100f - basalPct else 0f,
             bolusCount = boluses.size,
             correctionCount = correctionBoluses.size,
-            foodBolusUnits = (foodTotal / days).toFloat(),
-            correctionBolusUnits = (corrTotal / days).toFloat(),
-            bgFoodUnits = (bgFoodTotal / days).toFloat(),
-            bgOnlyUnits = (bgOnlyTotal / days).toFloat(),
+            foodBolusUnits = (foodPortionTotal / days).toFloat(),
+            correctionBolusUnits = (correctionPortionTotal / days).toFloat(),
+            categoryBreakdown = categoryBreakdown,
             periodDays = days,
         )
+    }
+
+    private class MutableCategoryAccum {
+        var count: Int = 0
+        var totalUnits: Double = 0.0
+        var foodPortion: Double = 0.0
+        var correctionPortion: Double = 0.0
     }
 
     /**

@@ -1,5 +1,15 @@
 package com.glycemicgpt.mobile.domain.model
 
+/**
+ * Per-category statistics for the insulin summary.
+ */
+data class CategoryStats(
+    val count: Int,
+    val totalUnits: Float,
+    val foodPortion: Float,
+    val correctionPortion: Float,
+)
+
 data class InsulinSummary(
     val totalDailyDose: Float,
     val basalUnits: Float,
@@ -9,10 +19,10 @@ data class InsulinSummary(
     val bolusPercent: Float,
     val bolusCount: Int,
     val correctionCount: Int,
-    // Per-category bolus breakdown (U/day), mirrors pump Delivery Summary:
-    val foodBolusUnits: Float = 0f,        // pump "Food Bolus" + "Food Only" (BolusType.MEAL)
-    val correctionBolusUnits: Float = 0f,  // pump "Correction Bolus" (BolusType.AUTO_CORRECTION + AUTO)
-    val bgFoodUnits: Float = 0f,           // pump "BG + Food" (BolusType.MEAL_WITH_CORRECTION)
-    val bgOnlyUnits: Float = 0f,           // pump "BG Only" (BolusType.CORRECTION)
+    // Portion-based delivery totals (U/day):
+    val foodBolusUnits: Float = 0f,        // sum of meal portions across all boluses
+    val correctionBolusUnits: Float = 0f,  // sum of correction portions across all boluses
+    // Category breakdown: each bolus assigned to exactly one category
+    val categoryBreakdown: Map<BolusCategory, CategoryStats> = emptyMap(),
     val periodDays: Float,
 )

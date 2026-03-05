@@ -118,6 +118,7 @@ class PumpDataRepository @Inject constructor(
                     correctionUnits = it.correctionUnits,
                     mealUnits = it.mealUnits,
                     source = it.source,
+                    category = it.category,
                     timestampMs = it.timestamp.toEpochMilli(),
                 )
             },
@@ -265,6 +266,7 @@ private fun BolusEventEntity.toDomain(): BolusEvent? = try {
         correctionUnits = correctionUnits,
         mealUnits = mealUnits,
         source = source,
+        category = category,
         timestamp = Instant.ofEpochMilli(timestampMs),
     )
 } catch (_: IllegalArgumentException) {

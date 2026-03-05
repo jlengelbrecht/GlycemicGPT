@@ -2,6 +2,7 @@ package com.glycemicgpt.mobile.ble.messages
 
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
+import com.glycemicgpt.mobile.plugin.TandemBolusCategoryProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -1047,6 +1048,65 @@ class StatusResponseParserTest {
         } finally {
             TimeZone.setDefault(savedTz)
         }
+    }
+
+    // -- deriveTandemCategory tests -------------------------------------------
+
+    @Test
+    fun `deriveTandemCategory source 7 returns CONTROL_IQ`() {
+        assertEquals(
+            TandemBolusCategoryProvider.CONTROL_IQ,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 7, bolusTypeRaw = 0, correctionMu = 0, mealMu = 0),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory source 2 returns OVERRIDE`() {
+        assertEquals(
+            TandemBolusCategoryProvider.OVERRIDE,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 2, bolusTypeRaw = 0, correctionMu = 500, mealMu = 1000),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory combo bolus returns BG_FOOD`() {
+        assertEquals(
+            TandemBolusCategoryProvider.BG_FOOD,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 0, bolusTypeRaw = 0, correctionMu = 500, mealMu = 3000),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory meal only returns FOOD_ONLY`() {
+        assertEquals(
+            TandemBolusCategoryProvider.FOOD_ONLY,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 0, bolusTypeRaw = 0, correctionMu = 0, mealMu = 3000),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory correction only returns BG_ONLY`() {
+        assertEquals(
+            TandemBolusCategoryProvider.BG_ONLY,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 0, bolusTypeRaw = 0, correctionMu = 1000, mealMu = 0),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory bitmask correction returns BG_ONLY`() {
+        // No meal/correction breakdown but correction bitmask set
+        assertEquals(
+            TandemBolusCategoryProvider.BG_ONLY,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 0, bolusTypeRaw = 0x0A, correctionMu = 0, mealMu = 0),
+        )
+    }
+
+    @Test
+    fun `deriveTandemCategory no breakdown no flags returns UNKNOWN`() {
+        assertEquals(
+            TandemBolusCategoryProvider.UNKNOWN,
+            StatusResponseParser.deriveTandemCategory(bolusSourceRaw = 0, bolusTypeRaw = 0, correctionMu = 0, mealMu = 0),
+        )
     }
 
     // -- Helper ---------------------------------------------------------------

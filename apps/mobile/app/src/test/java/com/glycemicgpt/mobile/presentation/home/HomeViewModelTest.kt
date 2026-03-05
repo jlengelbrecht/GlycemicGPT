@@ -18,6 +18,7 @@ import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.model.TimeInRangeData
+import com.glycemicgpt.mobile.domain.plugin.DevicePlugin
 import com.glycemicgpt.mobile.domain.plugin.Plugin
 import com.glycemicgpt.mobile.domain.plugin.PluginMetadata
 import com.glycemicgpt.mobile.domain.plugin.ui.DashboardCardDescriptor
@@ -127,6 +128,7 @@ class HomeViewModelTest {
     private val api = mockk<GlycemicGptApi>(relaxed = true)
     private val pluginRegistry = mockk<PluginRegistry>(relaxed = true) {
         every { allActivePlugins } returns MutableStateFlow<List<Plugin>>(emptyList())
+        every { activePumpPlugin } returns MutableStateFlow(null)
     }
 
     @Before

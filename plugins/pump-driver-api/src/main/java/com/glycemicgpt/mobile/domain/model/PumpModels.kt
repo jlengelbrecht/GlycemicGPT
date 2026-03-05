@@ -47,6 +47,7 @@ data class BolusEvent(
     val correctionUnits: Float = 0f,
     val mealUnits: Float = 0f,
     val source: String = "",
+    val category: String = "",
     val timestamp: Instant,
 ) {
     init {

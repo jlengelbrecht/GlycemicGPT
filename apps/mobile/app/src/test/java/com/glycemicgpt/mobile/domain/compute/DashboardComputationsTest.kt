@@ -1,12 +1,14 @@
 package com.glycemicgpt.mobile.domain.compute
 
 import com.glycemicgpt.mobile.domain.model.BasalReading
+import com.glycemicgpt.mobile.domain.model.BolusCategory
 import com.glycemicgpt.mobile.domain.model.BolusEvent
 import com.glycemicgpt.mobile.domain.model.BolusType
 import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
+import com.glycemicgpt.mobile.domain.plugin.capabilities.BolusCategoryProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -258,22 +260,25 @@ class DashboardComputationsTest {
     }
 
     @Test
-    fun `insulin summary per-category breakdown sums match total bolusUnits`() {
+    fun `insulin summary portion-based sums food and correction portions`() {
         val boluses = listOf(
-            bolus(3f, 60, isAutomated = false, isCorrection = false),          // MEAL (food)
-            bolus(1f, 120, isAutomated = true, isCorrection = true),           // AUTO_CORRECTION (correction)
-            bolus(4f, 180, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f), // MEAL_WITH_CORRECTION (bg+food)
-            bolus(2f, 240, isCorrection = true, correctionUnits = 0f),         // CORRECTION (bg only)
-            bolus(0.3f, 300, isAutomated = true, isCorrection = false),        // AUTO (correction)
+            bolus(3f, 60, isAutomated = false, isCorrection = false),          // FOOD: 3U food
+            bolus(1f, 120, isAutomated = true, isCorrection = true),           // AUTO: 1U correction
+            bolus(4f, 180, isCorrection = true, correctionUnits = 0.5f, mealUnits = 3.5f), // combo: 3.5U food + 0.5U correction
+            bolus(2f, 240, isCorrection = true, correctionUnits = 0f),         // BG Only: 2U correction (flag only)
+            bolus(0.3f, 300, isAutomated = true, isCorrection = false),        // AUTO: 0.3U correction
         )
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
-        val categorySum = summary.foodBolusUnits + summary.correctionBolusUnits +
-            summary.bgFoodUnits + summary.bgOnlyUnits
-        assertEquals(summary.bolusUnits, categorySum, 0.01f)
+        // foodBolusUnits = 3.0 (meal) + 3.5 (combo meal portion) = 6.5
+        assertEquals(6.5f, summary.foodBolusUnits, 0.01f)
+        // correctionBolusUnits = 1.0 (auto) + 0.5 (combo correction) + 2.0 (bg only) + 0.3 (auto) = 3.8
+        assertEquals(3.8f, summary.correctionBolusUnits, 0.01f)
+        // Food + correction portions = total bolus
+        assertEquals(summary.bolusUnits, summary.foodBolusUnits + summary.correctionBolusUnits, 0.01f)
     }
 
     @Test
-    fun `insulin summary AUTO_CORRECTION and AUTO both counted in correctionBolusUnits`() {
+    fun `insulin summary automated boluses all go to correction portion`() {
         val boluses = listOf(
             bolus(1f, 60, isAutomated = true, isCorrection = true),      // AUTO_CORRECTION
             bolus(0.5f, 120, isAutomated = true, isCorrection = false),  // AUTO
@@ -281,40 +286,78 @@ class DashboardComputationsTest {
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
         assertEquals(1.5f, summary.correctionBolusUnits, 0.01f)
         assertEquals(0f, summary.foodBolusUnits, 0.01f)
-        assertEquals(0f, summary.bgFoodUnits, 0.01f)
-        assertEquals(0f, summary.bgOnlyUnits, 0.01f)
     }
 
     @Test
-    fun `insulin summary mixed bolus types produce correct per-category breakdown`() {
+    fun `insulin summary category breakdown has correct counts`() {
         val boluses = listOf(
-            bolus(5f, 60, isAutomated = false, isCorrection = false),                         // MEAL
+            bolus(5f, 60, isAutomated = false, isCorrection = false),                         // FOOD
             bolus(2f, 120, isAutomated = true, isCorrection = true),                           // AUTO_CORRECTION
-            bolus(4f, 180, isCorrection = true, correctionUnits = 1f, mealUnits = 3f),        // MEAL_WITH_CORRECTION
+            bolus(4f, 180, isCorrection = true, correctionUnits = 1f, mealUnits = 3f),        // FOOD_AND_CORRECTION
             bolus(1f, 240, isAutomated = false, isCorrection = true, correctionUnits = 0f),   // CORRECTION
         )
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
-        // Data span < 1 day, clamped to 1 day -> U/day = raw totals
-        assertEquals(5f, summary.foodBolusUnits, 0.01f)
-        assertEquals(2f, summary.correctionBolusUnits, 0.01f)
-        assertEquals(4f, summary.bgFoodUnits, 0.01f)
-        assertEquals(1f, summary.bgOnlyUnits, 0.01f)
+        val breakdown = summary.categoryBreakdown
+        assertEquals(1, breakdown[BolusCategory.FOOD]?.count)
+        assertEquals(1, breakdown[BolusCategory.AUTO_CORRECTION]?.count)
+        assertEquals(1, breakdown[BolusCategory.FOOD_AND_CORRECTION]?.count)
+        assertEquals(1, breakdown[BolusCategory.CORRECTION]?.count)
     }
 
     @Test
-    fun `insulin summary combo bolus counted in bgFoodUnits and correctionUnits independently`() {
-        // A MEAL_WITH_CORRECTION bolus of 4U (3U meal + 1U correction) should:
-        // - Add full 4U to bgFoodUnits (pump-aligned: total delivery for that category)
-        // - Add 1U correction component to correctionUnits (the aggregate correction field)
-        // These are intentionally different views of the same data (pump Delivery Summary
-        // vs correction tracking), not a double-count bug.
+    fun `insulin summary mixed bolus types produce correct portion-based breakdown`() {
+        val boluses = listOf(
+            bolus(5f, 60, isAutomated = false, isCorrection = false),                         // FOOD
+            bolus(2f, 120, isAutomated = true, isCorrection = true),                           // AUTO
+            bolus(4f, 180, isCorrection = true, correctionUnits = 1f, mealUnits = 3f),        // combo
+            bolus(1f, 240, isAutomated = false, isCorrection = true, correctionUnits = 0f),   // BG Only
+        )
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24)!!
+        // Portion-based: food = 5 (meal) + 3 (combo meal) = 8; correction = 2 (auto) + 1 (combo corr) + 1 (bg) = 4
+        assertEquals(8f, summary.foodBolusUnits, 0.01f)
+        assertEquals(4f, summary.correctionBolusUnits, 0.01f)
+    }
+
+    @Test
+    fun `insulin summary combo bolus splits portions correctly`() {
+        // A combo bolus of 4U (3U meal + 1U correction):
+        // foodBolusUnits gets 3U (meal portion)
+        // correctionBolusUnits gets 1U (correction portion)
+        // correctionUnits also gets 1U (aggregate correction tracking)
         val combo = bolus(4f, 60, isCorrection = false, correctionUnits = 1f, mealUnits = 3f)
         val summary = DashboardComputations.computeInsulinSummary(emptyList(), listOf(combo), 24)!!
-        assertEquals(4f, summary.bgFoodUnits, 0.01f)       // full combo goes to BG+Food
-        assertEquals(0f, summary.foodBolusUnits, 0.01f)     // not a plain food bolus
-        assertEquals(0f, summary.correctionBolusUnits, 0.01f) // not AUTO_CORRECTION/AUTO
-        assertEquals(0f, summary.bgOnlyUnits, 0.01f)        // not a plain correction
-        assertEquals(1f, summary.correctionUnits, 0.01f)    // correction component tracked separately
+        assertEquals(3f, summary.foodBolusUnits, 0.01f)        // meal portion
+        assertEquals(1f, summary.correctionBolusUnits, 0.01f)  // correction portion
+        assertEquals(1f, summary.correctionUnits, 0.01f)       // aggregate correction
+        // Category: FOOD_AND_CORRECTION
+        assertEquals(1, summary.categoryBreakdown[BolusCategory.FOOD_AND_CORRECTION]?.count)
+    }
+
+    @Test
+    fun `insulin summary with provider uses plugin categories`() {
+        val provider = object : BolusCategoryProvider {
+            override fun declaredCategories() = setOf("CIQ", "OVERRIDE")
+            override fun toPlatformCategory(pluginCategory: String) = when (pluginCategory) {
+                "CIQ" -> "AUTO_CORRECTION"
+                "OVERRIDE" -> "OVERRIDE"
+                else -> null
+            }
+        }
+        val boluses = listOf(
+            bolus(1f, 60, isAutomated = true, isCorrection = true).copy(category = "CIQ"),
+            bolus(5f, 120, isAutomated = false, isCorrection = false).copy(category = "OVERRIDE"),
+        )
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), boluses, 24, provider)!!
+        assertEquals(1, summary.categoryBreakdown[BolusCategory.AUTO_CORRECTION]?.count)
+        assertEquals(1, summary.categoryBreakdown[BolusCategory.OVERRIDE]?.count)
+    }
+
+    @Test
+    fun `insulin summary backward compat empty category uses flag fallback`() {
+        // Old data with empty category field
+        val b = bolus(5f, 60, isAutomated = false, isCorrection = false)
+        val summary = DashboardComputations.computeInsulinSummary(emptyList(), listOf(b), 24)!!
+        assertEquals(1, summary.categoryBreakdown[BolusCategory.FOOD]?.count)
     }
 
     @Test

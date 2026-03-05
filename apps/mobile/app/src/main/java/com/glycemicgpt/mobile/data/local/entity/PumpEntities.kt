@@ -42,6 +42,7 @@ data class BolusEventEntity(
     @ColumnInfo(defaultValue = "0.0") val correctionUnits: Float = 0f,
     @ColumnInfo(defaultValue = "0.0") val mealUnits: Float = 0f,
     @ColumnInfo(defaultValue = "") val source: String = "",
+    @ColumnInfo(defaultValue = "") val category: String = "",
     val timestampMs: Long,
 )
 

@@ -8,6 +8,7 @@ import com.glycemicgpt.mobile.domain.model.CgmReading
 import com.glycemicgpt.mobile.domain.model.CgmTrend
 import com.glycemicgpt.mobile.domain.model.PumpActivityMode
 import com.glycemicgpt.mobile.domain.model.HistoryLogRange
+import com.glycemicgpt.mobile.plugin.TandemBolusCategoryProvider
 import com.glycemicgpt.mobile.domain.model.HistoryLogRecord
 import com.glycemicgpt.mobile.domain.model.IoBReading
 import com.glycemicgpt.mobile.domain.model.PumpHardwareInfo
@@ -355,6 +356,14 @@ internal object StatusResponseParser {
         // Check both bits to handle either format consistently.
         val isCorrection = (bolusTypeBitmask and 0x0A) != 0
 
+        // Status response does not include meal/correction breakdown, so we pass
+        // correctionMu=0, mealMu=0. Category falls back to source ID and bitmask only.
+        // This means GUI-initiated food-only boluses get UNKNOWN here, but they will
+        // be re-categorized from the history log when it arrives with full breakdown.
+        val category = deriveTandemCategory(
+            bolusSourceId, bolusTypeBitmask, correctionMu = 0, mealMu = 0,
+        )
+
         return listOf(
             BolusEvent(
                 units = units,
@@ -363,6 +372,7 @@ internal object StatusResponseParser {
                 correctionUnits = 0f,
                 mealUnits = 0f,
                 source = mapBolusSource(bolusSourceId),
+                category = category,
                 timestamp = timestamp,
             ),
         )
@@ -595,6 +605,28 @@ internal object StatusResponseParser {
         )
     }
 
+    /**
+     * Derive the Tandem-specific bolus category from BLE source/type fields.
+     *
+     * @param bolusSourceRaw BLE source byte (0=GUI, 1=AUTO_PILOT, 2=AUTO_POP_UP, 7=ALGORITHM)
+     * @param bolusTypeRaw BLE type bitmask (0x02=correction type, 0x08=correction component)
+     * @param correctionMu Correction portion in milliunits (0 = no correction)
+     * @param mealMu Meal portion in milliunits (0 = no meal)
+     */
+    internal fun deriveTandemCategory(
+        bolusSourceRaw: Int,
+        bolusTypeRaw: Int,
+        correctionMu: Int,
+        mealMu: Int,
+    ): String = when {
+        bolusSourceRaw == 7 -> TandemBolusCategoryProvider.CONTROL_IQ
+        bolusSourceRaw == 2 -> TandemBolusCategoryProvider.OVERRIDE
+        mealMu > 0 && correctionMu > 0 -> TandemBolusCategoryProvider.BG_FOOD
+        mealMu > 0 -> TandemBolusCategoryProvider.FOOD_ONLY
+        correctionMu > 0 || (bolusTypeRaw and 0x0A) != 0 -> TandemBolusCategoryProvider.BG_ONLY
+        else -> TandemBolusCategoryProvider.UNKNOWN
+    }
+
     // -- History log event extraction ---------------------------------------
 
     /** Event type ID for fingerstick BG meter readings (LidBgReadingTaken). */
@@ -765,6 +797,10 @@ internal object StatusResponseParser {
             0
         }
 
+        val category = deriveTandemCategory(
+            bolusSourceRaw, bolusTypeRaw, correctionMuClamped, mealPortionMu,
+        )
+
         return BolusEvent(
             units = deliveredTotalMu / 1000f,
             isAutomated = isAutomated,
@@ -772,6 +808,7 @@ internal object StatusResponseParser {
             correctionUnits = correctionMuClamped / 1000f,
             mealUnits = mealPortionMu / 1000f,
             source = mapBolusSource(bolusSourceRaw),
+            category = category,
             timestamp = pumpTimeToInstant(pumpTimeSec),
         )
     }

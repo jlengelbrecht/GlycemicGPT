@@ -20,6 +20,7 @@ import com.glycemicgpt.mobile.domain.model.ConnectionState
 import com.glycemicgpt.mobile.domain.model.EnrichedBolusEvent
 import com.glycemicgpt.mobile.domain.model.InsulinSummary
 import com.glycemicgpt.mobile.domain.model.IoBReading
+import com.glycemicgpt.mobile.domain.plugin.asBolusCategoryProvider
 import com.glycemicgpt.mobile.domain.model.ReservoirReading
 import com.glycemicgpt.mobile.domain.model.TimeInRangeData
 import com.glycemicgpt.mobile.domain.plugin.ui.DashboardCardDescriptor
@@ -247,16 +248,20 @@ class HomeViewModel @Inject constructor(
     val insulinSummary: StateFlow<InsulinSummary?> = combine(
         _selectedInsulinPeriod,
         _dayBoundaryHour,
-    ) { period, boundary -> Pair(period, boundary) }
-        .flatMapLatest { (period, boundary) ->
+        pluginRegistry.activePumpPlugin,
+    ) { period, boundary, plugin -> Triple(period, boundary, plugin) }
+        .flatMapLatest { (period, boundary, plugin) ->
             val since = DashboardComputations.periodStart(
                 period.daysBack, boundary, ZoneId.systemDefault(),
             )
+            val categoryProvider = plugin?.asBolusCategoryProvider()
             combine(
                 repository.observeBasalHistoryAll(since),
                 repository.observeBolusHistoryAll(since),
             ) { basals, boluses ->
-                DashboardComputations.computeInsulinSummary(basals, boluses, period.hours)
+                DashboardComputations.computeInsulinSummary(
+                    basals, boluses, period.hours, categoryProvider,
+                )
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
