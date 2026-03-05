@@ -39,10 +39,10 @@ import com.glycemicgpt.mobile.presentation.theme.GlucoseColors
 
 enum class TirPeriod(val label: String, val hours: Long, val daysBack: Int) {
     TWENTY_FOUR_HOURS("24H", 24, 0),
-    THREE_DAYS("3D", 72, 3),
-    SEVEN_DAYS("7D", 168, 7),
-    FOURTEEN_DAYS("14D", 336, 14),
-    THIRTY_DAYS("30D", 720, 30),
+    THREE_DAYS("3D", 72, 2),
+    SEVEN_DAYS("7D", 168, 6),
+    FOURTEEN_DAYS("14D", 336, 13),
+    THIRTY_DAYS("30D", 720, 29),
 }
 
 private val TirLow = GlucoseColors.UrgentLow   // Red

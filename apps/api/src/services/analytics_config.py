@@ -16,6 +16,24 @@ from src.schemas.analytics_config import AnalyticsConfigUpdate
 logger = get_logger(__name__)
 
 
+async def get_boundary_hour(
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> int:
+    """Get the user's analytics day boundary hour (read-only, no side effects).
+
+    Returns the configured boundary hour, or 0 (midnight) if no config exists.
+    Safe to call from GET endpoints without creating database records.
+    """
+    result = await db.execute(
+        select(AnalyticsConfig.day_boundary_hour).where(
+            AnalyticsConfig.user_id == user_id
+        )
+    )
+    value = result.scalar_one_or_none()
+    return value if value is not None else 0
+
+
 async def get_or_create_config(
     user_id: uuid.UUID,
     db: AsyncSession,
