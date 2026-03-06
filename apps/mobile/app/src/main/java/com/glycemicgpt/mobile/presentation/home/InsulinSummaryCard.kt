@@ -199,11 +199,11 @@ fun InsulinSummaryCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     PortionRow(
-                        label = "Food Bolus",
+                        label = "${categoryLabels["FOOD"] ?: BolusCategory.FOOD.displayName} Bolus",
                         value = String.format(Locale.US, "%.1f U/d", summary.foodBolusUnits),
                     )
                     PortionRow(
-                        label = "Correction Bolus",
+                        label = "${categoryLabels["CORRECTION"] ?: BolusCategory.CORRECTION.displayName} Bolus",
                         value = String.format(Locale.US, "%.1f U/d", summary.correctionBolusUnits),
                     )
                 }

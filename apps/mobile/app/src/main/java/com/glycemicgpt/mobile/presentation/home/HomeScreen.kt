@@ -122,6 +122,7 @@ fun HomeScreen(
                 selectedPeriod = selectedPeriod,
                 onPeriodSelected = { viewModel.onPeriodSelected(it) },
                 thresholds = thresholds,
+                categoryLabels = categoryLabels,
                 onClick = onNavigateToChartDetail,
             )
 
@@ -173,6 +174,7 @@ fun HomeScreen(
                 boluses = enrichedBoluses,
                 selectedPeriod = selectedBolusPeriod,
                 onPeriodSelected = { viewModel.onBolusPeriodSelected(it) },
+                categoryLabels = categoryLabels,
                 onExpand = onNavigateToBolusHistory,
             )
 
