@@ -1055,6 +1055,24 @@ export default function DataRetentionPage() {
                 type="button"
                 onClick={() => {
                   const defaults = DEFAULT_DISPLAY_LABELS.map((d) => ({ ...d }));
+                  // Auto-populate pump_source from plugin category_mappings
+                  if (pluginDeclaration) {
+                    // Reverse map: computation_role -> pump-native category
+                    const roleToSource: Record<string, string> = {};
+                    for (const [pumpCat, role] of Object.entries(
+                      pluginDeclaration.category_mappings
+                    )) {
+                      // First mapping wins (avoids many-to-one ambiguity)
+                      if (!roleToSource[role]) {
+                        roleToSource[role] = pumpCat;
+                      }
+                    }
+                    for (const label of defaults) {
+                      if (label.computation_role && roleToSource[label.computation_role]) {
+                        label.pump_source = roleToSource[label.computation_role];
+                      }
+                    }
+                  }
                   setDisplayLabels(defaults);
                 }}
                 disabled={
