@@ -26,9 +26,7 @@ def _boundary_cutoff(days: int, boundary_hour: int = 0) -> datetime:
     Test data must be placed after this cutoff to be counted.
     """
     now = datetime.now(UTC)
-    today_boundary = now.replace(
-        hour=boundary_hour, minute=0, second=0, microsecond=0
-    )
+    today_boundary = now.replace(hour=boundary_hour, minute=0, second=0, microsecond=0)
     if now < today_boundary:
         effective_boundary = today_boundary - timedelta(days=1)
     else:
@@ -866,7 +864,9 @@ class TestCrossUserIsolation:
 
         assert resp_a.status_code == 200
         assert resp_b.status_code == 200
-        assert resp_a.json()["total_count"] == 30  # 18 bolus + 12 correction (6 complete days)
+        assert (
+            resp_a.json()["total_count"] == 30
+        )  # 18 bolus + 12 correction (6 complete days)
         assert resp_b.json()["total_count"] == 0
         assert resp_b.json()["boluses"] == []
 
