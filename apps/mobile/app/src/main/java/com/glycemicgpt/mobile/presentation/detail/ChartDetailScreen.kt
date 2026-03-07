@@ -124,7 +124,7 @@ fun ChartDetailScreen(
             iobReadings = iobHistory,
             basalReadings = basalHistory,
             bolusEvents = bolusHistory,
-            selectedPeriod = selectedPeriod,
+            selectedPeriod = effectivePeriod,
             onPeriodSelected = { viewModel.onPeriodSelected(it) },
             thresholds = thresholds,
             categoryLabels = categoryLabels,

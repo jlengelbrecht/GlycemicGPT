@@ -80,6 +80,7 @@ fun HomeScreen(
     val enrichedBoluses by viewModel.enrichedBoluses.collectAsState()
     val categoryLabels by viewModel.categoryLabels.collectAsState()
     val pumpLabelMap by viewModel.pumpLabelMap.collectAsState()
+    val showPumpLabels by viewModel.showPumpLabels.collectAsState()
     val retentionDays by viewModel.dataRetentionDays.collectAsState()
 
     PullToRefreshBox(
@@ -153,7 +154,7 @@ fun HomeScreen(
                 selectedPeriod = selectedInsulinPeriod,
                 onPeriodSelected = { viewModel.onInsulinPeriodSelected(it) },
                 categoryLabels = categoryLabels,
-                pumpLabelMap = if (viewModel.showPumpLabels) pumpLabelMap else null,
+                pumpLabelMap = if (showPumpLabels) pumpLabelMap else null,
                 maxRetentionDays = retentionDays,
             )
 

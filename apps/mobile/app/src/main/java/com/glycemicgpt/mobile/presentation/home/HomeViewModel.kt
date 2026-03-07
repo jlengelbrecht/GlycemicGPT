@@ -144,8 +144,8 @@ class HomeViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Debug-only: whether to show pump-native labels next to display labels. */
-    val showPumpLabels: Boolean
-        get() = appSettingsStore.showPumpLabels
+    private val _showPumpLabels = MutableStateFlow(appSettingsStore.showPumpLabels)
+    val showPumpLabels: StateFlow<Boolean> = _showPumpLabels.asStateFlow()
 
     /** Current local data retention setting (days). Used to cap period selectors. */
     private val _dataRetentionDays = MutableStateFlow(appSettingsStore.dataRetentionDays)
@@ -356,8 +356,9 @@ class HomeViewModel @Inject constructor(
                 pumpDriver.getReservoirLevel().onSuccess { repository.saveReservoir(it) }
                 delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
                 pumpDriver.getCgmStatus().onSuccess { repository.saveCgm(it) }
-                // Re-read retention in case the user changed it in Settings
+                // Re-read settings in case the user changed them in Settings
                 _dataRetentionDays.value = appSettingsStore.dataRetentionDays
+                _showPumpLabels.value = appSettingsStore.showPumpLabels
             } catch (e: Exception) {
                 Timber.w(e, "Error during manual data refresh")
             } finally {
