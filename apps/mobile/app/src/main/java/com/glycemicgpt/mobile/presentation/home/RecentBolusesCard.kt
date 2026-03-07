@@ -63,7 +63,8 @@ fun RecentBolusesCard(
     maxRetentionDays: Int = AppSettingsStore.DEFAULT_RETENTION_DAYS,
     modifier: Modifier = Modifier,
 ) {
-    val availablePeriods = BolusTimePeriods.filter { it.hours / 24 <= maxRetentionDays }
+    val safeRetention = maxRetentionDays.coerceAtLeast(1)
+    val availablePeriods = BolusTimePeriods.filter { it.hours / 24 <= safeRetention }
     // Coerce period to one supported by this card
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
     val a11yDescription = "Recent boluses: ${boluses.size} events in the last ${effectivePeriod.label}"

@@ -71,7 +71,8 @@ fun InsulinSummaryCard(
     maxRetentionDays: Int = AppSettingsStore.DEFAULT_RETENTION_DAYS,
     modifier: Modifier = Modifier,
 ) {
-    val availablePeriods = InsulinPeriods.filter { it.hours / 24 <= maxRetentionDays }
+    val safeRetention = maxRetentionDays.coerceAtLeast(1)
+    val availablePeriods = InsulinPeriods.filter { it.hours / 24 <= safeRetention }
     // Coerce period to one supported by this card
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
 

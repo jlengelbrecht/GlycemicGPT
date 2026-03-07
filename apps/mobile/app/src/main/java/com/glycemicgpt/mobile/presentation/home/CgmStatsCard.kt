@@ -41,7 +41,8 @@ fun CgmStatsCard(
     maxRetentionDays: Int = AppSettingsStore.DEFAULT_RETENTION_DAYS,
     modifier: Modifier = Modifier,
 ) {
-    val availablePeriods = CgmStatsPeriods.filter { it.hours / 24 <= maxRetentionDays }
+    val safeRetention = maxRetentionDays.coerceAtLeast(1)
+    val availablePeriods = CgmStatsPeriods.filter { it.hours / 24 <= safeRetention }
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
     val a11yDescription = if (stats != null) {
         "CGM statistics: mean glucose %.0f mg/dL, coefficient of variation %.1f%%, GMI %.1f%%".format(

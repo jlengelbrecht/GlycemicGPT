@@ -64,7 +64,8 @@ fun TimeInRangeBar(
     maxRetentionDays: Int = AppSettingsStore.DEFAULT_RETENTION_DAYS,
     modifier: Modifier = Modifier,
 ) {
-    val availablePeriods = TirPeriod.entries.filter { it.hours / 24 <= maxRetentionDays }
+    val safeRetention = maxRetentionDays.coerceAtLeast(1)
+    val availablePeriods = TirPeriod.entries.filter { it.hours / 24 <= safeRetention }
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
     val a11yDescription = if (data != null && data.totalReadings > 0) {
         ("Time in range: %.0f%% low, %.0f%% in range, %.0f%% high, " +
