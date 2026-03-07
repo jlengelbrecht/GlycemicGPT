@@ -72,19 +72,23 @@ fun InsulinSummaryCard(
     // Coerce period to one supported by this card (other cards may allow 14D/30D)
     val effectivePeriod = if (selectedPeriod in InsulinPeriods) selectedPeriod else InsulinPeriods.first()
 
+    val foodLabel = categoryLabels["FOOD"] ?: BolusCategory.FOOD.displayName
+    val corrLabel = categoryLabels["CORRECTION"] ?: BolusCategory.CORRECTION.displayName
     val a11yDescription = if (summary != null) {
         String.format(
             Locale.US,
             "Insulin summary: total daily dose %.1f units, " +
                 "basal %.1f units (%.0f%%), bolus %.1f units (%.0f%%). " +
-                "Food bolus %.1f, Correction bolus %.1f units per day. " +
+                "%s bolus %.1f, %s bolus %.1f units per day. " +
                 "%d total boluses",
             summary.totalDailyDose,
             summary.basalUnits,
             summary.basalPercent,
             summary.bolusUnits,
             summary.bolusPercent,
+            foodLabel,
             summary.foodBolusUnits,
+            corrLabel,
             summary.correctionBolusUnits,
             summary.bolusCount,
         )

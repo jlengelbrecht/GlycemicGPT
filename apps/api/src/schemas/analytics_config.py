@@ -100,10 +100,13 @@ class DisplayLabel(BaseModel):
     @field_validator("label")
     @classmethod
     def validate_label(cls, v: str) -> str:
-        if len(v.strip()) == 0:
+        v = v.strip()
+        if len(v) == 0:
             raise ValueError("Label text must not be blank.")
         if _HTML_TAG_RE.search(v):
             raise ValueError("Label text must not contain HTML tags.")
+        if any(c in v for c in "\n\r\t"):
+            raise ValueError("Label text must not contain control characters.")
         return v
 
     @field_validator("computation_role")

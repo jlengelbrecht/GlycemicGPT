@@ -164,6 +164,8 @@ def upgrade() -> None:
             )
 
     # 3. Drop old columns
+    # Note: custom_categories was a schema-ready placeholder (045) that was
+    # never populated by any service or UI -- safe to drop without migration.
     op.drop_column("analytics_configs", "category_labels")
     op.drop_column("analytics_configs", "custom_categories")
 

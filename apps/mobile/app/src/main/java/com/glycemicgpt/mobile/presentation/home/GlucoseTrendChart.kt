@@ -912,13 +912,12 @@ private fun bolusTypeLabel(type: BolusType, categoryLabels: Map<String, String>)
     }
 }
 
-/** Abbreviate a label for chart markers (max ~6 chars for 7sp text). */
+/** Abbreviate a label for chart markers (max ~8 chars for 7sp text). */
 private fun abbreviateLabel(label: String): String {
     if (label.isBlank()) return label
-    if (label.length <= 6) return label
-    // Take first word, or truncate with ellipsis
-    val firstWord = label.split(" ", "+", "/").first()
-    return if (firstWord.length <= 6) firstWord else firstWord.take(5) + "."
+    if (label.length <= 8) return label
+    // Truncate with ellipsis, preserving enough chars for uniqueness
+    return label.take(7) + "."
 }
 
 private fun DrawScope.drawBolusMarkers(

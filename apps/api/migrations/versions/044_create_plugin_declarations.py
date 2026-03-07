@@ -31,7 +31,6 @@ def upgrade() -> None:
             sa.dialects.postgresql.UUID(as_uuid=True),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
-            unique=True,
         ),
         sa.Column("plugin_id", sa.String(128), nullable=False),
         sa.Column("plugin_name", sa.String(64), nullable=False),

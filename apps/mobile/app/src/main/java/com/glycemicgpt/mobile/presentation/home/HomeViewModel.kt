@@ -485,9 +485,22 @@ class HomeViewModel @Inject constructor(
                 }
                 return
             }
-            val provider = plugin.asBolusCategoryProvider() ?: return
+            val provider = plugin.asBolusCategoryProvider()
+            if (provider == null) {
+                val resp = api.deletePluginDeclarations()
+                if (resp.isSuccessful || resp.code() == 404) {
+                    Timber.d("Plugin declaration cleared (no bolus category provider)")
+                }
+                return
+            }
             val declared = provider.declaredCategories()
-            if (declared.isEmpty()) return
+            if (declared.isEmpty()) {
+                val resp = api.deletePluginDeclarations()
+                if (resp.isSuccessful || resp.code() == 404) {
+                    Timber.d("Plugin declaration cleared (empty declared categories)")
+                }
+                return
+            }
             val mappings = buildMap {
                 for (pumpCat in declared) {
                     val platform = provider.toPlatformCategory(pumpCat) ?: continue

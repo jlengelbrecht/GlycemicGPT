@@ -79,6 +79,26 @@ class TestDisplayLabel:
         with pytest.raises(ValidationError, match="HTML"):
             DisplayLabel(id="test", label="<script>xss</script>", sort_order=0)
 
+    def test_label_svg_xss_rejected(self):
+        with pytest.raises(ValidationError, match="HTML"):
+            DisplayLabel(id="test", label="<svg/onload=1>", sort_order=0)
+
+    def test_label_img_xss_rejected(self):
+        with pytest.raises(ValidationError):
+            DisplayLabel(id="test", label='<img onerror=1>', sort_order=0)
+
+    def test_label_embedded_newline_rejected(self):
+        with pytest.raises(ValidationError, match="control"):
+            DisplayLabel(id="test", label="Me\nal", sort_order=0)
+
+    def test_label_embedded_tab_rejected(self):
+        with pytest.raises(ValidationError, match="control"):
+            DisplayLabel(id="test", label="Me\tal", sort_order=0)
+
+    def test_label_whitespace_trimmed(self):
+        label = DisplayLabel(id="test", label="  Meal  ", sort_order=0)
+        assert label.label == "Meal"
+
     def test_invalid_computation_role_rejected(self):
         with pytest.raises(ValidationError, match="computation_role"):
             DisplayLabel(

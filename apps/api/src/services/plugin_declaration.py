@@ -54,9 +54,8 @@ async def upsert_declaration(
     await db.commit()
     await db.refresh(declaration)
 
-    logger.info(
+    logger.debug(
         "Upserted plugin declaration",
-        user_id=str(user_id),
         plugin_id=data.plugin_id,
     )
 
@@ -86,9 +85,6 @@ async def delete_declaration(
     deleted = result.rowcount > 0
 
     if deleted:
-        logger.info(
-            "Deleted plugin declaration",
-            user_id=str(user_id),
-        )
+        logger.debug("Deleted plugin declaration")
 
     return deleted

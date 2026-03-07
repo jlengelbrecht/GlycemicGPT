@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from src.schemas.analytics_config import COMPUTATION_ROLES
 
 _PLUGIN_ID_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
-_PLUGIN_NAME_RE = re.compile(r"^[\w\s.()-]+$")
+_PLUGIN_NAME_RE = re.compile(r"^[\w .()-]+$")
 _PLUGIN_VERSION_RE = re.compile(r"^[a-zA-Z0-9.+-]+$")
 _CATEGORY_KEY_RE = re.compile(r"^[A-Z0-9_]+$")
 

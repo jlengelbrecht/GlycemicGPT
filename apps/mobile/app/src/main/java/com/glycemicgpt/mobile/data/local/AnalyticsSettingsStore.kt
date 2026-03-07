@@ -63,6 +63,8 @@ class AnalyticsSettingsStore @Inject constructor(
                 if (categoryLabels != null) {
                     val json = JSONObject(categoryLabels).toString()
                     editor.putString(KEY_CATEGORY_LABELS, json)
+                } else {
+                    editor.remove(KEY_CATEGORY_LABELS)
                 }
             }
             .apply()
