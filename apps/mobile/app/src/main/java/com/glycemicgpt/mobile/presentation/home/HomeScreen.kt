@@ -53,7 +53,6 @@ fun HomeScreen(
     onNavigateToTirDetail: () -> Unit = {},
     onNavigateToInsulinDetail: () -> Unit = {},
     onNavigateToAlertHistory: () -> Unit = {},
-    onNavigateToAgpDetail: (() -> Unit)? = null,
     onNavigateToBolusHistory: (() -> Unit)? = null,
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
@@ -73,8 +72,6 @@ fun HomeScreen(
     val timeInRange by viewModel.timeInRange.collectAsState()
     val thresholds by viewModel.glucoseThresholds.collectAsState()
     val pluginCards by viewModel.pluginCards.collectAsState()
-    val selectedAgpPeriod by viewModel.selectedAgpPeriod.collectAsState()
-    val agpProfile by viewModel.agpProfile.collectAsState()
     val selectedCgmStatsPeriod by viewModel.selectedCgmStatsPeriod.collectAsState()
     val cgmStats by viewModel.cgmStats.collectAsState()
     val selectedInsulinPeriod by viewModel.selectedInsulinPeriod.collectAsState()
@@ -83,6 +80,7 @@ fun HomeScreen(
     val enrichedBoluses by viewModel.enrichedBoluses.collectAsState()
     val categoryLabels by viewModel.categoryLabels.collectAsState()
     val pumpLabelMap by viewModel.pumpLabelMap.collectAsState()
+    val retentionDays by viewModel.dataRetentionDays.collectAsState()
 
     PullToRefreshBox(
         isRefreshing = isRefreshing,
@@ -134,6 +132,7 @@ fun HomeScreen(
                 selectedPeriod = selectedTirPeriod,
                 onPeriodSelected = { viewModel.onTirPeriodSelected(it) },
                 thresholds = thresholds,
+                maxRetentionDays = retentionDays,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -143,6 +142,7 @@ fun HomeScreen(
                 stats = cgmStats,
                 selectedPeriod = selectedCgmStatsPeriod,
                 onPeriodSelected = { viewModel.onCgmStatsPeriodSelected(it) },
+                maxRetentionDays = retentionDays,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -154,17 +154,7 @@ fun HomeScreen(
                 onPeriodSelected = { viewModel.onInsulinPeriodSelected(it) },
                 categoryLabels = categoryLabels,
                 pumpLabelMap = if (viewModel.showPumpLabels) pumpLabelMap else null,
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // AGP chart
-            AgpChart(
-                profile = agpProfile,
-                selectedPeriod = selectedAgpPeriod,
-                onPeriodSelected = { viewModel.onAgpPeriodSelected(it) },
-                thresholds = thresholds,
-                onClick = onNavigateToAgpDetail,
+                maxRetentionDays = retentionDays,
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -176,6 +166,7 @@ fun HomeScreen(
                 onPeriodSelected = { viewModel.onBolusPeriodSelected(it) },
                 categoryLabels = categoryLabels,
                 onExpand = onNavigateToBolusHistory,
+                maxRetentionDays = retentionDays,
             )
 
             // Plugin-contributed cards (sorted by priority, memoized)

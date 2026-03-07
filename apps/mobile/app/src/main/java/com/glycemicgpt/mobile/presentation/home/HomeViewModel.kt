@@ -12,7 +12,6 @@ import com.glycemicgpt.mobile.data.remote.dto.PluginDeclarationRequest
 import com.glycemicgpt.mobile.data.repository.AuthRepository
 import com.glycemicgpt.mobile.data.repository.PumpDataRepository
 import com.glycemicgpt.mobile.domain.compute.DashboardComputations
-import com.glycemicgpt.mobile.domain.model.AgpProfile
 import com.glycemicgpt.mobile.domain.model.BasalReading
 import com.glycemicgpt.mobile.domain.model.BatteryStatus
 import com.glycemicgpt.mobile.domain.model.BolusCategory
@@ -148,6 +147,10 @@ class HomeViewModel @Inject constructor(
     val showPumpLabels: Boolean
         get() = appSettingsStore.showPumpLabels
 
+    /** Current local data retention setting (days). Used to cap period selectors. */
+    private val _dataRetentionDays = MutableStateFlow(appSettingsStore.dataRetentionDays)
+    val dataRetentionDays: StateFlow<Int> = _dataRetentionDays.asStateFlow()
+
     init {
         // Refresh glucose range from backend on screen load if stale (15 min)
         if (glucoseRangeStore.isStale(maxAgeMs = RANGE_REFRESH_INTERVAL_MS)) {
@@ -245,26 +248,6 @@ class HomeViewModel @Inject constructor(
 
     fun onTirPeriodSelected(period: TirPeriod) {
         _selectedTirPeriod.value = period
-    }
-
-    // -- AGP Chart state ------------------------------------------------------
-
-    private val _selectedAgpPeriod = MutableStateFlow(AgpPeriod.FOURTEEN_DAYS)
-    val selectedAgpPeriod: StateFlow<AgpPeriod> = _selectedAgpPeriod.asStateFlow()
-
-    val agpProfile: StateFlow<AgpProfile?> = _selectedAgpPeriod
-        .flatMapLatest { period ->
-            val since = Instant.ofEpochMilli(
-                System.currentTimeMillis() - period.days * 24 * 3600_000L,
-            )
-            repository.observeCgmHistoryAll(since).map { readings ->
-                DashboardComputations.computeAgp(readings, period.days)
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun onAgpPeriodSelected(period: AgpPeriod) {
-        _selectedAgpPeriod.value = period
     }
 
     // -- CGM Stats state ------------------------------------------------------
@@ -373,6 +356,8 @@ class HomeViewModel @Inject constructor(
                 pumpDriver.getReservoirLevel().onSuccess { repository.saveReservoir(it) }
                 delay(PumpPollingOrchestrator.REQUEST_STAGGER_MS)
                 pumpDriver.getCgmStatus().onSuccess { repository.saveCgm(it) }
+                // Re-read retention in case the user changed it in Settings
+                _dataRetentionDays.value = appSettingsStore.dataRetentionDays
             } catch (e: Exception) {
                 Timber.w(e, "Error during manual data refresh")
             } finally {
