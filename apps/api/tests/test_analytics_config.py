@@ -85,7 +85,7 @@ class TestDisplayLabel:
 
     def test_label_img_xss_rejected(self):
         with pytest.raises(ValidationError):
-            DisplayLabel(id="test", label='<img onerror=1>', sort_order=0)
+            DisplayLabel(id="test", label="<img onerror=1>", sort_order=0)
 
     def test_label_embedded_newline_rejected(self):
         with pytest.raises(ValidationError, match="control"):
