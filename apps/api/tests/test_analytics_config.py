@@ -95,6 +95,10 @@ class TestDisplayLabel:
         with pytest.raises(ValidationError, match="control"):
             DisplayLabel(id="test", label="Me\tal", sort_order=0)
 
+    def test_label_embedded_carriage_return_rejected(self):
+        with pytest.raises(ValidationError, match="control"):
+            DisplayLabel(id="test", label="Me\ral", sort_order=0)
+
     def test_label_whitespace_trimmed(self):
         label = DisplayLabel(id="test", label="  Meal  ", sort_order=0)
         assert label.label == "Meal"
