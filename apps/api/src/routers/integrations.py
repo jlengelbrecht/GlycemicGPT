@@ -121,15 +121,13 @@ def _validate_date_range(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Both 'start' and 'end' must be provided together.",
         )
-    # Ensure timezone-aware (treat naive as UTC)
-    if start.tzinfo is None:
-        start = start.replace(tzinfo=UTC)
-    if end.tzinfo is None:
-        end = end.replace(tzinfo=UTC)
+    # Ensure timezone-aware and normalized to UTC
+    start = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
+    end = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
     if end <= start:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="'end' must be after 'start'.",
+            detail="'end' must be strictly after 'start'.",
         )
     if (end - start) > timedelta(days=_MAX_DATE_RANGE_DAYS):
         raise HTTPException(
@@ -2136,7 +2134,7 @@ async def get_insulin_summary(
         cutoff = date_range[0]
         now = date_range[1]
         # Compute fractional days for averaging
-        period_days = max(1, round((now - cutoff).total_seconds() / 86400))
+        period_days = max(1, (now - cutoff).total_seconds() / 86400)
     else:
         from src.services.analytics_config import get_boundary_hour
 
@@ -2319,7 +2317,7 @@ async def get_insulin_summary(
         bolus_pct=bolus_pct,
         bolus_count=bolus_count,
         correction_count=correction_count,
-        period_days=period_days,
+        period_days=max(1, round(period_days)),
     )
 
 
@@ -2361,7 +2359,7 @@ async def get_bolus_review(
     if date_range is not None:
         cutoff = date_range[0]
         now = date_range[1]
-        period_days = max(1, round((now - cutoff).total_seconds() / 86400))
+        period_days = max(1, (now - cutoff).total_seconds() / 86400)
     else:
         from src.services.analytics_config import get_boundary_hour
 
@@ -2383,7 +2381,7 @@ async def get_bolus_review(
     )
 
     if review_source is None:
-        return BolusReviewResponse(boluses=[], total_count=0, period_days=period_days)
+        return BolusReviewResponse(boluses=[], total_count=0, period_days=max(1, round(period_days)))
 
     # Count total
     count_result = await db.execute(
@@ -2443,5 +2441,5 @@ async def get_bolus_review(
             for e in events
         ],
         total_count=total,
-        period_days=period_days,
+        period_days=max(1, round(period_days)),
     )

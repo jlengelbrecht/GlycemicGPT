@@ -35,8 +35,8 @@
 | 27 | External Platform Integrations (Backend) | 0/5 | Planned |
 | 28 | Security Hardening & Penetration Testing | 17/17 | **Complete** |
 | 29 | App Icons & Branding | 3/3 | **Complete** |
-| 30 | Advanced Web Dashboard Visualization | 9/10 | **In Progress** |
-| 31 | Mobile Dashboard Parity & Hub-and-Spoke Redesign | 2/8 | **In Progress** |
+| 30 | Advanced Web Dashboard Visualization | 9/9 | **Complete** |
+| 31 | Mobile Dashboard Parity & Hub-and-Spoke Redesign | 5/8 | **In Progress** |
 | 33 | Data Source Abstraction & CGM Intelligence | 0/12 | Planned |
 | 34 | Code Quality & Technical Debt Elimination | 0/17 | Planned |
 | 35 | AI Intelligence Pipeline | 0/18 | Planned |
@@ -59,8 +59,8 @@
 **Epic 28 (Security Hardening):** 17/17 complete
 **Epic 26 (Runtime Plugin Loading):** 7/7 complete
 **Epic 29 (App Icons & Branding):** 3/3 complete
-**Epic 30 (Web Dashboard Visualization):** 9/10 in progress
-**Epic 31 (Mobile Dashboard Parity):** 2/8 complete
+**Epic 30 (Web Dashboard Visualization):** 10/10 complete
+**Epic 31 (Mobile Dashboard Parity):** 5/8 complete (2 cancelled)
 **Epic 33 (Data Source Abstraction):** 0/12 planned
 **Epic 34 (Code Quality):** 0/17 planned
 **Epic 35 (AI Intelligence Pipeline):** 0/18 planned
@@ -994,7 +994,7 @@ All 5 stories completed:
 
 ## Epic 30: Advanced Web Dashboard Visualization
 
-**Status:** In Progress (9/10 stories)
+**Status:** Complete (10/10 stories)
 
 | Story | Title | Status | PR |
 |-------|-------|--------|-----|
@@ -1005,7 +1005,7 @@ All 5 stories completed:
 | 30.5 | Percentile Band Glucose Chart (AGP) | Done | [#329](https://github.com/jlengelbrecht/GlycemicGPT/pull/329) |
 | 30.6 | Zoom, Pan, and Brush Controls + Chart Tooltip & Insulin Display | Done | [#338](https://github.com/jlengelbrecht/GlycemicGPT/pull/338) |
 | 30.7 | Insulin Summary and Bolus Review | Done | [#332](https://github.com/jlengelbrecht/GlycemicGPT/pull/332) |
-| 30.8 | Reports Page with Daily Timeline | Planned | |
+| 30.8 | ~~Reports Page with Daily Timeline~~ | Removed | Redundant with Dashboard + Daily Briefs. PR #356 closed. Export fix shipped separately. |
 | 30.9 | Fix Basal Rate Aggregation in Insulin Summary | Done | [#336](https://github.com/jlengelbrecht/GlycemicGPT/pull/336) |
 | 30.10 | Fix Source Duplication and Bolus/Correction Double-Counting | Done | [#337](https://github.com/jlengelbrecht/GlycemicGPT/pull/337) |
 
@@ -1049,11 +1049,11 @@ Any new stats calculations (CGM summary, insulin summary, AGP percentiles, 5-buc
 | Story | Title | Status | PR |
 |-------|-------|--------|-----|
 | 31.1 | Navigation Scaffold & Detail Page Architecture | Complete | #345 |
-| 31.2 | Compact Card Grid Home Screen | Planned | |
+| 31.2 | Compact Card Grid Home Screen | Cancelled | |
 | 31.3 | Chart Detail Page with Landscape & Zoom/Pan/Brush | Complete | #345, #351 |
-| 31.4 | TIR Upgrade & CGM Stats Detail Page | Planned | |
-| 31.5 | Insulin Summary & Bolus Review Detail Page | Planned | |
-| 31.6 | Visual Polish, Animations & Label Refinement | Planned | |
+| 31.4 | 5-Bucket TIR Display & CGM Stats Active % | Complete | #354 |
+| 31.5 | Insulin Summary & Bolus Review Detail Page | Cancelled | Home cards already show full data; BolusHistoryScreen exists |
+| 31.6 | Visual Polish, Animations & Label Refinement | Complete | #355 |
 | 31.7 | Wear OS Compact Chart & Data Feed | Planned | |
 | 31.8 | Retention-Aware Period Options + AGP Removal | Complete | #352 |
 
@@ -1136,22 +1136,16 @@ Any new stats calculations (CGM summary, insulin summary, AGP percentiles, 5-buc
 - Back navigation returns to portrait home screen
 - Performance: smooth 60fps rendering with 500+ data points
 
-### Story 31.4: TIR Upgrade & CGM Stats Detail Page
+### Story 31.4: 5-Bucket TIR Display & CGM Stats Active % (Complete - PR #354)
 
-**Priority:** Medium -- brings clinical-grade stats to mobile.
-
-**Scope:** Upgrade TimeInRangeBar from 3-bucket to 5-bucket clinical display. Create a combined TIR + CGM Stats detail page matching web's CgmSummaryStats panel.
+**Scope:** Upgrade TIR card to 5-bucket clinical display and CGM Stats card with Std Dev + CGM Active %. In-place card upgrades only, no detail pages.
 
 **Changes:**
-- **TIR 5-Bucket Upgrade (home screen card + detail page):**
-  - Urgent Low (<55 mg/dL), Low (55-70), In Range (70-180), High (180-250), Urgent High (>250)
-  - Dynamic thresholds from GlucoseRangeStore (same as web)
-- **Period Comparison Delta:** Show +/- change vs previous period (e.g., "In Range: 72% +3%")
-- **Quality Assessment:** "Excellent" (>=70%), "Good" (50-70%), "Needs Improvement" (<50%)
-- **CGM Summary Stats (detail page only):**
-  - 6-metric grid matching web: Avg Glucose, Std Dev, CV%, GMI, CGM Active %, Total Readings
-  - Assessment labels: CV% stability, CGM active quality
-  - Data computed locally from Room DB CGM readings via new `CgmStatsCalculator` utility in ViewModel layer
+- **TIR 5-Bucket Upgrade:** PumpDao SQL expanded to 5 CASE WHEN buckets with 4 thresholds; FiveBucketStackedBar with 2-row legend; dynamic thresholds from GlucoseRangeStore
+- **CGM Stats 6-Metric Grid:** Added Std Dev, CGM Active %, Readings count to existing Mean/CV%/GMI; color-coded assessments for CV% and CGM Active %
+- **CGM Active %:** `DashboardComputations.computeCgmStats` accepts `periodHours` for actual/expected readings (12/hr)
+- **Threshold Validation:** Full ordering check (urgentLow <= low < high <= urgentHigh) in HomeViewModel
+- **Bar Rounding Fix:** `lastNonZeroIndex` ensures rounding absorption works with trailing zero-percent buckets
 - **AGP Chart (detail page only):**
   - Percentile band chart (p10/p25/p50/p75/p90) matching web's AgpChart
   - 24-hour X-axis, auto-scaled Y-axis
@@ -1196,30 +1190,19 @@ Any new stats calculations (CGM summary, insulin summary, AGP percentiles, 5-buc
 - Scrolling is smooth with 100+ boluses
 - Empty state shown when no data
 
-### Story 31.6: Visual Polish, Animations & Label Refinement
+### Story 31.6: Full-Platform Visual Polish & Theme Support
 
-**Priority:** Medium -- the finishing touches that make it feel professional.
+**Status:** Complete (PR #355)
 
-**Scope:** Unified visual polish pass across all new and existing components. Consistent Material 3 theming, transitions, spacing, and typography.
+**Scope:** Full-platform theme support (System/Dark/Light) across web and mobile, Framer Motion animations on web, and dual light/dark Tailwind classes across 40+ components.
 
 **Changes:**
-- **Card Transitions:** Smooth shared-element or fade transitions when navigating hub -> spoke
-- **Loading States:** Consistent shimmer/skeleton placeholders across all cards and detail pages
-- **Typography Audit:** Ensure consistent use of Material 3 type scale (headlineLarge for values, titleMedium for labels, bodySmall for captions)
-- **Spacing Audit:** Consistent 8dp grid, 16dp card padding, 12dp inter-card gap
-- **Color Consistency:** Ensure glucose range colors, chart colors, and badge colors match between home cards and detail pages
-- **Dark Theme:** Verify all new components render correctly in dark mode
-- **Accessibility:** Content descriptions on all cards, screen reader traversal order, minimum 48dp touch targets
-- **Connection Status:** Move ConnectionSyncRow into a more subtle top bar (icon-only when connected, expanded only on issues)
-- **Empty States:** Unified empty state illustrations/messages across all detail pages
-
-**Acceptance Criteria:**
-- Smooth transitions between hub and spoke screens
-- Consistent shimmer loading across all cards
-- Dark mode renders correctly
-- TalkBack screen reader traversal is logical
-- Touch targets meet 48dp minimum
-- Visual inspection: clean, cohesive Material 3 design
+- **Web Theme Infrastructure:** ThemeProvider context with localStorage persistence, FOUC-preventing inline script, ThemeToggle (sun/moon/monitor) in header
+- **Web Animations:** AnimatedCard and PageTransition wrappers using Framer Motion with useReducedMotion support, Skeleton components
+- **Web Dual Theme:** All 40+ components and pages updated with `dark:` class variants for complete light mode support
+- **Mobile Theme:** ThemeMode enum (System/Dark/Light), brand-consistent color schemes (no dynamic Material You colors), Appearance section in Settings
+- **Mobile Live Switching:** SharedPreferences.OnSharedPreferenceChangeListener in MainActivity for live theme updates without restart
+- **Accessibility:** prefers-reduced-motion support, proper ARIA for theme toggle radio group, WCAG contrast verified for light/dark
 
 ### Story 31.7: Wear OS Compact Chart & Data Feed
 

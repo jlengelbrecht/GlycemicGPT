@@ -297,6 +297,8 @@ async def get_glucose_readings(
     if (start is None) != (end is None):
         raise ValueError("Both 'start' and 'end' must be provided together, or neither")
     if start is not None and end is not None:
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("'start' and 'end' must be timezone-aware datetimes")
         if start > end:
             raise ValueError(f"'start' must be <= 'end' (got {start} > {end})")
         cutoff = start
