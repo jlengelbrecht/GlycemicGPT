@@ -245,6 +245,14 @@ function ReportGlucoseChart({
     return result;
   }, [startDate, domainEnd, days]);
 
+  const chartSummary = useMemo(() => {
+    if (points.length === 0) return "";
+    const avg = Math.round(points.reduce((s, p) => s + p.value, 0) / points.length);
+    const startLabel = new Date(domainStart).toLocaleDateString([], { month: "short", day: "numeric" });
+    const endLabel = new Date(domainEnd).toLocaleDateString([], { month: "short", day: "numeric" });
+    return `Glucose trend chart showing ${points.length} readings from ${startLabel} to ${endLabel}, average ${avg} mg/dL`;
+  }, [points, domainStart, domainEnd]);
+
   if (points.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
@@ -254,6 +262,7 @@ function ReportGlucoseChart({
   }
 
   return (
+    <div role="img" aria-label={chartSummary}>
     <ResponsiveContainer width="100%" height={280}>
       <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
         <CartesianGrid
@@ -297,6 +306,7 @@ function ReportGlucoseChart({
         <Scatter data={points} shape={renderPoint} />
       </ScatterChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -685,6 +695,7 @@ export default function ClinicalReportPage() {
   const [reportStartDate, setReportStartDate] = useState<string | null>(null);
   const [reportEndDate, setReportEndDate] = useState<string | null>(null);
   const didAutoGenerate = useRef(false);
+  const requestIdRef = useRef(0);
 
   const numDays = useMemo(
     () => daysBetween(startDate, endDate),
@@ -703,11 +714,13 @@ export default function ClinicalReportPage() {
 
   const handleGenerate = useCallback(async () => {
     if (!isValid) return;
+    const currentRequestId = ++requestIdRef.current;
     setIsGenerating(true);
     setError(null);
     setReportData(null);
     try {
       const data = await fetchReportData(startDate, endDate);
+      if (currentRequestId !== requestIdRef.current) return;
       setReportData(data);
       setReportStartDate(startDate);
       setReportEndDate(endDate);
@@ -721,11 +734,14 @@ export default function ClinicalReportPage() {
         }),
       );
     } catch (err) {
+      if (currentRequestId !== requestIdRef.current) return;
       setError(
         err instanceof Error ? err.message : "Failed to generate report",
       );
     } finally {
-      setIsGenerating(false);
+      if (currentRequestId === requestIdRef.current) {
+        setIsGenerating(false);
+      }
     }
   }, [startDate, endDate, isValid]);
 
@@ -737,11 +753,13 @@ export default function ClinicalReportPage() {
   useEffect(() => {
     if (didAutoGenerate.current) return;
     didAutoGenerate.current = true;
+    let cancelled = false;
     const start = daysAgoDateString(14);
     const end = todayDateString();
     setIsGenerating(true);
     fetchReportData(start, end)
       .then((data) => {
+        if (cancelled) return;
         setReportData(data);
         setReportStartDate(start);
         setReportEndDate(end);
@@ -756,13 +774,17 @@ export default function ClinicalReportPage() {
         );
       })
       .catch((err) => {
+        if (cancelled) return;
         setError(
           err instanceof Error ? err.message : "Failed to generate report",
         );
       })
       .finally(() => {
-        setIsGenerating(false);
+        if (!cancelled) {
+          setIsGenerating(false);
+        }
       });
+    return () => { cancelled = true; };
   }, []);
 
   return (
