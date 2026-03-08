@@ -382,7 +382,7 @@ export default function BriefDeliveryPage() {
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                       "disabled:opacity-50 disabled:cursor-not-allowed",
                       channel === opt.value
-                        ? "bg-blue-600/20 border-blue-500 text-blue-400"
+                        ? "bg-blue-50 dark:bg-blue-600/20 border-blue-600 dark:border-blue-500 text-blue-700 dark:text-blue-400"
                         : "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-600"
                     )}
                   >
@@ -399,7 +399,7 @@ export default function BriefDeliveryPage() {
             {!isLoading && (
               <div className="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-300/50 dark:border-slate-700/50">
                 <p className="text-xs text-slate-500 mb-2">Preview</p>
-                <p className="text-lg font-semibold text-blue-400">
+                <p className="text-lg font-semibold text-blue-700 dark:text-blue-400">
                   {enabled ? "Enabled" : "Disabled"} &middot; {deliveryTime}{" "}
                   {timezone.replace(/_/g, " ")} &middot;{" "}
                   {CHANNEL_OPTIONS.find((o) => o.value === channel)?.label}

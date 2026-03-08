@@ -870,12 +870,12 @@ export function GlucoseTrendChart({
         data-testid="glucose-trend-chart"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-200">
             Glucose Trend
           </h2>
           <PeriodSelector selected={period} onSelect={handlePeriodChange} />
         </div>
-        <div className="h-64 flex flex-col items-center justify-center text-slate-500 dark:text-slate-500 gap-3">
+        <div className="h-64 flex flex-col items-center justify-center text-slate-500 dark:text-slate-400 gap-3">
           <p>Unable to load glucose history</p>
           <button
             type="button"
@@ -902,12 +902,12 @@ export function GlucoseTrendChart({
         data-testid="glucose-trend-chart"
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-200">
             Glucose Trend
           </h2>
           <PeriodSelector selected={period} onSelect={handlePeriodChange} />
         </div>
-        <div className="h-64 flex items-center justify-center text-slate-500 dark:text-slate-500">
+        <div className="h-64 flex items-center justify-center text-slate-500 dark:text-slate-400">
           <p>No glucose readings yet</p>
         </div>
       </div>
@@ -931,7 +931,7 @@ export function GlucoseTrendChart({
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-slate-200">Glucose Trend</h2>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-200">Glucose Trend</h2>
           {zoomDomain ? (
             <button
               type="button"
@@ -1094,7 +1094,7 @@ export function GlucoseTrendChart({
       />
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center justify-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-500">
+      <div className="flex flex-wrap items-center justify-center gap-4 mt-3 text-xs text-slate-500 dark:text-slate-400">
         <span className="flex items-center gap-1">
           <span
             className="w-2 h-2 rounded-full bg-green-500 inline-block"

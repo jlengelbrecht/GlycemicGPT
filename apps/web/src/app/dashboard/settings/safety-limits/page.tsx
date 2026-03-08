@@ -488,7 +488,7 @@ export default function SafetyLimitsPage() {
                     aria-invalid={!isNaN(minGNum) && (minGNum < 20 || minGNum > 499) ? true : undefined}
                     className={clsx(
                       "w-full rounded-lg border px-3 py-2 text-sm",
-                      "bg-slate-100 dark:bg-slate-800 text-slate-200",
+                      "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200",
                       !isNaN(minGNum) && (minGNum < 20 || minGNum > 499)
                         ? "border-red-500 focus:ring-red-500"
                         : "border-slate-300 dark:border-slate-700 focus:ring-orange-500",
@@ -525,7 +525,7 @@ export default function SafetyLimitsPage() {
                     aria-invalid={!isNaN(maxGNum) && (maxGNum < 21 || maxGNum > 500) ? true : undefined}
                     className={clsx(
                       "w-full rounded-lg border px-3 py-2 text-sm",
-                      "bg-slate-100 dark:bg-slate-800 text-slate-200",
+                      "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200",
                       !isNaN(maxGNum) && (maxGNum < 21 || maxGNum > 500)
                         ? "border-red-500 focus:ring-red-500"
                         : "border-slate-300 dark:border-slate-700 focus:ring-orange-500",
@@ -594,7 +594,7 @@ export default function SafetyLimitsPage() {
                   aria-invalid={!isNaN(basalMuNum) && (basalMuNum < 1 || basalMuNum > 15000) ? true : undefined}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
-                    "bg-slate-100 dark:bg-slate-800 text-slate-200",
+                    "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200",
                     !isNaN(basalMuNum) && (basalMuNum < 1 || basalMuNum > 15000)
                       ? "border-red-500 focus:ring-red-500"
                       : "border-slate-300 dark:border-slate-700 focus:ring-orange-500",
@@ -631,7 +631,7 @@ export default function SafetyLimitsPage() {
                   aria-invalid={!isNaN(bolusMuNum) && (bolusMuNum < 1 || bolusMuNum > 25000) ? true : undefined}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
-                    "bg-slate-100 dark:bg-slate-800 text-slate-200",
+                    "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200",
                     !isNaN(bolusMuNum) && (bolusMuNum < 1 || bolusMuNum > 25000)
                       ? "border-red-500 focus:ring-red-500"
                       : "border-slate-300 dark:border-slate-700 focus:ring-orange-500",

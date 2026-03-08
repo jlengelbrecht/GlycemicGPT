@@ -140,7 +140,7 @@ function DataContextDisplay({ data }: { data: Record<string, unknown> }) {
     <div className="grid grid-cols-2 gap-x-4 gap-y-1">
       {entries.map(([key, value]) => (
         <div key={key} className="flex justify-between text-xs">
-          <span className="text-slate-500 dark:text-slate-500">{formatKey(key)}</span>
+          <span className="text-slate-500 dark:text-slate-400">{formatKey(key)}</span>
           <span className="text-slate-600 dark:text-slate-300 font-mono">{formatValue(value)}</span>
         </div>
       ))}
@@ -309,11 +309,11 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
             </span>
             <StatusBadge status={localStatus} />
           </div>
-          <h3 className="text-sm font-semibold text-slate-200 leading-tight">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-200 leading-tight">
             {insight.title}
           </h3>
           <time
-            className="text-xs text-slate-500 dark:text-slate-500 mt-0.5 block"
+            className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 block"
             dateTime={insight.created_at}
           >
             {formatDate(insight.created_at)}
@@ -348,7 +348,7 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
           onClick={() => setIsExpanded(!isExpanded)}
           className={clsx(
             "mt-2 text-xs font-medium flex items-center gap-1",
-            "text-slate-500 dark:text-slate-400 hover:text-slate-200 transition-colors",
+            "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
           )}
           aria-expanded={isExpanded}
@@ -373,7 +373,7 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
           disabled={detailLoading}
           className={clsx(
             "mt-3 text-xs font-medium flex items-center gap-1.5",
-            "text-slate-500 dark:text-slate-400 hover:text-slate-200 transition-colors",
+            "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded",
             "disabled:opacity-50 disabled:cursor-not-allowed"
           )}
@@ -437,12 +437,12 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
               AI Model
             </h4>
             <div className="flex items-center gap-2">
-              <Bot className="h-3.5 w-3.5 text-slate-500 dark:text-slate-500" aria-hidden="true" />
+              <Bot className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" aria-hidden="true" />
               <span className="text-xs text-slate-600 dark:text-slate-300">
                 {detail.model_info.provider} / {detail.model_info.model}
               </span>
             </div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-500">
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Tokens: {detail.model_info.input_tokens.toLocaleString()} in / {detail.model_info.output_tokens.toLocaleString()} out
             </div>
           </div>
@@ -472,7 +472,7 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
                 </span>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-500">No safety log available</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">No safety log available</p>
             )}
           </div>
         </div>
@@ -512,7 +512,7 @@ export function AIInsightCard({ insight, onRespond, onFetchDetail }: AIInsightCa
             disabled={isResponding}
             className={clsx(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium",
-              "bg-slate-700/50 text-slate-500 dark:text-slate-400 hover:bg-slate-700",
+              "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700/50 dark:text-slate-300 dark:hover:bg-slate-700",
               "transition-colors",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500",
               "disabled:opacity-50 disabled:cursor-not-allowed"

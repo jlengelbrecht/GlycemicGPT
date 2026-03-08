@@ -49,7 +49,7 @@ function SkeletonRow() {
     <tr className="border-b border-slate-200/50 dark:border-slate-800/50">
       {Array.from({ length: 6 }).map((_, i) => (
         <td key={i} className="px-4 py-3">
-          <div className="animate-pulse h-4 bg-slate-700 rounded w-16" />
+          <div className="animate-pulse h-4 bg-slate-200 dark:bg-slate-700 rounded w-16" />
         </td>
       ))}
     </tr>
@@ -86,11 +86,11 @@ function BolusRow({ bolus }: { bolus: BolusReviewItem }) {
       </td>
       <td className="px-4 py-3 whitespace-nowrap">
         {bolus.is_automated ? (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-300">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-700 dark:text-violet-300">
             Auto
           </span>
         ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-700/50 text-slate-500 dark:text-slate-400">
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200/50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
             Manual
           </span>
         )}

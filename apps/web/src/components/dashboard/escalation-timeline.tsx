@@ -26,23 +26,23 @@ const TIER_CONFIG: Record<
   reminder: {
     label: "Reminder Sent",
     icon: Clock,
-    color: "text-amber-400",
-    bg: "bg-amber-900/20",
-    border: "border-amber-700/30",
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-100/50 dark:bg-amber-900/20",
+    border: "border-amber-300/50 dark:border-amber-700/30",
   },
   primary_contact: {
     label: "Primary Contact Notified",
     icon: User,
-    color: "text-orange-400",
-    bg: "bg-orange-900/20",
-    border: "border-orange-700/30",
+    color: "text-orange-600 dark:text-orange-400",
+    bg: "bg-orange-100/50 dark:bg-orange-900/20",
+    border: "border-orange-300/50 dark:border-orange-700/30",
   },
   all_contacts: {
     label: "All Contacts Notified",
     icon: Users,
-    color: "text-red-400",
-    bg: "bg-red-900/20",
-    border: "border-red-700/30",
+    color: "text-red-600 dark:text-red-400",
+    bg: "bg-red-100/50 dark:bg-red-900/20",
+    border: "border-red-300/50 dark:border-red-700/30",
   },
 };
 
@@ -61,9 +61,9 @@ function formatTimestamp(iso: string): string {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    sent: "bg-green-900/30 text-green-400 border-green-700/30",
-    pending: "bg-yellow-900/30 text-yellow-400 border-yellow-700/30",
-    failed: "bg-red-900/30 text-red-400 border-red-700/30",
+    sent: "bg-green-100/50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300/50 dark:border-green-700/30",
+    pending: "bg-yellow-100/50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-300/50 dark:border-yellow-700/30",
+    failed: "bg-red-100/50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-300/50 dark:border-red-700/30",
   };
 
   return (

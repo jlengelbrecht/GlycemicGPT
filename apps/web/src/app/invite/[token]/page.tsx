@@ -211,7 +211,7 @@ export default function InviteAcceptPage() {
             Caregiver Invitation
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            <span className="text-blue-400">{invitation.patient_email}</span>{" "}
+            <span className="text-blue-700 dark:text-blue-400">{invitation.patient_email}</span>{" "}
             has invited you to be their caregiver on GlycemicGPT.
           </p>
           <p className="text-xs text-slate-500 mt-2">

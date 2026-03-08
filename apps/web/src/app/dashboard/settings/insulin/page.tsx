@@ -281,7 +281,7 @@ export default function InsulinConfigPage() {
                 disabled={isSaving}
                 className={clsx(
                   "w-full rounded-lg border px-3 py-2 text-sm",
-                  "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-200",
+                  "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200",
                   "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                   "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}
@@ -317,7 +317,7 @@ export default function InsulinConfigPage() {
                   disabled={isSaving || (!isCustom && insulinType !== "custom")}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
-                    "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-200",
+                    "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200",
                     "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     "placeholder:text-slate-500",
                     "disabled:opacity-50 disabled:cursor-not-allowed"
@@ -350,7 +350,7 @@ export default function InsulinConfigPage() {
                   disabled={isSaving || (!isCustom && insulinType !== "custom")}
                   className={clsx(
                     "w-full rounded-lg border px-3 py-2 text-sm",
-                    "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-200",
+                    "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-200",
                     "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
                     "placeholder:text-slate-500",
                     "disabled:opacity-50 disabled:cursor-not-allowed"
@@ -369,7 +369,7 @@ export default function InsulinConfigPage() {
             {isValid && (
               <div className="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg p-4 border border-slate-300/50 dark:border-slate-700/50">
                 <p className="text-xs text-slate-500 mb-2">Active Configuration</p>
-                <p className="text-lg font-semibold text-blue-400">
+                <p className="text-lg font-semibold text-blue-700 dark:text-blue-400">
                   {INSULIN_LABELS[insulinType] || insulinType} - {diaNum}h DIA, {onsetNum}min onset
                 </p>
               </div>

@@ -36,21 +36,30 @@ function resolveTheme(theme: Theme): ResolvedTheme {
   return theme === "system" ? getSystemTheme() : theme;
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("dark");
+function getStoredTheme(): Theme {
+  if (typeof window === "undefined") return "system";
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved === "light" || saved === "dark" || saved === "system"
+      ? saved
+      : "system";
+  } catch {
+    return "system";
+  }
+}
 
-  // Load saved theme on mount
-  useEffect(() => {
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(STORAGE_KEY);
-    } catch {
-      // localStorage unavailable (e.g. incognito/private browsing)
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
+    if (typeof document !== "undefined") {
+      return document.documentElement.classList.contains("light") ? "light" : "dark";
     }
-    const initial = saved && ["light", "dark", "system"].includes(saved)
-      ? (saved as Theme)
-      : "dark";
+    return "dark";
+  });
+
+  // Sync theme on mount (handles SSR -> client handoff)
+  useEffect(() => {
+    const initial = getStoredTheme();
     setThemeState(initial);
     setResolvedTheme(resolveTheme(initial));
   }, []);

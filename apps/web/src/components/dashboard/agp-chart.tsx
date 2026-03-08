@@ -118,18 +118,18 @@ function AgpTooltipContent({
   if (d.count === 0) {
     return (
       <div className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs shadow-lg">
-        <p className="font-semibold text-slate-200 mb-1">{d.label}</p>
+        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">{d.label}</p>
         <p className="text-slate-500 dark:text-slate-400">No data for this hour</p>
       </div>
     );
   }
   return (
     <div className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs shadow-lg">
-      <p className="font-semibold text-slate-200 mb-1">{d.label}</p>
+      <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">{d.label}</p>
       <p className="text-teal-400">Median: {Math.round(d.p50)} mg/dL</p>
       <p className="text-slate-600 dark:text-slate-300">25th-75th: {Math.round(d.p25)}-{Math.round(d.p75)} mg/dL</p>
       <p className="text-slate-500 dark:text-slate-400">10th-90th: {Math.round(d.p10)}-{Math.round(d.p90)} mg/dL</p>
-      <p className="text-slate-500 dark:text-slate-500 mt-1">{d.count} readings</p>
+      <p className="text-slate-500 dark:text-slate-400 mt-1">{d.count} readings</p>
     </div>
   );
 }
