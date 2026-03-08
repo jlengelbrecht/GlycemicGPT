@@ -45,7 +45,7 @@ fun CgmStatsCard(
     val availablePeriods = CgmStatsPeriods.filter { it.hours / 24 <= safeRetention }
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
     val a11yDescription = if (stats != null) {
-        ("CGM statistics: mean glucose %.0f mg/dL, std dev %.1f, " +
+        ("CGM statistics: mean glucose %.0f mg/dL, std dev %.1f mg/dL, " +
             "CV %.1f%%, GMI %.1f%%, CGM active %.0f%%, %d readings").format(
             stats.meanGlucose,
             stats.stdDev,
@@ -128,6 +128,7 @@ fun CgmStatsCard(
                         label = "Std Dev",
                         value = "%.1f".format(stats.stdDev),
                         valueColor = MaterialTheme.colorScheme.onSurface,
+                        subtitle = "mg/dL",
                     )
                     val (cvLabel, cvColor) = cvAssessment(stats.cvPercent)
                     StatColumn(

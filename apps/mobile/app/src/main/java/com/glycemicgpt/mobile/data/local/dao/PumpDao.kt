@@ -134,6 +134,7 @@ interface PumpDao {
             SUM(CASE WHEN glucoseMgDl > :urgentHigh THEN 1 ELSE 0 END) AS urgentHighCount
         FROM cgm_readings
         WHERE timestampMs >= :sinceMs
+          AND glucoseMgDl BETWEEN 20 AND 500
         """,
     )
     fun observeTimeInRangeCounts(
