@@ -1,21 +1,23 @@
 "use client";
 
 /**
- * Clinical Report Generator
+ * Clinical Report Page
  *
- * Generates a professional printable report similar to Tandem t:connect
- * or Dexcom Clarity reports. Fetches data for a user-selected date range
- * and renders a print-optimized layout with glucose chart, CGM stats,
- * TIR breakdown, insulin delivery, and bolus events.
+ * Dedicated full-page report similar to Tandem t:connect or Dexcom Clarity.
+ * Date range controls are at the top (hidden on print). The report body
+ * renders below -- on screen it lives inside the dashboard layout (sidebar
+ * visible) but the existing globals.css print rules hide sidebar/header
+ * automatically, producing a clean printable document.
  */
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Loader2,
   AlertCircle,
   Printer,
   FileText,
   Calendar,
+  ArrowLeft,
 } from "lucide-react";
 import {
   ScatterChart,
@@ -28,6 +30,7 @@ import {
   ReferenceArea,
   ResponsiveContainer,
 } from "recharts";
+import Link from "next/link";
 import {
   getGlucoseHistoryByDateRange,
   getGlucoseStatsByDateRange,
@@ -52,6 +55,7 @@ interface ReportData {
   tirStats: TimeInRangeDetailStats | null;
   insulin: InsulinSummaryResponse | null;
   boluses: BolusReviewItem[];
+  totalBolusCount: number;
   warnings: string[];
 }
 
@@ -102,7 +106,6 @@ async function fetchReportData(
   endDate: string,
 ): Promise<ReportData> {
   const startISO = `${startDate}T00:00:00Z`;
-  // Use start of next day to include the full end date
   const nextDay = new Date(`${endDate}T00:00:00Z`);
   nextDay.setUTCDate(nextDay.getUTCDate() + 1);
   const endISO = nextDay.toISOString();
@@ -112,7 +115,7 @@ async function fetchReportData(
     getGlucoseStatsByDateRange(startISO, endISO),
     getTimeInRangeDetailByDateRange(startISO, endISO),
     getInsulinSummaryByDateRange(startISO, endISO),
-    getBolusReviewByDateRange(startISO, endISO, 500),
+    getBolusReviewByDateRange(startISO, endISO, 50),
   ]);
 
   const warnings: string[] = [];
@@ -122,14 +125,16 @@ async function fetchReportData(
     }
   });
 
+  const bolusResult = results[4].status === "fulfilled" ? results[4].value : null;
+
   return {
     readings:
       results[0].status === "fulfilled" ? results[0].value.readings : [],
     cgmStats: results[1].status === "fulfilled" ? results[1].value : null,
     tirStats: results[2].status === "fulfilled" ? results[2].value : null,
     insulin: results[3].status === "fulfilled" ? results[3].value : null,
-    boluses:
-      results[4].status === "fulfilled" ? results[4].value.boluses : [],
+    boluses: bolusResult?.boluses ?? [],
+    totalBolusCount: bolusResult?.total_count ?? 0,
     warnings,
   };
 }
@@ -227,9 +232,8 @@ function ReportGlucoseChart({
   const domainStart = new Date(`${startDate}T00:00:00`).getTime();
   const domainEnd =
     new Date(`${endDate}T00:00:00`).getTime() + 24 * 60 * 60 * 1000;
-  const days = daysBetween(startDate, endDate) + 1;
+  const days = daysBetween(startDate, endDate);
 
-  // Generate day ticks
   const ticks = useMemo(() => {
     const result: number[] = [];
     const step = days <= 7 ? 1 : days <= 14 ? 2 : days <= 21 ? 3 : 5;
@@ -399,7 +403,6 @@ function TirSection({ tir }: { tir: TimeInRangeDetailStats }) {
 
   return (
     <div className="space-y-4">
-      {/* Stacked bar */}
       <div
         className="flex h-8 rounded-full overflow-hidden"
         role="img"
@@ -419,7 +422,6 @@ function TirSection({ tir }: { tir: TimeInRangeDetailStats }) {
         )}
       </div>
 
-      {/* Detail table */}
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b-2 border-slate-300 dark:border-slate-600 print:border-slate-400">
@@ -542,7 +544,6 @@ function InsulinSection({ insulin }: { insulin: InsulinSummaryResponse }) {
           </p>
         </div>
       </div>
-      {/* Basal/Bolus split bar */}
       <div className="flex h-4 rounded-full overflow-hidden">
         <div
           style={{
@@ -581,15 +582,12 @@ function InsulinSection({ insulin }: { insulin: InsulinSummaryResponse }) {
   );
 }
 
-function BolusTable({ boluses }: { boluses: BolusReviewItem[] }) {
+function BolusTable({ boluses, totalCount }: { boluses: BolusReviewItem[]; totalCount: number }) {
   if (boluses.length === 0) {
     return (
       <p className="text-sm text-slate-500">No bolus events for this period.</p>
     );
   }
-
-  // Show most recent 50 for readability
-  const display = boluses.slice(0, 50);
 
   return (
     <div className="space-y-2">
@@ -615,7 +613,7 @@ function BolusTable({ boluses }: { boluses: BolusReviewItem[] }) {
             </tr>
           </thead>
           <tbody>
-            {display.map((b, i) => (
+            {boluses.map((b, i) => (
               <tr
                 key={`${b.event_timestamp}-${i}`}
                 className="border-b border-slate-200 dark:border-slate-700 print:border-slate-300"
@@ -657,9 +655,9 @@ function BolusTable({ boluses }: { boluses: BolusReviewItem[] }) {
           </tbody>
         </table>
       </div>
-      {boluses.length > 50 && (
+      {totalCount > boluses.length && (
         <p className="text-xs text-slate-400 print:text-slate-500">
-          Showing most recent 50 of {boluses.length} bolus events.
+          Showing most recent {boluses.length} of {totalCount} bolus events.
         </p>
       )}
     </div>
@@ -667,7 +665,7 @@ function BolusTable({ boluses }: { boluses: BolusReviewItem[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Main component
+// Page component
 // ---------------------------------------------------------------------------
 
 const PRESETS = [
@@ -676,27 +674,32 @@ const PRESETS = [
   { label: "30 Days", days: 30 },
 ];
 
-export function ClinicalReportSection() {
+export default function ClinicalReportPage() {
   const [startDate, setStartDate] = useState(daysAgoDateString(14));
   const [endDate, setEndDate] = useState(todayDateString());
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(14);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reportData, setReportData] = useState<ReportData | null>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [reportStartDate, setReportStartDate] = useState<string | null>(null);
+  const [reportEndDate, setReportEndDate] = useState<string | null>(null);
+  const didAutoGenerate = useRef(false);
 
   const numDays = useMemo(
     () => daysBetween(startDate, endDate),
     [startDate, endDate],
   );
   const isValid = numDays >= 1 && numDays <= 31;
+  const reportDays = reportStartDate && reportEndDate
+    ? daysBetween(reportStartDate, reportEndDate)
+    : 0;
 
-  const handlePreset = useCallback(
-    (days: number) => {
-      setStartDate(daysAgoDateString(days));
-      setEndDate(todayDateString());
-    },
-    [],
-  );
+  const handlePreset = useCallback((days: number) => {
+    setStartDate(daysAgoDateString(days));
+    setEndDate(todayDateString());
+    setSelectedPreset(days);
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     if (!isValid) return;
@@ -706,6 +709,17 @@ export function ClinicalReportSection() {
     try {
       const data = await fetchReportData(startDate, endDate);
       setReportData(data);
+      setReportStartDate(startDate);
+      setReportEndDate(endDate);
+      setGeneratedAt(
+        new Date().toLocaleString([], {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to generate report",
@@ -719,111 +733,155 @@ export function ClinicalReportSection() {
     window.print();
   }, []);
 
+  // Auto-generate on first load with default 14-day range
+  useEffect(() => {
+    if (didAutoGenerate.current) return;
+    didAutoGenerate.current = true;
+    const start = daysAgoDateString(14);
+    const end = todayDateString();
+    setIsGenerating(true);
+    fetchReportData(start, end)
+      .then((data) => {
+        setReportData(data);
+        setReportStartDate(start);
+        setReportEndDate(end);
+        setGeneratedAt(
+          new Date().toLocaleString([], {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+        );
+      })
+      .catch((err) => {
+        setError(
+          err instanceof Error ? err.message : "Failed to generate report",
+        );
+      })
+      .finally(() => {
+        setIsGenerating(false);
+      });
+  }, []);
+
   return (
-    <>
-      {/* Controls section -- hidden when printing */}
-      <div
-        className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:hidden"
-        data-print-hide
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-500/10 rounded-lg">
-            <FileText className="h-5 w-5 text-blue-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              Clinical Report
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Generate a printable report for your healthcare provider
-            </p>
-          </div>
-        </div>
+    <div className="space-y-6">
+      {/* Controls bar -- hidden on print */}
+      <div className="print:hidden">
+        <Link
+          href="/dashboard/settings/data"
+          className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 mb-4"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Data Settings
+        </Link>
 
-        <div className="space-y-4">
-          {/* Presets */}
-          <div className="flex gap-2">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.days}
-                type="button"
-                onClick={() => handlePreset(preset.days)}
-                className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                  numDays === preset.days
-                    ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                    : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-500/10 rounded-lg">
+              <FileText className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-slate-900 dark:text-white">
+                Clinical Report
+              </h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Generate a printable report for your healthcare provider
+              </p>
+            </div>
           </div>
 
-          {/* Custom date range */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Presets */}
+            <div className="flex gap-2">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.days}
+                  type="button"
+                  onClick={() => handlePreset(preset.days)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                    selectedPreset === preset.days
+                      ? "border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Date range */}
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-slate-400" />
-              <label
-                htmlFor="report-start"
-                className="text-sm text-slate-500 dark:text-slate-400"
-              >
-                From
-              </label>
               <input
                 id="report-start"
                 type="date"
+                aria-label="Report start date"
                 value={startDate}
                 max={endDate}
                 onChange={(e) => {
-                  if (e.target.value) setStartDate(e.target.value);
+                  if (e.target.value) {
+                    setStartDate(e.target.value);
+                    setSelectedPreset(null);
+                  }
                 }}
                 className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
-            </div>
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="report-end"
-                className="text-sm text-slate-500 dark:text-slate-400"
-              >
-                To
-              </label>
+              <span className="text-sm text-slate-400">to</span>
               <input
                 id="report-end"
                 type="date"
+                aria-label="Report end date"
                 value={endDate}
                 min={startDate}
                 max={todayDateString()}
                 onChange={(e) => {
-                  if (e.target.value) setEndDate(e.target.value);
+                  if (e.target.value) {
+                    setEndDate(e.target.value);
+                    setSelectedPreset(null);
+                  }
                 }}
                 className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
+              <span className="text-xs text-slate-400">
+                {numDays}d
+                {!isValid && numDays > 31 && (
+                  <span className="text-red-400 ml-1">(max 31)</span>
+                )}
+              </span>
             </div>
-            <span className="text-xs text-slate-400">
-              {numDays} day{numDays !== 1 ? "s" : ""}
-              {!isValid && numDays > 31 && (
-                <span className="text-red-400 ml-1">(max 31 days)</span>
+
+            {/* Generate */}
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!isValid || isGenerating}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileText className="h-4 w-4" />
               )}
-            </span>
+              {isGenerating ? "Generating..." : "Generate Report"}
+            </button>
+
+            {/* Print */}
+            {reportData && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <Printer className="h-4 w-4" />
+                Print / Save PDF
+              </button>
+            )}
           </div>
 
-          {/* Generate button */}
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={!isValid || isGenerating}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white text-sm font-medium rounded-lg transition-colors disabled:cursor-not-allowed"
-          >
-            {isGenerating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FileText className="h-4 w-4" />
-            )}
-            {isGenerating ? "Generating..." : "Generate Report"}
-          </button>
-
           {error && (
-            <div className="flex items-center gap-2 text-sm text-red-400">
+            <div className="flex items-center gap-2 text-sm text-red-400 mt-3">
               <AlertCircle className="h-4 w-4" />
               {error}
             </div>
@@ -831,42 +889,30 @@ export function ClinicalReportSection() {
         </div>
       </div>
 
-      {/* Report output -- visible on screen and optimized for print */}
-      {reportData && (
-        <div ref={reportRef} className="space-y-1 print:space-y-0">
-          {/* Print header */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:p-0 print:pb-4 print:mb-2">
-            <div className="flex items-center justify-between print:block">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white print:text-black print:text-2xl">
-                  GlycemicGPT Clinical Report
-                </h2>
-                <p className="text-sm text-slate-500 print:text-slate-600 mt-1">
-                  {formatDisplayDate(startDate)} &ndash;{" "}
-                  {formatDisplayDate(endDate)} ({numDays} day
-                  {numDays !== 1 ? "s" : ""})
-                </p>
-                <p className="text-xs text-slate-400 print:text-slate-500 mt-0.5">
-                  Generated{" "}
-                  {new Date().toLocaleString([], {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors print:hidden"
-                data-print-hide
-              >
-                <Printer className="h-4 w-4" />
-                Print / Save PDF
-              </button>
-            </div>
+      {/* Loading state */}
+      {isGenerating && !reportData && (
+        <div className="flex flex-col items-center justify-center py-20 print:hidden">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-3" />
+          <p className="text-sm text-slate-400">Generating your report...</p>
+        </div>
+      )}
+
+      {/* Report body -- this is what prints */}
+      {reportData && reportStartDate && reportEndDate && (
+        <div className="space-y-4 print:space-y-2">
+          {/* Report header */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:p-0 print:pb-4 print:mb-2 print:break-inside-avoid">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white print:text-black print:text-2xl">
+              GlycemicGPT Clinical Report
+            </h2>
+            <p className="text-sm text-slate-500 print:text-slate-600 mt-1">
+              {formatDisplayDate(reportStartDate)} &ndash;{" "}
+              {formatDisplayDate(reportEndDate)} ({reportDays} day
+              {reportDays !== 1 ? "s" : ""})
+            </p>
+            <p className="text-xs text-slate-400 print:text-slate-500 mt-0.5">
+              Generated {generatedAt}
+            </p>
           </div>
 
           {/* Partial failure warnings */}
@@ -891,7 +937,7 @@ export function ClinicalReportSection() {
           {/* CGM Summary */}
           {reportData.cgmStats &&
             reportData.cgmStats.readings_count > 0 && (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4 print:break-inside-avoid">
                 <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600 uppercase tracking-wider mb-3">
                   CGM Summary
                 </h3>
@@ -902,7 +948,7 @@ export function ClinicalReportSection() {
           {/* Time in Range */}
           {reportData.tirStats &&
             reportData.tirStats.readings_count > 0 && (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4 print:break-inside-avoid">
                 <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600 uppercase tracking-wider mb-3">
                   Time in Range
                 </h3>
@@ -912,14 +958,14 @@ export function ClinicalReportSection() {
 
           {/* Glucose Trend */}
           {reportData.readings.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4 print:break-inside-avoid">
               <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600 uppercase tracking-wider mb-3">
                 Glucose Trend
               </h3>
               <ReportGlucoseChart
                 readings={reportData.readings}
-                startDate={startDate}
-                endDate={endDate}
+                startDate={reportStartDate}
+                endDate={reportEndDate}
                 low={reportData.tirStats?.thresholds.low}
                 high={reportData.tirStats?.thresholds.high}
               />
@@ -930,7 +976,7 @@ export function ClinicalReportSection() {
           {reportData.insulin &&
             (reportData.insulin.tdd > 0 ||
               reportData.insulin.bolus_count > 0) && (
-              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4 print:break-inside-avoid">
                 <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600 uppercase tracking-wider mb-3">
                   Insulin Delivery
                 </h3>
@@ -940,11 +986,11 @@ export function ClinicalReportSection() {
 
           {/* Bolus Events */}
           {reportData.boluses.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 print:border-0 print:rounded-none print:border-b print:border-slate-300 print:p-4 print:break-inside-avoid">
               <h3 className="text-sm font-semibold text-slate-500 dark:text-slate-400 print:text-slate-600 uppercase tracking-wider mb-3">
                 Bolus Events
               </h3>
-              <BolusTable boluses={reportData.boluses} />
+              <BolusTable boluses={reportData.boluses} totalCount={reportData.totalBolusCount} />
             </div>
           )}
 
@@ -959,6 +1005,6 @@ export function ClinicalReportSection() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
