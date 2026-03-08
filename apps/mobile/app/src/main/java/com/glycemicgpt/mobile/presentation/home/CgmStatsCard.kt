@@ -14,6 +14,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,14 +45,23 @@ fun CgmStatsCard(
     val safeRetention = maxRetentionDays.coerceAtLeast(1)
     val availablePeriods = CgmStatsPeriods.filter { it.hours / 24 <= safeRetention }
     val effectivePeriod = if (selectedPeriod in availablePeriods) selectedPeriod else availablePeriods.first()
+    LaunchedEffect(selectedPeriod, availablePeriods) {
+        if (selectedPeriod !in availablePeriods) {
+            onPeriodSelected(effectivePeriod)
+        }
+    }
     val a11yDescription = if (stats != null) {
+        val (cvLabel, _) = cvAssessment(stats.cvPercent)
+        val (activeLabel, _) = cgmActiveAssessment(stats.cgmActivePercent)
         ("CGM statistics: mean glucose %.0f mg/dL, std dev %.1f mg/dL, " +
-            "CV %.1f%%, GMI %.1f%%, CGM active %.0f%%, %d readings").format(
+            "CV %.1f%% %s, GMI %.1f%%, CGM active %.0f%% %s, %d readings").format(
             stats.meanGlucose,
             stats.stdDev,
             stats.cvPercent,
+            cvLabel,
             stats.gmi,
             stats.cgmActivePercent,
+            activeLabel,
             stats.readingsCount,
         )
     } else {

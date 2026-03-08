@@ -127,11 +127,11 @@ interface PumpDao {
         """
         SELECT
             COUNT(*) AS total,
-            SUM(CASE WHEN glucoseMgDl < :urgentLow THEN 1 ELSE 0 END) AS urgentLowCount,
-            SUM(CASE WHEN glucoseMgDl >= :urgentLow AND glucoseMgDl < :low THEN 1 ELSE 0 END) AS lowCount,
-            SUM(CASE WHEN glucoseMgDl >= :low AND glucoseMgDl <= :high THEN 1 ELSE 0 END) AS inRangeCount,
-            SUM(CASE WHEN glucoseMgDl > :high AND glucoseMgDl <= :urgentHigh THEN 1 ELSE 0 END) AS highCount,
-            SUM(CASE WHEN glucoseMgDl > :urgentHigh THEN 1 ELSE 0 END) AS urgentHighCount
+            COALESCE(SUM(CASE WHEN glucoseMgDl < :urgentLow THEN 1 ELSE 0 END), 0) AS urgentLowCount,
+            COALESCE(SUM(CASE WHEN glucoseMgDl >= :urgentLow AND glucoseMgDl < :low THEN 1 ELSE 0 END), 0) AS lowCount,
+            COALESCE(SUM(CASE WHEN glucoseMgDl >= :low AND glucoseMgDl <= :high THEN 1 ELSE 0 END), 0) AS inRangeCount,
+            COALESCE(SUM(CASE WHEN glucoseMgDl > :high AND glucoseMgDl <= :urgentHigh THEN 1 ELSE 0 END), 0) AS highCount,
+            COALESCE(SUM(CASE WHEN glucoseMgDl > :urgentHigh THEN 1 ELSE 0 END), 0) AS urgentHighCount
         FROM cgm_readings
         WHERE timestampMs >= :sinceMs
           AND glucoseMgDl BETWEEN 20 AND 500
