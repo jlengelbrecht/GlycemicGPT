@@ -712,7 +712,7 @@ function DailyOverlayChart({
     for (const point of overlayData) {
       const bucket = Math.round(point.minuteOfDay / 5) * 5;
       minuteSet.add(bucket);
-      const key = `${bucket}:${point.day}`;
+      const key = `${bucket}|${point.day}`;
       const prev = accum.get(key);
       if (prev) {
         prev.sum += point.value;
@@ -726,7 +726,8 @@ function DailyOverlayChart({
       minuteMap.set(bucket, { minuteOfDay: bucket });
     }
     for (const [key, { sum, count }] of accum) {
-      const [bucketStr, day] = key.split(":");
+      const [bucketStr, ...dayParts] = key.split("|");
+      const day = dayParts.join("|");
       const entry = minuteMap.get(Number(bucketStr))!;
       entry[day] = Math.round(sum / count);
     }
