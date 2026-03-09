@@ -150,14 +150,14 @@ class TestExportUserData:
             return result
 
         results = [
-            make_result(False),   # glucose_readings
-            make_result(True),    # pump_events
-            make_result(False),   # daily_briefs
-            make_result(False),   # meal_analyses
-            make_result(False),   # correction_analyses
-            make_result(False),   # suggestion_responses
-            make_result(False),   # safety_logs
-            make_result(False),   # alerts
+            make_result(False),  # glucose_readings
+            make_result(True),  # pump_events
+            make_result(False),  # daily_briefs
+            make_result(False),  # meal_analyses
+            make_result(False),  # correction_analyses
+            make_result(False),  # suggestion_responses
+            make_result(False),  # safety_logs
+            make_result(False),  # alerts
         ]
         db.execute = AsyncMock(side_effect=results)
 

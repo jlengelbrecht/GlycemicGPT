@@ -121,9 +121,14 @@ def _validate_date_range(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Both 'start' and 'end' must be provided together.",
         )
-    # Ensure timezone-aware and normalized to UTC
-    start = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
-    end = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
+    # Reject naive datetimes -- callers must include Z or an explicit offset
+    if start.tzinfo is None or end.tzinfo is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'start' and 'end' must include a timezone offset (e.g. 'Z' or '+05:00').",
+        )
+    start = start.astimezone(UTC)
+    end = end.astimezone(UTC)
     if end <= start:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -2381,7 +2386,9 @@ async def get_bolus_review(
     )
 
     if review_source is None:
-        return BolusReviewResponse(boluses=[], total_count=0, period_days=max(1, round(period_days)))
+        return BolusReviewResponse(
+            boluses=[], total_count=0, period_days=max(1, round(period_days))
+        )
 
     # Count total
     count_result = await db.execute(

@@ -1692,7 +1692,7 @@ const PRESETS = [
 ];
 
 export default function ClinicalReportPage() {
-  const [startDate, setStartDate] = useState(daysAgoDateString(14));
+  const [startDate, setStartDate] = useState(daysAgoDateString(13));
   const [endDate, setEndDate] = useState(todayDateString());
   const [selectedPreset, setSelectedPreset] = useState<number | null>(14);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1705,13 +1705,13 @@ export default function ClinicalReportPage() {
   const requestIdRef = useRef(0);
 
   const numDays = useMemo(
-    () => daysBetween(startDate, endDate),
+    () => daysBetween(startDate, endDate) + 1,
     [startDate, endDate],
   );
   const isValid = numDays >= 1 && numDays <= 31;
   const reportDays =
     reportStartDate && reportEndDate
-      ? daysBetween(reportStartDate, reportEndDate)
+      ? daysBetween(reportStartDate, reportEndDate) + 1
       : 0;
 
   // Derive CGM source from readings (e.g., "dexcom" -> "Dexcom CGM")
@@ -1760,7 +1760,7 @@ export default function ClinicalReportPage() {
   );
 
   const handlePreset = useCallback((days: number) => {
-    setStartDate(daysAgoDateString(days));
+    setStartDate(daysAgoDateString(days - 1));
     setEndDate(todayDateString());
     setSelectedPreset(days);
   }, []);
@@ -1807,7 +1807,7 @@ export default function ClinicalReportPage() {
     if (didAutoGenerate.current) return;
     didAutoGenerate.current = true;
     let cancelled = false;
-    const start = daysAgoDateString(14);
+    const start = daysAgoDateString(13);
     const end = todayDateString();
     setIsGenerating(true);
     fetchReportData(start, end)
