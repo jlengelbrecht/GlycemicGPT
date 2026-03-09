@@ -11,18 +11,19 @@
  *
  * Sections:
  * 1. Patient & Device Info (user profile, pump/CGM)
- * 2. CGM Summary with estimated A1C
- * 3. Time in Range (5-bucket + targets)
- * 4. Ambulatory Glucose Profile (AGP) - percentile bands
- * 5. Glucose Trend (scatter chart)
- * 6. Daily Glucose Overlay (spaghetti plot)
- * 7. Hypoglycemia Analysis
- * 8. Overnight Pattern (10pm-6am)
- * 9. Insulin Delivery
- * 10. Active Pump Settings (basal, carb ratio, CF, targets)
- * 11. Bolus Events table
- * 12. Sensor Coverage & Gaps
- * 13. Medical disclaimer footer
+ * 2. Platform Settings (glucose ranges, label mappings)
+ * 3. CGM Summary with estimated A1C
+ * 4. Time in Range (5-bucket + targets)
+ * 5. Ambulatory Glucose Profile (AGP) - percentile bands
+ * 6. Glucose Trend (scatter chart)
+ * 7. Daily Glucose Overlay (spaghetti plot)
+ * 8. Hypoglycemia Analysis
+ * 9. Overnight Pattern (10pm-6am)
+ * 10. Insulin Delivery
+ * 11. Active Pump Settings (basal, carb ratio, CF, targets)
+ * 12. Bolus Events table
+ * 13. Sensor Coverage & Gaps
+ * 14. Medical disclaimer footer
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -59,6 +60,8 @@ import {
   getCurrentUser,
   getPluginDeclarations,
   getPumpProfile,
+  getTargetGlucoseRange,
+  getAnalyticsConfig,
   type GlucoseHistoryReading,
   type GlucoseStats,
   type TimeInRangeDetailStats,
@@ -69,6 +72,9 @@ import {
   type PluginDeclarationResponse,
   type PumpProfileSummaryResponse,
   type PumpProfileSegment,
+  type TargetGlucoseRangeResponse,
+  type AnalyticsConfigResponse,
+  type DisplayLabel,
 } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +91,8 @@ interface ReportData {
   user: CurrentUserResponse | null;
   plugin: PluginDeclarationResponse | null;
   pumpProfile: PumpProfileSummaryResponse | null;
+  glucoseRange: TargetGlucoseRangeResponse | null;
+  analyticsConfig: AnalyticsConfigResponse | null;
   warnings: string[];
 }
 
@@ -161,6 +169,8 @@ const SECTION_NAMES = [
   "User Profile",
   "Device Info",
   "Pump Settings",
+  "Glucose Range",
+  "Analytics Config",
 ] as const;
 
 async function fetchReportData(
@@ -191,10 +201,13 @@ async function fetchReportData(
     getCurrentUser(),
     getPluginDeclarations(),
     getPumpProfile(),
+    getTargetGlucoseRange(),
+    getAnalyticsConfig(),
   ]);
 
   const warnings: string[] = [];
-  // Only warn on core data sections (first 5), not profile/device info
+  // Only warn on core data sections (indices 0-4). Indices 5+ are
+  // profile/device/settings fetches that fail gracefully with defaults.
   for (let i = 0; i < 5; i++) {
     if (results[i].status === "rejected") {
       warnings.push(`${SECTION_NAMES[i]} data could not be loaded`);
@@ -215,6 +228,8 @@ async function fetchReportData(
     user: results[5].status === "fulfilled" ? results[5].value : null,
     plugin: results[6].status === "fulfilled" ? results[6].value : null,
     pumpProfile: results[7].status === "fulfilled" ? results[7].value : null,
+    glucoseRange: results[8].status === "fulfilled" ? results[8].value : null,
+    analyticsConfig: results[9].status === "fulfilled" ? results[9].value : null,
     warnings,
   };
 }
@@ -403,10 +418,10 @@ function transformReadings(readings: GlucoseHistoryReading[]): ChartPoint[] {
     .sort((a, b) => a.time - b.time);
 }
 
-function getPointColor(value: number, low: number, high: number): string {
-  if (value < 54) return "#dc2626";
+function getPointColor(value: number, low: number, high: number, urgentLow = 54, urgentHigh = 250): string {
+  if (value < urgentLow) return "#dc2626";
   if (value < low) return "#f59e0b";
-  if (value > 300) return "#dc2626";
+  if (value > urgentHigh) return "#dc2626";
   if (value > high) return "#f97316";
   return "#22c55e";
 }
@@ -436,7 +451,7 @@ function GlucoseChartTooltip({
   );
 }
 
-function makeScatterRenderer(low: number, high: number) {
+function makeScatterRenderer(low: number, high: number, urgentLow = 54, urgentHigh = 250) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function renderScatterPoint(props: any) {
     const { cx, cy, payload } = props;
@@ -447,7 +462,7 @@ function makeScatterRenderer(low: number, high: number) {
         cx={cx}
         cy={cy}
         r={2}
-        fill={getPointColor(value, low, high)}
+        fill={getPointColor(value, low, high, urgentLow, urgentHigh)}
         opacity={0.7}
       />
     );
@@ -458,19 +473,23 @@ function ReportGlucoseChart({
   readings,
   startDate,
   endDate,
-  low = 70,
-  high = 180,
+  low,
+  high,
+  urgentLow = 54,
+  urgentHigh = 250,
 }: {
   readings: GlucoseHistoryReading[];
   startDate: string;
   endDate: string;
-  low?: number;
-  high?: number;
+  low: number;
+  high: number;
+  urgentLow?: number;
+  urgentHigh?: number;
 }) {
   const points = useMemo(() => transformReadings(readings), [readings]);
   const renderPoint = useMemo(
-    () => makeScatterRenderer(low, high),
-    [low, high],
+    () => makeScatterRenderer(low, high, urgentLow, urgentHigh),
+    [low, high, urgentLow, urgentHigh],
   );
 
   const domainStart = new Date(`${startDate}T00:00:00`).getTime();
@@ -540,7 +559,7 @@ function ReportGlucoseChart({
             type="number"
             dataKey="value"
             domain={[40, 350]}
-            ticks={[54, low, high, 250, 300]}
+            ticks={[urgentLow, low, high, urgentHigh]}
             tick={{ fontSize: 10, fill: "#94a3b8" }}
             width={35}
           />
@@ -567,14 +586,31 @@ function ReportGlucoseChart({
 
 function AgpChartSection({
   buckets,
-  low = 70,
-  high = 180,
+  low,
+  high,
+  urgentLow = 54,
+  urgentHigh = 250,
 }: {
   buckets: AgpBucket[];
-  low?: number;
-  high?: number;
+  low: number;
+  high: number;
+  urgentLow?: number;
+  urgentHigh?: number;
 }) {
-  const data = buckets.filter((b) => b.count > 0);
+  const data = useMemo(() => {
+    const filtered = buckets.filter((b) => b.count > 0);
+    if (filtered.length === 0) return [];
+    return filtered.map((b) => ({
+      hour: b.hour,
+      base: Math.round(b.p10),
+      band_p10_p25: Math.max(0, Math.round(b.p25 - b.p10)),
+      band_p25_p50: Math.max(0, Math.round(b.p50 - b.p25)),
+      band_p50_p75: Math.max(0, Math.round(b.p75 - b.p50)),
+      band_p75_p90: Math.max(0, Math.round(b.p90 - b.p75)),
+      p50: b.p50,
+    }));
+  }, [buckets]);
+
   if (data.length === 0) {
     return (
       <p className="text-sm text-slate-500">
@@ -599,7 +635,7 @@ function AgpChartSection({
           />
           <YAxis
             domain={[40, 350]}
-            ticks={[54, low, high, 250]}
+            ticks={[urgentLow, low, high, urgentHigh]}
             tick={{ fontSize: 10, fill: "#94a3b8" }}
             width={35}
           />
@@ -616,60 +652,27 @@ function AgpChartSection({
             strokeDasharray="4 4"
             strokeOpacity={0.5}
           />
-          <Area
-            type="monotone"
-            dataKey="p90"
-            stroke="none"
-            fill="#93c5fd"
-            fillOpacity={0.2}
-            name="p90"
-          />
-          <Area
-            type="monotone"
-            dataKey="p75"
-            stroke="none"
-            fill="#60a5fa"
-            fillOpacity={0.25}
-            name="p75"
-          />
-          <Area
-            type="monotone"
-            dataKey="p50"
-            stroke="#2563eb"
-            strokeWidth={2}
-            fill="#3b82f6"
-            fillOpacity={0.15}
-            name="Median"
-          />
-          <Area
-            type="monotone"
-            dataKey="p25"
-            stroke="none"
-            fill="white"
-            fillOpacity={1}
-            name="p25"
-          />
-          <Area
-            type="monotone"
-            dataKey="p10"
-            stroke="none"
-            fill="white"
-            fillOpacity={1}
-            name="p10"
-          />
+          {/* Stacked bands: transparent base at p10, then band deltas */}
+          <Area type="monotone" dataKey="base" stackId="agp" stroke="none" fill="transparent" />
+          <Area type="monotone" dataKey="band_p10_p25" stackId="agp" stroke="none" fill="rgba(59, 130, 246, 0.15)" />
+          <Area type="monotone" dataKey="band_p25_p50" stackId="agp" stroke="none" fill="rgba(59, 130, 246, 0.30)" />
+          <Area type="monotone" dataKey="band_p50_p75" stackId="agp" stroke="none" fill="rgba(59, 130, 246, 0.30)" />
+          <Area type="monotone" dataKey="band_p75_p90" stackId="agp" stroke="none" fill="rgba(59, 130, 246, 0.15)" />
+          {/* Median line (not stacked) */}
+          <Area type="monotone" dataKey="p50" stroke="rgb(59, 130, 246)" strokeWidth={2} fill="none" />
         </AreaChart>
       </ResponsiveContainer>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-1">
         <span>
-          <span className="inline-block w-3 h-0.5 bg-blue-600 mr-1 align-middle" />
+          <span className="inline-block w-3 h-0.5 bg-blue-500 mr-1 align-middle" />
           Median (p50)
         </span>
         <span>
-          <span className="inline-block w-3 h-2 bg-blue-400/30 mr-1 align-middle rounded-sm" />
+          <span className="inline-block w-3 h-2 mr-1 align-middle rounded-sm" style={{ backgroundColor: "rgba(59, 130, 246, 0.30)" }} />
           25th-75th percentile
         </span>
         <span>
-          <span className="inline-block w-3 h-2 bg-blue-300/20 mr-1 align-middle rounded-sm" />
+          <span className="inline-block w-3 h-2 mr-1 align-middle rounded-sm" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)" }} />
           10th-90th percentile
         </span>
       </div>
@@ -679,12 +682,16 @@ function AgpChartSection({
 
 function DailyOverlayChart({
   readings,
-  low = 70,
-  high = 180,
+  low,
+  high,
+  urgentLow = 54,
+  urgentHigh = 250,
 }: {
   readings: GlucoseHistoryReading[];
-  low?: number;
-  high?: number;
+  low: number;
+  high: number;
+  urgentLow?: number;
+  urgentHigh?: number;
 }) {
   const MAX_OVERLAY_DAYS = 14;
   const overlayData = useMemo(() => buildDailyOverlay(readings), [readings]);
@@ -760,7 +767,7 @@ function DailyOverlayChart({
           />
           <YAxis
             domain={[40, 350]}
-            ticks={[54, low, high, 250]}
+            ticks={[urgentLow, low, high, urgentHigh]}
             tick={{ fontSize: 10, fill: "#94a3b8" }}
             width={35}
           />
@@ -1073,9 +1080,13 @@ function TirSection({ tir }: { tir: TimeInRangeDetailStats }) {
 function HypoSection({
   events,
   periodDays,
+  low = 70,
+  urgentLow = 54,
 }: {
   events: HypoEvent[];
   periodDays: number;
+  low?: number;
+  urgentLow?: number;
 }) {
   const urgentEvents = events.filter((e) => e.isUrgent);
   const totalDuration = events.reduce((s, e) => s + e.durationMinutes, 0);
@@ -1100,7 +1111,7 @@ function HypoSection({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div>
           <p className="text-xs text-slate-500 print:text-slate-600 mb-1">
-            Low Events (&lt;70)
+            Low Events (&lt;{low})
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-white print:text-black">
             {events.length}
@@ -1109,7 +1120,7 @@ function HypoSection({
         </div>
         <div>
           <p className="text-xs text-slate-500 print:text-slate-600 mb-1">
-            Urgent Lows (&lt;54)
+            Urgent Lows (&lt;{urgentLow})
           </p>
           <p className={`text-2xl font-bold ${urgentEvents.length > 0 ? "text-red-600" : "text-slate-900 dark:text-white print:text-black"}`}>
             {urgentEvents.length}
@@ -1410,6 +1421,9 @@ function BolusTable({
               <th className="py-1.5 px-2 text-center text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider">
                 Type
               </th>
+              <th className="py-1.5 px-2 text-left text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider">
+                Reason
+              </th>
               <th className="py-1.5 px-2 text-right text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider">
                 BG
               </th>
@@ -1419,45 +1433,59 @@ function BolusTable({
             </tr>
           </thead>
           <tbody>
-            {boluses.map((b, i) => (
-              <tr
-                key={`${b.event_timestamp}-${i}`}
-                className="border-b border-slate-200 dark:border-slate-700 print:border-slate-300"
-              >
-                <td className="py-1.5 px-2 text-slate-600 dark:text-slate-300 print:text-slate-700 whitespace-nowrap">
-                  {new Date(b.event_timestamp).toLocaleString([], {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </td>
-                <td className="py-1.5 px-2 text-right font-medium text-slate-900 dark:text-white print:text-black">
-                  {b.units.toFixed(2)} U
-                </td>
-                <td className="py-1.5 px-2 text-center">
-                  {b.is_automated ? (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700 print:bg-violet-50 print:text-violet-800">
-                      Auto
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 print:bg-slate-50 print:text-slate-700">
-                      Manual
-                    </span>
-                  )}
-                </td>
-                <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300 print:text-slate-700">
-                  {b.bg_at_event != null
-                    ? `${Math.round(b.bg_at_event)}`
-                    : "---"}
-                </td>
-                <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300 print:text-slate-700">
-                  {b.iob_at_event != null
-                    ? `${b.iob_at_event.toFixed(1)} U`
-                    : "---"}
-                </td>
-              </tr>
-            ))}
+            {boluses.map((b, i) => {
+              const modeLabel: Record<string, string> = {
+                SLEEP: "Sleep Mode",
+                EXERCISE: "Exercise Mode",
+              };
+              const reasonLabel = b.is_automated
+                ? (b.control_iq_reason || "Auto-correction")
+                : (b.pump_activity_mode && b.pump_activity_mode !== "NONE"
+                    ? modeLabel[b.pump_activity_mode] ?? b.pump_activity_mode
+                    : "Manual");
+              return (
+                <tr
+                  key={`${b.event_timestamp}-${i}`}
+                  className="border-b border-slate-200 dark:border-slate-700 print:border-slate-300"
+                >
+                  <td className="py-1.5 px-2 text-slate-600 dark:text-slate-300 print:text-slate-700 whitespace-nowrap">
+                    {new Date(b.event_timestamp).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </td>
+                  <td className="py-1.5 px-2 text-right font-medium text-slate-900 dark:text-white print:text-black">
+                    {b.units.toFixed(2)} U
+                  </td>
+                  <td className="py-1.5 px-2 text-center">
+                    {b.is_automated ? (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700 print:bg-violet-50 print:text-violet-800">
+                        Auto
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600 print:bg-slate-50 print:text-slate-700">
+                        Manual
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1.5 px-2 text-left text-xs text-slate-500 dark:text-slate-400 print:text-slate-600">
+                    {reasonLabel}
+                  </td>
+                  <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300 print:text-slate-700">
+                    {b.bg_at_event != null
+                      ? `${Math.round(b.bg_at_event)}`
+                      : "---"}
+                  </td>
+                  <td className="py-1.5 px-2 text-right text-slate-600 dark:text-slate-300 print:text-slate-700">
+                    {b.iob_at_event != null
+                      ? `${b.iob_at_event.toFixed(1)} U`
+                      : "---"}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1570,6 +1598,88 @@ function ReportSection({
   );
 }
 
+function PlatformSettingsSection({
+  glucoseRange,
+  plugin,
+  analyticsConfig,
+}: {
+  glucoseRange: { urgentLow: number; low: number; high: number; urgentHigh: number };
+  plugin: PluginDeclarationResponse | null;
+  analyticsConfig: AnalyticsConfigResponse | null;
+}) {
+  const displayLabels = analyticsConfig?.display_labels ?? null;
+
+  return (
+    <div className="space-y-4">
+      {/* Glucose Thresholds */}
+      <div>
+        <h4 className="text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider mb-2">
+          Glucose Target Ranges
+        </h4>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-slate-400">Urgent Low</p>
+            <p className="font-medium text-red-600 print:text-red-700">&lt;{glucoseRange.urgentLow} mg/dL</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Low</p>
+            <p className="font-medium text-amber-500">{glucoseRange.urgentLow}-{glucoseRange.low} mg/dL</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">Target Range</p>
+            <p className="font-medium text-green-600 print:text-green-700">{glucoseRange.low}-{glucoseRange.high} mg/dL</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">High</p>
+            <p className="font-medium text-orange-500">&gt;{glucoseRange.high} mg/dL</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Label Mappings (only if plugin + display labels exist) */}
+      {plugin && displayLabels && displayLabels.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider mb-2">
+            Bolus Category Labels
+          </h4>
+          <p className="text-xs text-slate-400 mb-2">
+            How custom display labels map to {plugin.plugin_name} pump categories
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b-2 border-slate-300 dark:border-slate-600 print:border-slate-400">
+                <th className="py-1 px-2 text-left text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider">
+                  Display Label
+                </th>
+                <th className="py-1 px-2 text-left text-xs font-semibold text-slate-500 print:text-slate-600 uppercase tracking-wider">
+                  Pump Source
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...displayLabels]
+                .sort((a: DisplayLabel, b: DisplayLabel) => a.sort_order - b.sort_order)
+                .map((dl: DisplayLabel) => (
+                  <tr
+                    key={dl.id}
+                    className="border-b border-slate-200 dark:border-slate-700 print:border-slate-300"
+                  >
+                    <td className="py-1 px-2 text-slate-700 dark:text-slate-300 print:text-slate-700">
+                      {dl.label}
+                    </td>
+                    <td className="py-1 px-2 text-slate-500 print:text-slate-500">
+                      {dl.pump_source || "---"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
@@ -1618,6 +1728,18 @@ export default function ClinicalReportPage() {
     return labels.join(", ") || null;
   }, [reportData]);
 
+  // Unified glucose thresholds: prefer TIR stats (period-specific), fall back to user settings, then defaults
+  const thresholds = useMemo(() => {
+    const tir = reportData?.tirStats?.thresholds;
+    const range = reportData?.glucoseRange;
+    return {
+      urgentLow: tir?.urgent_low ?? range?.urgent_low ?? 54,
+      low: tir?.low ?? range?.low_target ?? 70,
+      high: tir?.high ?? range?.high_target ?? 180,
+      urgentHigh: tir?.urgent_high ?? range?.urgent_high ?? 250,
+    };
+  }, [reportData]);
+
   // Computed analyses
   const agpBuckets = useMemo(
     () => (reportData ? computeAgpBuckets(reportData.readings) : []),
@@ -1625,16 +1747,12 @@ export default function ClinicalReportPage() {
   );
   const hypoEvents = useMemo(() => {
     if (!reportData || reportData.readings.length === 0) return [];
-    const low = reportData.tirStats?.thresholds.low ?? 70;
-    const urgentLow = reportData.tirStats?.thresholds.urgent_low ?? 54;
-    return detectHypoEvents(reportData.readings, low, urgentLow);
-  }, [reportData]);
+    return detectHypoEvents(reportData.readings, thresholds.low, thresholds.urgentLow);
+  }, [reportData, thresholds]);
   const overnightStats = useMemo(() => {
     if (!reportData || reportData.readings.length === 0) return null;
-    const low = reportData.tirStats?.thresholds.low ?? 70;
-    const high = reportData.tirStats?.thresholds.high ?? 180;
-    return computeOvernightStats(reportData.readings, low, high);
-  }, [reportData]);
+    return computeOvernightStats(reportData.readings, thresholds.low, thresholds.high);
+  }, [reportData, thresholds]);
   const sensorGaps = useMemo(
     () => (reportData ? detectSensorGaps(reportData.readings) : []),
     [reportData],
@@ -1860,6 +1978,16 @@ export default function ClinicalReportPage() {
       {/* Report body -- this is what prints */}
       {reportData && reportStartDate && reportEndDate && (
         <div className="space-y-4 print:space-y-2">
+          {/* Print-only branding header */}
+          <div className="hidden print:flex items-center gap-3 mb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="GlycemicGPT" width={40} height={40} className="rounded-lg" />
+            <div>
+              <p className="text-lg font-bold text-black">GlycemicGPT</p>
+              <p className="text-xs text-slate-500">AI-Powered Diabetes Management Platform</p>
+            </div>
+          </div>
+
           {/* 1. Report header with patient & device info */}
           <div className={`${SECTION_CLASS} print:p-0 print:pb-4 print:mb-2`}>
             <PatientDeviceHeader
@@ -1890,6 +2018,15 @@ export default function ClinicalReportPage() {
             </div>
           )}
 
+          {/* Platform Settings */}
+          <ReportSection title="Platform Settings">
+            <PlatformSettingsSection
+              glucoseRange={thresholds}
+              plugin={reportData.plugin}
+              analyticsConfig={reportData.analyticsConfig}
+            />
+          </ReportSection>
+
           {/* 2. CGM Summary with prominent eA1C */}
           {reportData.cgmStats &&
             reportData.cgmStats.readings_count > 0 && (
@@ -1911,8 +2048,10 @@ export default function ClinicalReportPage() {
             <ReportSection title="Ambulatory Glucose Profile (AGP)">
               <AgpChartSection
                 buckets={agpBuckets}
-                low={reportData.tirStats?.thresholds.low}
-                high={reportData.tirStats?.thresholds.high}
+                low={thresholds.low}
+                high={thresholds.high}
+                urgentLow={thresholds.urgentLow}
+                urgentHigh={thresholds.urgentHigh}
               />
             </ReportSection>
           )}
@@ -1924,8 +2063,10 @@ export default function ClinicalReportPage() {
                 readings={reportData.readings}
                 startDate={reportStartDate}
                 endDate={reportEndDate}
-                low={reportData.tirStats?.thresholds.low}
-                high={reportData.tirStats?.thresholds.high}
+                low={thresholds.low}
+                high={thresholds.high}
+                urgentLow={thresholds.urgentLow}
+                urgentHigh={thresholds.urgentHigh}
               />
             </ReportSection>
           )}
@@ -1935,8 +2076,10 @@ export default function ClinicalReportPage() {
             <ReportSection title="Daily Glucose Overlay">
               <DailyOverlayChart
                 readings={reportData.readings}
-                low={reportData.tirStats?.thresholds.low}
-                high={reportData.tirStats?.thresholds.high}
+                low={thresholds.low}
+                high={thresholds.high}
+                urgentLow={thresholds.urgentLow}
+                urgentHigh={thresholds.urgentHigh}
               />
             </ReportSection>
           )}
@@ -1944,7 +2087,7 @@ export default function ClinicalReportPage() {
           {/* 7. Hypoglycemia Analysis */}
           {reportData.readings.length > 0 && (
             <ReportSection title="Hypoglycemia Analysis">
-              <HypoSection events={hypoEvents} periodDays={reportDays} />
+              <HypoSection events={hypoEvents} periodDays={reportDays} low={thresholds.low} urgentLow={thresholds.urgentLow} />
             </ReportSection>
           )}
 
