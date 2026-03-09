@@ -21,6 +21,7 @@ export function AnimatedCard({ children, delay = 0, className }: AnimatedCardPro
     const prefersReduced = typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReduced) {
+      el.style.transition = "none";
       el.style.opacity = "1";
       return;
     }
