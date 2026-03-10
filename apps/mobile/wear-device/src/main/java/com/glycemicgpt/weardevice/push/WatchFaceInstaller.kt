@@ -76,6 +76,10 @@ class WatchFaceInstaller(private val context: Context) {
         return try {
             val existing = findExistingFace(pushManager)
 
+            if (!apkFile.exists() || !apkFile.canRead()) {
+                return Result.Error("APK file not accessible: ${apkFile.name}")
+            }
+
             val pfd = ParcelFileDescriptor.open(apkFile, ParcelFileDescriptor.MODE_READ_ONLY)
             val details = try {
                 // validationToken is empty: GlycemicGPT is sideloaded (not Play Store),

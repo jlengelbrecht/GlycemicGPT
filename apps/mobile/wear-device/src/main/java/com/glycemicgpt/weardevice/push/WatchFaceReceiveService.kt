@@ -8,7 +8,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import timber.log.Timber
@@ -39,13 +43,16 @@ class WatchFaceReceiveService : WearableListenerService() {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val installMutex = Mutex()
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
         if (channel.path != WearDataContract.WATCHFACE_PUSH_CHANNEL) return
 
         Timber.d("Watch face push channel opened from phone")
         scope.launch {
-            receiveAndInstallWatchFace(channel)
+            installMutex.withLock {
+                receiveAndInstallWatchFace(channel)
+            }
         }
     }
 
@@ -113,12 +120,19 @@ class WatchFaceReceiveService : WearableListenerService() {
     /**
      * Copy from input to output with a size limit to prevent disk exhaustion.
      * Throws [IllegalStateException] if the limit is exceeded.
+     *
+     * Note: InputStream.read() is a blocking syscall that cannot be interrupted by
+     * coroutine cancellation. The ensureActive() check between reads provides
+     * cooperative cancellation at chunk boundaries (~8KB). For a stalled connection
+     * where read() blocks indefinitely, the BLE/Data Layer disconnect will eventually
+     * unblock it by closing the underlying socket.
      */
-    private fun copyWithLimit(input: InputStream, output: OutputStream, maxBytes: Long) {
+    private suspend fun copyWithLimit(input: InputStream, output: OutputStream, maxBytes: Long) {
         val buffer = ByteArray(8192)
         var totalBytes = 0L
         var bytesRead: Int
         while (input.read(buffer).also { bytesRead = it } != -1) {
+            currentCoroutineContext().ensureActive()
             totalBytes += bytesRead
             if (totalBytes > maxBytes) {
                 throw IllegalStateException(
