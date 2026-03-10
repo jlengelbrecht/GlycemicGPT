@@ -3,6 +3,7 @@ package com.glycemicgpt.weardevice
 import android.app.Application
 import com.glycemicgpt.weardevice.data.WatchDataRepository
 import com.glycemicgpt.weardevice.data.WearDataContract
+import com.glycemicgpt.weardevice.util.GlucoseDisplayUtils
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.HiltAndroidApp
@@ -40,14 +41,23 @@ class GlycemicWearDeviceApp : Application() {
                             Timber.d("Bootstrapped IoB from DataLayer cache")
                         }
                         WearDataContract.CGM_PATH -> {
+                            val mgDl = dataMap.getInt(WearDataContract.KEY_CGM_MG_DL)
+                            if (!GlucoseDisplayUtils.isValidGlucose(mgDl)) {
+                                Timber.w("Rejected invalid cached CGM value during bootstrap")
+                                return@forEach
+                            }
+                            val low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70).coerceIn(40, 200)
+                            val high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180).coerceIn(100, 400)
+                            val urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55).coerceIn(20, low)
+                            val urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250).coerceIn(high, 500)
                             WatchDataRepository.updateCgm(
-                                mgDl = dataMap.getInt(WearDataContract.KEY_CGM_MG_DL),
+                                mgDl = mgDl,
                                 trend = dataMap.getString(WearDataContract.KEY_CGM_TREND, "UNKNOWN"),
                                 timestampMs = dataMap.getLong(WearDataContract.KEY_CGM_TIMESTAMP),
-                                low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70),
-                                high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180),
-                                urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55),
-                                urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250),
+                                low = low,
+                                high = high,
+                                urgentLow = urgentLow,
+                                urgentHigh = urgentHigh,
                             )
                             Timber.d("Bootstrapped CGM from DataLayer cache")
                         }

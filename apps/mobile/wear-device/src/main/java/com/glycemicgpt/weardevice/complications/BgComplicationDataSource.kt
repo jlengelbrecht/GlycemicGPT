@@ -35,8 +35,11 @@ class BgComplicationDataSource : SuspendingComplicationDataSourceService() {
     }
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData {
+        val now = System.currentTimeMillis()
+        val staleThresholdMs = 15 * 60_000L // 15 minutes
         val cgmState = WatchDataRepository.cgm.value?.takeIf {
-            GlucoseDisplayUtils.isValidGlucose(it.mgDl)
+            GlucoseDisplayUtils.isValidGlucose(it.mgDl) &&
+                (now - it.timestampMs) < staleThresholdMs
         }
         val bgText = cgmState?.let {
             "${it.mgDl} ${GlucoseDisplayUtils.trendSymbol(it.trend)}"

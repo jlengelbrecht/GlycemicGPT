@@ -11,7 +11,7 @@ This follows the same pattern used by xDrip, AAPS, Dexcom G7, and other health a
 - Adds unnecessary complexity (inter-app IPC on the same phone)
 - Confusing UX (users must install and manage two phone apps)
 - The main app already has WearDataSender and DataLayer communication
-- Two Play Store listings to maintain
+- Two separate distribution artifacts to maintain
 - No technical benefit -- the main app can do everything a companion app would
 
 ## Architecture Overview
@@ -61,8 +61,8 @@ The old `apps/mobile/wear/` module (which was a watch-side app with tiny watch U
 The Watch Face Push API (`androidx.wear.watchface:watchface-push`) enables the phone app to programmatically install and activate WFF watch faces on the watch.
 
 ### Initial Setup
-1. User installs GlycemicGPT on phone (Play Store or sideload)
-2. Watch-side `:wear-device` APK installs on watch (Play Store auto-install for production, ADB for dev)
+1. User installs GlycemicGPT on phone (sideload from GitHub Releases)
+2. Watch-side `:wear-device` APK installs on watch (ADB sideload or helper app)
 3. User opens Settings > Watch in the phone app
 4. App detects connected watch, shows watch face gallery
 5. User taps "Set Watch Face" -- app pushes WFF APK via ChannelClient
@@ -133,37 +133,41 @@ The phone app's Settings > Watch section provides full customization:
 ## Development vs Production
 
 ### Development (Sideloading)
+
 ```bash
 # Build all modules
 ./gradlew :app:assembleDebug :wear-device:assembleDebug :watchface:assembleDebug
 
 # Install phone app
-adb -s <phone> install app/build/outputs/apk/debug/app-debug.apk
+adb -s <phone> install apps/mobile/app/build/outputs/apk/debug/app-debug.apk
 
 # Install watch-side services (via ADB to watch)
-adb -s <watch> install wear-device/build/outputs/apk/debug/wear-device-debug.apk
+adb -s <watch> install apps/mobile/wear-device/build/outputs/apk/debug/wear-device-debug.apk
 
 # Watch face is pushed programmatically by the app (not sideloaded)
-# OR for testing: adb -s <watch> install watchface/build/outputs/apk/debug/watchface-debug.apk
+# OR for testing: adb -s <watch> install apps/mobile/watchface/build/outputs/apk/debug/watchface-debug.apk
 ```
 
-### Production (Play Store)
-- Phone APK and watch APK share the same Play Store listing
-- Play Store auto-installs `:wear-device` on paired watches
-- Watch face is pushed by the app itself via Watch Face Push API
-- No manual sideloading required by end users
+### Production (GitHub Releases)
+
+GlycemicGPT is distributed via GitHub Releases (not Play Store -- open source diabetes software, not FDA approved).
+
+- Phone APK and watch APK are published as GitHub Release assets
+- Users sideload the phone APK or install via F-Droid (future)
+- Watch APK must be installed separately on the watch via ADB or a helper app (Epic 32 future story)
+- Watch face is pushed programmatically by the phone app via Watch Face Push API
 
 ## API Level Requirements
 
 | Component | minSdk | targetSdk | Notes |
 |-----------|--------|-----------|-------|
 | `:app` (phone) | 26 | 35 | Standard Android phone app |
-| `:wear-device` (watch) | 33 | 34 | Wear OS 4+ for services/complications; Watch Face Push API (Story 32.2) bumps minSdk to 36 |
+| `:wear-device` (watch) | 33 | 34 | Wear OS 4+ for services/complications. Watch Face Push API requires Wear OS 6 (API 36) at runtime but does not require bumping minSdk. |
 | `:watchface` (WFF) | 33 | 34 | WFF v1 for broadest compatibility |
 
 ## Migration from Old Architecture
 
-The old `apps/mobile/wear/` module is removed. Migration:
+The old `apps/mobile/wear/` module is being replaced by `:wear-device`. Story 32.1 creates the new module and migrates core services. Story 32.9 removes the old module after all functionality is migrated. Migration map:
 
 | Old (wear/) | New Location |
 |-------------|-------------|

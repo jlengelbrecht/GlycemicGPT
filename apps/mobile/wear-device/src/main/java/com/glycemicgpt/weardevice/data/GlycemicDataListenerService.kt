@@ -41,14 +41,18 @@ class GlycemicDataListenerService : WearableListenerService() {
                         Timber.w("Rejected invalid CGM value from phone")
                         return@forEach
                     }
+                    val low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70).coerceIn(40, 200)
+                    val high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180).coerceIn(100, 400)
+                    val urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55).coerceIn(20, low)
+                    val urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250).coerceIn(high, 500)
                     WatchDataRepository.updateCgm(
                         mgDl = mgDl,
                         trend = dataMap.getString(WearDataContract.KEY_CGM_TREND, "UNKNOWN"),
                         timestampMs = dataMap.getLong(WearDataContract.KEY_CGM_TIMESTAMP),
-                        low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70),
-                        high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180),
-                        urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55),
-                        urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250),
+                        low = low,
+                        high = high,
+                        urgentLow = urgentLow,
+                        urgentHigh = urgentHigh,
                     )
                     cgmUpdated = true
                     Timber.d("Received CGM update from phone")
