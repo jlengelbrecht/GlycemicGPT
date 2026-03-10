@@ -33,11 +33,12 @@ reason = "Dev-only dependency (eslint/jest toolchain), not in production"
 id = "GHSA-7r86-cg39-jmmj"
 reason = "Dev-only dependency (eslint/jest toolchain), not in production"
 
-# ajv 6.12.6 -- dev-only transitive dependency. Prototype pollution
-# via crafted JSON schema, not exploitable in our build tooling.
+# @tootallnate/once 2.0.0 -- dev-only transitive dependency
+# (jest-environment-jsdom -> jsdom -> http-proxy-agent). Not in
+# production builds. npm audit fix requires breaking jsdom upgrade.
 [[IgnoredVulns]]
-id = "GHSA-2g4f-4pwh-qvx6"
-reason = "Dev-only dependency, not in production; prototype pollution not exploitable in build tooling"
+id = "GHSA-vpq2-c234-7xj6"
+reason = "Dev-only dependency (jest toolchain), not in production; fix requires breaking jsdom upgrade"
 
 # next 15.5.12 -- fix only in canary (15.6.0-canary.61). Waiting for
 # stable release. SSRF via Server Actions; mitigated by our CSP and
