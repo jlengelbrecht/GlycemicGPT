@@ -30,49 +30,52 @@ class GlycemicWearDeviceApp : Application() {
             try {
                 val dataClient = Wearable.getDataClient(this@GlycemicWearDeviceApp)
                 val dataItems = dataClient.dataItems.await()
-                dataItems.forEach { item ->
-                    val dataMap = DataMapItem.fromDataItem(item).dataMap
-                    when (item.uri.path) {
-                        WearDataContract.IOB_PATH -> {
-                            WatchDataRepository.updateIoB(
-                                iob = dataMap.getFloat(WearDataContract.KEY_IOB_VALUE),
-                                timestampMs = dataMap.getLong(WearDataContract.KEY_IOB_TIMESTAMP),
-                            )
-                            Timber.d("Bootstrapped IoB from DataLayer cache")
-                        }
-                        WearDataContract.CGM_PATH -> {
-                            val mgDl = dataMap.getInt(WearDataContract.KEY_CGM_MG_DL)
-                            if (!GlucoseDisplayUtils.isValidGlucose(mgDl)) {
-                                Timber.w("Rejected invalid cached CGM value during bootstrap")
-                                return@forEach
+                try {
+                    dataItems.forEach { item ->
+                        val dataMap = DataMapItem.fromDataItem(item).dataMap
+                        when (item.uri.path) {
+                            WearDataContract.IOB_PATH -> {
+                                WatchDataRepository.updateIoB(
+                                    iob = dataMap.getFloat(WearDataContract.KEY_IOB_VALUE),
+                                    timestampMs = dataMap.getLong(WearDataContract.KEY_IOB_TIMESTAMP),
+                                )
+                                Timber.d("Bootstrapped IoB from DataLayer cache")
                             }
-                            val low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70).coerceIn(40, 200)
-                            val high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180).coerceIn(100, 400)
-                            val urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55).coerceIn(20, low)
-                            val urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250).coerceIn(high, 500)
-                            WatchDataRepository.updateCgm(
-                                mgDl = mgDl,
-                                trend = dataMap.getString(WearDataContract.KEY_CGM_TREND, "UNKNOWN"),
-                                timestampMs = dataMap.getLong(WearDataContract.KEY_CGM_TIMESTAMP),
-                                low = low,
-                                high = high,
-                                urgentLow = urgentLow,
-                                urgentHigh = urgentHigh,
-                            )
-                            Timber.d("Bootstrapped CGM from DataLayer cache")
-                        }
-                        WearDataContract.ALERT_PATH -> {
-                            WatchDataRepository.updateAlert(
-                                type = dataMap.getString(WearDataContract.KEY_ALERT_TYPE, "none"),
-                                bgValue = dataMap.getInt(WearDataContract.KEY_ALERT_BG_VALUE, 0),
-                                timestampMs = dataMap.getLong(WearDataContract.KEY_ALERT_TIMESTAMP),
-                                message = dataMap.getString(WearDataContract.KEY_ALERT_MESSAGE, ""),
-                            )
-                            Timber.d("Bootstrapped alert from DataLayer cache")
+                            WearDataContract.CGM_PATH -> {
+                                val mgDl = dataMap.getInt(WearDataContract.KEY_CGM_MG_DL)
+                                if (!GlucoseDisplayUtils.isValidGlucose(mgDl)) {
+                                    Timber.w("Rejected invalid cached CGM value during bootstrap")
+                                    return@forEach
+                                }
+                                val low = dataMap.getInt(WearDataContract.KEY_GLUCOSE_LOW, 70).coerceIn(40, 200)
+                                val high = dataMap.getInt(WearDataContract.KEY_GLUCOSE_HIGH, 180).coerceIn(100, 400)
+                                val urgentLow = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_LOW, 55).coerceIn(20, low)
+                                val urgentHigh = dataMap.getInt(WearDataContract.KEY_GLUCOSE_URGENT_HIGH, 250).coerceIn(high, 500)
+                                WatchDataRepository.updateCgm(
+                                    mgDl = mgDl,
+                                    trend = dataMap.getString(WearDataContract.KEY_CGM_TREND, "UNKNOWN"),
+                                    timestampMs = dataMap.getLong(WearDataContract.KEY_CGM_TIMESTAMP),
+                                    low = low,
+                                    high = high,
+                                    urgentLow = urgentLow,
+                                    urgentHigh = urgentHigh,
+                                )
+                                Timber.d("Bootstrapped CGM from DataLayer cache")
+                            }
+                            WearDataContract.ALERT_PATH -> {
+                                WatchDataRepository.updateAlert(
+                                    type = dataMap.getString(WearDataContract.KEY_ALERT_TYPE, "none"),
+                                    bgValue = dataMap.getInt(WearDataContract.KEY_ALERT_BG_VALUE, 0),
+                                    timestampMs = dataMap.getLong(WearDataContract.KEY_ALERT_TIMESTAMP),
+                                    message = dataMap.getString(WearDataContract.KEY_ALERT_MESSAGE, ""),
+                                )
+                                Timber.d("Bootstrapped alert from DataLayer cache")
+                            }
                         }
                     }
+                } finally {
+                    dataItems.release()
                 }
-                dataItems.release()
             } catch (e: Exception) {
                 Timber.w(e, "Failed to bootstrap watch data from DataLayer")
             }
