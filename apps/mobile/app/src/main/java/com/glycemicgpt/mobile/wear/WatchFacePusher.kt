@@ -5,11 +5,13 @@ import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.OutputStream
 import java.security.MessageDigest
@@ -66,14 +68,14 @@ class WatchFacePusher @Inject constructor(
      * is logged on the watch side. Story 32.4 will add real-time status
      * listening via MessageClient.
      */
-    suspend fun pushWatchFace(): Result {
-        return try {
+    suspend fun pushWatchFace(): Result = withContext(Dispatchers.IO) {
+        try {
             if (!verifyAssetIntegrity()) {
-                return Result.Error("Watch face APK integrity check failed")
+                return@withContext Result.Error("Watch face APK integrity check failed")
             }
 
             val watchNode = findWatchNode()
-                ?: return Result.Error("No watch connected")
+                ?: return@withContext Result.Error("No watch connected")
 
             Timber.d("Pushing watch face to node: %s (%s)", watchNode.displayName, watchNode.id)
 

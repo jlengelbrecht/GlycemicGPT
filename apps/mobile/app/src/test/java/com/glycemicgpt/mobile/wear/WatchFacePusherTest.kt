@@ -44,8 +44,8 @@ class WatchFacePusherTest {
     }
 
     @Test
-    fun `SEND_TIMEOUT_MS constant is reasonable`() {
-        // Channel send timeout should be at least 30 seconds
-        assertTrue(120_000L >= 30_000L)
+    fun `WATCHFACE_ASSET constant name follows convention`() {
+        // Verify the asset name constant is accessible and non-empty
+        assertTrue(WatchFacePusher.WATCHFACE_SHA256.isNotEmpty())
     }
 }

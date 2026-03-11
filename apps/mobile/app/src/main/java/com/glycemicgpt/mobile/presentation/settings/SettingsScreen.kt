@@ -1578,7 +1578,11 @@ private fun WatchSection(
                                 text = "Watch face sent to watch",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f),
                             )
+                            TextButton(onClick = onDismissPushResult) {
+                                Text("Dismiss")
+                            }
                         }
                     }
                     is WatchFacePushState.Error -> {
@@ -1595,7 +1599,11 @@ private fun WatchSection(
                                 text = watchFacePushState.message,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f),
                             )
+                            TextButton(onClick = onDismissPushResult) {
+                                Text("Dismiss")
+                            }
                         }
                     }
                     else -> { /* Idle or Pushing -- no extra UI */ }

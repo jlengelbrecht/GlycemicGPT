@@ -41,10 +41,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicBoolean
 import timber.log.Timber
 import java.io.File
@@ -135,6 +137,7 @@ data class SettingsUiState(
 )
 
 private const val AUTO_DISMISS_MS = 5_000L
+private const val PUSH_TIMEOUT_MS = 150_000L
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -552,7 +555,13 @@ class SettingsViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(watchFacePushState = WatchFacePushState.Pushing)
         viewModelScope.launch {
             try {
-                val result = watchFacePusher.pushWatchFace()
+                val result = try {
+                    withTimeout(PUSH_TIMEOUT_MS) {
+                        watchFacePusher.pushWatchFace()
+                    }
+                } catch (_: TimeoutCancellationException) {
+                    WatchFacePusher.Result.Error("Push timed out")
+                }
                 val newState = when (result) {
                     is WatchFacePusher.Result.Success -> WatchFacePushState.Success
                     is WatchFacePusher.Result.Error -> WatchFacePushState.Error(result.message)
