@@ -478,6 +478,7 @@ class SettingsViewModelTest {
         assertEquals(config, vm.uiState.value.watchFaceConfig)
         verify { appSettingsStore.watchFaceShowIoB = false }
         verify { appSettingsStore.watchFaceShowGraph = false }
+        verify { appSettingsStore.watchFaceShowAlert = true }
         verify { appSettingsStore.watchFaceShowSeconds = true }
         verify { appSettingsStore.watchFaceGraphRangeHours = 6 }
         verify { appSettingsStore.watchFaceTheme = "High Contrast" }
@@ -506,6 +507,7 @@ class SettingsViewModelTest {
         val config = vm.uiState.value.watchFaceConfig
         assertFalse(config.showIoB)
         assertFalse(config.showGraph)
+        assertTrue(config.showAlert)
         assertTrue(config.showSeconds)
         assertEquals(6, config.graphRangeHours)
         assertEquals(WatchFaceTheme.HighContrast, config.theme)

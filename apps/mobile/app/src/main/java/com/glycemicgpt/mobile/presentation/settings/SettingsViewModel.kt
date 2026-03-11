@@ -603,7 +603,8 @@ class SettingsViewModel @Inject constructor(
                 cgmItems.firstOrNull()?.let { item ->
                     val map = com.google.android.gms.wearable.DataMapItem.fromDataItem(item).dataMap
                     if (map.containsKey(WearDataContract.KEY_CGM_MG_DL)) {
-                        lastBg = map.getInt(WearDataContract.KEY_CGM_MG_DL)
+                        val rawBg = map.getInt(WearDataContract.KEY_CGM_MG_DL)
+                        lastBg = if (rawBg in 20..500) rawBg else null
                     }
                     if (map.containsKey(WearDataContract.KEY_CGM_TIMESTAMP)) {
                         lastBgTs = map.getLong(WearDataContract.KEY_CGM_TIMESTAMP)
@@ -711,12 +712,14 @@ class SettingsViewModel @Inject constructor(
     private fun loadPersistedWatchFaceConfig(): WatchFaceConfig {
         val themeName = appSettingsStore.watchFaceTheme
         val theme = WatchFaceTheme.entries.find { it.label == themeName } ?: WatchFaceTheme.Dark
+        val rawGraphRange = appSettingsStore.watchFaceGraphRangeHours
+        val graphRange = if (rawGraphRange in WatchFaceConfig.VALID_GRAPH_RANGES) rawGraphRange else 3
         return WatchFaceConfig(
             showIoB = appSettingsStore.watchFaceShowIoB,
             showGraph = appSettingsStore.watchFaceShowGraph,
             showAlert = appSettingsStore.watchFaceShowAlert,
             showSeconds = appSettingsStore.watchFaceShowSeconds,
-            graphRangeHours = appSettingsStore.watchFaceGraphRangeHours,
+            graphRangeHours = graphRange,
             theme = theme,
         )
     }
