@@ -6,15 +6,16 @@ import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 import java.io.File
 import java.io.InputStream
@@ -57,18 +58,33 @@ class WatchFaceReceiveService : WearableListenerService() {
     }
 
     private suspend fun receiveAndInstallWatchFace(channel: ChannelClient.Channel) {
+        // Reject early on unsupported devices to avoid unnecessary transfer and disk I/O
+        if (!WatchFaceInstaller.isSupported()) {
+            Timber.w("Watch Face Push not supported on this device (API %d)", android.os.Build.VERSION.SDK_INT)
+            sendStatus("error", error = "Watch Face Push requires Wear OS 6")
+            try {
+                Wearable.getChannelClient(this).close(channel).await()
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to close channel")
+            }
+            return
+        }
+
         val tempFile = File.createTempFile("watchface-push-", ".apk", cacheDir)
         try {
-            // Read APK bytes from channel into temp file with timeout and size limit
+            // Read APK bytes from channel into temp file with size limit.
+            // A watchdog coroutine force-closes the channel if the transfer stalls,
+            // since InputStream.read() is a blocking syscall that coroutine cancellation
+            // alone cannot interrupt.
             val channelClient = Wearable.getChannelClient(this)
             val inputStream = channelClient.getInputStream(channel).await()
+            val watchdog = launchTimeoutWatchdog(channelClient, channel)
             inputStream.use { input ->
-                withTimeout(RECEIVE_TIMEOUT_MS) {
-                    tempFile.outputStream().use { output ->
-                        copyWithLimit(input, output, MAX_APK_SIZE_BYTES)
-                    }
+                tempFile.outputStream().use { output ->
+                    copyWithLimit(input, output, MAX_APK_SIZE_BYTES)
                 }
             }
+            watchdog.cancel()
 
             val fileSize = tempFile.length()
             if (fileSize == 0L) {
@@ -118,14 +134,31 @@ class WatchFaceReceiveService : WearableListenerService() {
     }
 
     /**
+     * Launch a watchdog that force-closes the channel after [RECEIVE_TIMEOUT_MS].
+     * Closing the channel closes the underlying socket, which unblocks any
+     * blocking [InputStream.read] call in [copyWithLimit].
+     * The caller must cancel the returned [Job] on successful transfer.
+     */
+    private fun launchTimeoutWatchdog(
+        channelClient: ChannelClient,
+        channel: ChannelClient.Channel,
+    ): Job = scope.launch {
+        delay(RECEIVE_TIMEOUT_MS)
+        Timber.w("Watch face receive timed out after %d ms, force-closing channel", RECEIVE_TIMEOUT_MS)
+        try {
+            channelClient.close(channel).await()
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to force-close channel on timeout")
+        }
+    }
+
+    /**
      * Copy from input to output with a size limit to prevent disk exhaustion.
      * Throws [IllegalStateException] if the limit is exceeded.
      *
-     * Note: InputStream.read() is a blocking syscall that cannot be interrupted by
-     * coroutine cancellation. The ensureActive() check between reads provides
-     * cooperative cancellation at chunk boundaries (~8KB). For a stalled connection
-     * where read() blocks indefinitely, the BLE/Data Layer disconnect will eventually
-     * unblock it by closing the underlying socket.
+     * The [ensureActive] check between reads provides cooperative cancellation at
+     * chunk boundaries (~8KB). For a fully stalled connection, the timeout watchdog
+     * force-closes the channel to unblock the blocking [InputStream.read] call.
      */
     private suspend fun copyWithLimit(input: InputStream, output: OutputStream, maxBytes: Long) {
         val buffer = ByteArray(8192)

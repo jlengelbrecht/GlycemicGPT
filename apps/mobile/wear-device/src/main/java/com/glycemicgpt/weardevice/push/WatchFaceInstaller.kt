@@ -25,6 +25,8 @@ class WatchFaceInstaller(private val context: Context) {
 
     companion object {
         private const val WEAR_OS_6_API = 36
+        /** Base package name for the GlycemicGPT watch face (without build-type suffix). */
+        private const val WATCHFACE_PACKAGE_PREFIX = "com.glycemicgpt.watchface"
 
         fun isSupported(): Boolean = Build.VERSION.SDK_INT >= WEAR_OS_6_API
     }
@@ -149,13 +151,20 @@ class WatchFaceInstaller(private val context: Context) {
         }
     }
 
+    /**
+     * Find an existing GlycemicGPT watch face by matching [packageName] prefix.
+     * The list order from [WatchFacePushManager.listWatchFaces] is not guaranteed stable,
+     * so we match by package name rather than taking the first entry.
+     */
     @RequiresApi(WEAR_OS_6_API)
     private suspend fun findExistingFace(
         pushManager: WatchFacePushManager,
     ): WatchFacePushManager.WatchFaceDetails? {
         return try {
             val response = pushManager.listWatchFaces()
-            response.installedWatchFaceDetails.firstOrNull()
+            response.installedWatchFaceDetails.firstOrNull { details ->
+                details.packageName.startsWith(WATCHFACE_PACKAGE_PREFIX)
+            }
         } catch (e: WatchFacePushManager.ListWatchFacesException) {
             Timber.w(e, "Failed to list watch faces, treating as fresh install")
             null

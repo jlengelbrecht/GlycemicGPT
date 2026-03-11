@@ -4,7 +4,7 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
-    <!-- watchface-push AAR requires minSdk 36 but we target Wear OS 4+ (API 33+)
+    <!-- watchface-push AAR requires minSdk 36 but this module targets Wear OS 5+ (API 35+)
          for core services. Push functionality is guarded by runtime API level check. -->
     <uses-sdk tools:overrideLibrary="androidx.wear.watchface.push" />
 
