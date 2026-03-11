@@ -1575,7 +1575,7 @@ private fun WatchSection(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Watch face pushed successfully",
+                                text = "Watch face sent to watch",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )

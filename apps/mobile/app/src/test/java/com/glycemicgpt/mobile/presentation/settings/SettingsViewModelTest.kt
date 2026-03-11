@@ -423,4 +423,35 @@ class SettingsViewModelTest {
         val vm = createViewModel()
         assertEquals(AuthState.Unauthenticated, vm.authState.value)
     }
+
+    @Test
+    fun `pushWatchFace transitions to Success on successful push`() = runTest {
+        coEvery { watchFacePusher.pushWatchFace() } returns WatchFacePusher.Result.Success("sent", null)
+        val vm = createViewModel()
+
+        vm.pushWatchFace()
+
+        assertTrue(vm.uiState.value.watchFacePushState is WatchFacePushState.Success)
+    }
+
+    @Test
+    fun `pushWatchFace transitions to Error on failure`() = runTest {
+        coEvery { watchFacePusher.pushWatchFace() } returns WatchFacePusher.Result.Error("No watch connected")
+        val vm = createViewModel()
+
+        vm.pushWatchFace()
+
+        val state = vm.uiState.value.watchFacePushState
+        assertTrue(state is WatchFacePushState.Error)
+        assertEquals("No watch connected", (state as WatchFacePushState.Error).message)
+    }
+
+    @Test
+    fun `dismissWatchFacePushResult resets to Idle`() {
+        val vm = createViewModel()
+
+        vm.dismissWatchFacePushResult()
+
+        assertTrue(vm.uiState.value.watchFacePushState is WatchFacePushState.Idle)
+    }
 }

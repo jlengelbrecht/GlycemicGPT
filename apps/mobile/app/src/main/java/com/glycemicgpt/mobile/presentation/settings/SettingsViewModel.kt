@@ -41,9 +41,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import timber.log.Timber
 import java.io.File
 import javax.inject.Inject
@@ -131,6 +133,8 @@ data class SettingsUiState(
     val themeMode: com.glycemicgpt.mobile.presentation.theme.ThemeMode =
         com.glycemicgpt.mobile.presentation.theme.ThemeMode.System,
 )
+
+private const val AUTO_DISMISS_MS = 5_000L
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -541,17 +545,25 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private val pushInProgress = AtomicBoolean(false)
+
     fun pushWatchFace() {
-        if (_uiState.value.watchFacePushState is WatchFacePushState.Pushing) return
+        if (!pushInProgress.compareAndSet(false, true)) return
         _uiState.value = _uiState.value.copy(watchFacePushState = WatchFacePushState.Pushing)
         viewModelScope.launch {
-            val result = watchFacePusher.pushWatchFace()
-            _uiState.value = _uiState.value.copy(
-                watchFacePushState = when (result) {
+            try {
+                val result = watchFacePusher.pushWatchFace()
+                val newState = when (result) {
                     is WatchFacePusher.Result.Success -> WatchFacePushState.Success
                     is WatchFacePusher.Result.Error -> WatchFacePushState.Error(result.message)
-                },
-            )
+                }
+                _uiState.value = _uiState.value.copy(watchFacePushState = newState)
+                // Auto-dismiss success/error after 5 seconds
+                delay(AUTO_DISMISS_MS)
+                dismissWatchFacePushResult()
+            } finally {
+                pushInProgress.set(false)
+            }
         }
     }
 

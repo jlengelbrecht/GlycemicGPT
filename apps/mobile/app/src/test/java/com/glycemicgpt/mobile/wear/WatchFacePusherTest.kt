@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.wear
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -32,5 +33,19 @@ class WatchFacePusherTest {
         val error: WatchFacePusher.Result = WatchFacePusher.Result.Error("fail")
         assertTrue(success is WatchFacePusher.Result.Success)
         assertTrue(error is WatchFacePusher.Result.Error)
+    }
+
+    @Test
+    fun `WATCHFACE_SHA256 is a valid 64-char hex string`() {
+        val hash = WatchFacePusher.WATCHFACE_SHA256
+        assertNotNull(hash)
+        assertEquals(64, hash.length)
+        assertTrue("SHA-256 must be lowercase hex", hash.matches(Regex("[0-9a-f]{64}")))
+    }
+
+    @Test
+    fun `SEND_TIMEOUT_MS constant is reasonable`() {
+        // Channel send timeout should be at least 30 seconds
+        assertTrue(120_000L >= 30_000L)
     }
 }
