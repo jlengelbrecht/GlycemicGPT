@@ -27,6 +27,7 @@ import com.glycemicgpt.mobile.service.PumpConnectionService
 import android.media.RingtoneManager
 import com.glycemicgpt.mobile.data.update.DownloadResult
 import com.glycemicgpt.mobile.data.update.UpdateCheckResult
+import com.glycemicgpt.mobile.wear.WatchFacePusher
 import com.glycemicgpt.mobile.wear.WearDataContract
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.Wearable
@@ -63,6 +64,13 @@ sealed class UpdateUiState {
     object Downloading : UpdateUiState()
     data class ReadyToInstall(val apkFile: File) : UpdateUiState()
     data class Error(val message: String) : UpdateUiState()
+}
+
+sealed class WatchFacePushState {
+    object Idle : WatchFacePushState()
+    object Pushing : WatchFacePushState()
+    object Success : WatchFacePushState()
+    data class Error(val message: String) : WatchFacePushState()
 }
 
 data class SettingsUiState(
@@ -106,6 +114,7 @@ data class SettingsUiState(
     // Watch
     val watchAppInstalled: Boolean? = null,
     val watchConnected: Boolean = false,
+    val watchFacePushState: WatchFacePushState = WatchFacePushState.Idle,
     // Battery optimization
     val isBatteryOptimized: Boolean = true,
     // Notification sounds
@@ -136,6 +145,7 @@ class SettingsViewModel @Inject constructor(
     private val alertSoundStore: AlertSoundStore,
     private val alertNotificationManager: AlertNotificationManager,
     private val pluginRegistry: PluginRegistry,
+    private val watchFacePusher: WatchFacePusher,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -529,6 +539,24 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    fun pushWatchFace() {
+        if (_uiState.value.watchFacePushState is WatchFacePushState.Pushing) return
+        _uiState.value = _uiState.value.copy(watchFacePushState = WatchFacePushState.Pushing)
+        viewModelScope.launch {
+            val result = watchFacePusher.pushWatchFace()
+            _uiState.value = _uiState.value.copy(
+                watchFacePushState = when (result) {
+                    is WatchFacePusher.Result.Success -> WatchFacePushState.Success
+                    is WatchFacePusher.Result.Error -> WatchFacePushState.Error(result.message)
+                },
+            )
+        }
+    }
+
+    fun dismissWatchFacePushResult() {
+        _uiState.value = _uiState.value.copy(watchFacePushState = WatchFacePushState.Idle)
     }
 
     fun checkBatteryOptimization() {
