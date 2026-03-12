@@ -129,6 +129,10 @@ class GlycemicDataListenerService : WearableListenerService() {
                     val json = JSONObject(String(responseData, Charsets.UTF_8))
                     val response = json.optString("response", "")
                     val disclaimer = json.optString("disclaimer", "")
+                    if (response.isBlank()) {
+                        WatchDataRepository.setChatError("Empty response from AI")
+                        return
+                    }
                     WatchDataRepository.setChatResponse(response, disclaimer)
                     Timber.d("Received chat response from phone (%d chars)", response.length)
                 } catch (e: Exception) {

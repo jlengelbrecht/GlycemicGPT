@@ -1,6 +1,7 @@
 package com.glycemicgpt.mobile.wear
 
 import com.glycemicgpt.mobile.data.local.AuthTokenStore
+import com.glycemicgpt.mobile.data.repository.AlertRepository
 import com.glycemicgpt.mobile.data.repository.ChatRepository
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
@@ -20,6 +21,7 @@ import javax.inject.Inject
 class WearChatRelayService : WearableListenerService() {
 
     @Inject lateinit var chatRepository: ChatRepository
+    @Inject lateinit var alertRepository: AlertRepository
     @Inject lateinit var authTokenStore: AuthTokenStore
     @Inject lateinit var wearDataSender: WearDataSender
 
@@ -36,6 +38,16 @@ class WearChatRelayService : WearableListenerService() {
     private fun handleAlertDismiss() {
         Timber.d("Received alert dismiss from watch")
         serviceScope.launch {
+            // Acknowledge the most recent alert in the phone's database/backend
+            try {
+                val serverId = alertRepository.getLatestUnacknowledgedServerId()
+                if (serverId != null) {
+                    alertRepository.acknowledgeAlert(serverId)
+                    Timber.d("Acknowledged alert %s from watch dismiss", serverId)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to acknowledge alert on phone side")
+            }
             wearDataSender.clearAlert()
         }
     }
@@ -47,6 +59,9 @@ class WearChatRelayService : WearableListenerService() {
 
         if (requestText.isEmpty()) {
             Timber.w("Empty chat request received, ignoring")
+            serviceScope.launch {
+                sendError(sourceNodeId, "Empty message")
+            }
             return
         }
 

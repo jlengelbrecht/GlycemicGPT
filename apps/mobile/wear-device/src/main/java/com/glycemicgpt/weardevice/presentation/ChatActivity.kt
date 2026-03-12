@@ -200,6 +200,7 @@ private fun sendQuery(
                 WatchDataRepository.setChatError("Phone not connected")
             }
         } catch (e: Exception) {
+            timber.log.Timber.w(e, "Failed to send chat request")
             WatchDataRepository.setChatError("Failed to send request")
         }
     }
