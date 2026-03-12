@@ -4,6 +4,7 @@ import android.content.Context
 import com.glycemicgpt.weardevice.data.WearDataContract
 import com.google.android.gms.wearable.Wearable
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 
 /**
@@ -12,20 +13,24 @@ import timber.log.Timber
  */
 object WearMessageSender {
 
+    private const val WEARABLE_TIMEOUT_MS = 10_000L
+
     private suspend fun getPhoneNodeId(context: Context): String? {
         return try {
-            val capClient = Wearable.getCapabilityClient(context)
-            val capInfo = capClient.getCapability(
-                WearDataContract.CHAT_RELAY_CAPABILITY,
-                com.google.android.gms.wearable.CapabilityClient.FILTER_REACHABLE,
-            ).await()
-            // Prefer capability-matched node; fall back to first connected node
-            val capNode = capInfo.nodes.firstOrNull { it.isNearby }
-                ?: capInfo.nodes.firstOrNull()
-            if (capNode != null) return capNode.id
+            withTimeout(WEARABLE_TIMEOUT_MS) {
+                val capClient = Wearable.getCapabilityClient(context)
+                val capInfo = capClient.getCapability(
+                    WearDataContract.CHAT_RELAY_CAPABILITY,
+                    com.google.android.gms.wearable.CapabilityClient.FILTER_REACHABLE,
+                ).await()
+                // Prefer capability-matched node; fall back to first connected node
+                val capNode = capInfo.nodes.firstOrNull { it.isNearby }
+                    ?: capInfo.nodes.firstOrNull()
+                if (capNode != null) return@withTimeout capNode.id
 
-            val nodes = Wearable.getNodeClient(context).connectedNodes.await()
-            nodes.firstOrNull()?.id
+                val nodes = Wearable.getNodeClient(context).connectedNodes.await()
+                nodes.firstOrNull()?.id
+            }
         } catch (e: Exception) {
             Timber.w(e, "Failed to get connected phone node")
             null
@@ -38,13 +43,15 @@ object WearMessageSender {
             return false
         }
         return try {
-            Wearable.getMessageClient(context)
-                .sendMessage(
-                    nodeId,
-                    WearDataContract.CHAT_REQUEST_PATH,
-                    message.toByteArray(Charsets.UTF_8),
-                )
-                .await()
+            withTimeout(WEARABLE_TIMEOUT_MS) {
+                Wearable.getMessageClient(context)
+                    .sendMessage(
+                        nodeId,
+                        WearDataContract.CHAT_REQUEST_PATH,
+                        message.toByteArray(Charsets.UTF_8),
+                    )
+                    .await()
+            }
             Timber.d("Sent chat request to phone (%d chars)", message.length)
             true
         } catch (e: Exception) {
@@ -59,13 +66,15 @@ object WearMessageSender {
             return false
         }
         return try {
-            Wearable.getMessageClient(context)
-                .sendMessage(
-                    nodeId,
-                    WearDataContract.ALERT_DISMISS_PATH,
-                    ByteArray(0),
-                )
-                .await()
+            withTimeout(WEARABLE_TIMEOUT_MS) {
+                Wearable.getMessageClient(context)
+                    .sendMessage(
+                        nodeId,
+                        WearDataContract.ALERT_DISMISS_PATH,
+                        ByteArray(0),
+                    )
+                    .await()
+            }
             Timber.d("Sent alert dismiss to phone")
             true
         } catch (e: Exception) {

@@ -88,7 +88,7 @@ private fun WearAlertScreen(onFinish: () -> Unit) {
                         textAlign = TextAlign.Center,
                     )
 
-                    if (currentAlert.bgValue > 0) {
+                    if (currentAlert.bgValue in 20..500) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "${currentAlert.bgValue} mg/dL",

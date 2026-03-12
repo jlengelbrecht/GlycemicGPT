@@ -194,9 +194,13 @@ private fun sendQuery(
 ) {
     WatchDataRepository.setChatLoading()
     scope.launch {
-        val sent = WearMessageSender.sendChatRequest(context, query)
-        if (!sent) {
-            WatchDataRepository.setChatError("Phone not connected")
+        try {
+            val sent = WearMessageSender.sendChatRequest(context, query)
+            if (!sent) {
+                WatchDataRepository.setChatError("Phone not connected")
+            }
+        } catch (e: Exception) {
+            WatchDataRepository.setChatError("Failed to send request")
         }
     }
 }

@@ -119,8 +119,14 @@ class GlycemicDataListenerService : WearableListenerService() {
     override fun onMessageReceived(messageEvent: MessageEvent) {
         when (messageEvent.path) {
             WearDataContract.CHAT_RESPONSE_PATH -> {
+                val responseData = messageEvent.data
+                if (responseData == null) {
+                    WatchDataRepository.setChatError("Empty response")
+                    Timber.w("Received chat response with null data")
+                    return
+                }
                 try {
-                    val json = JSONObject(String(messageEvent.data, Charsets.UTF_8))
+                    val json = JSONObject(String(responseData, Charsets.UTF_8))
                     val response = json.optString("response", "")
                     val disclaimer = json.optString("disclaimer", "")
                     WatchDataRepository.setChatResponse(response, disclaimer)
@@ -132,7 +138,13 @@ class GlycemicDataListenerService : WearableListenerService() {
             }
 
             WearDataContract.CHAT_ERROR_PATH -> {
-                val rawError = String(messageEvent.data, Charsets.UTF_8)
+                val data = messageEvent.data
+                if (data == null) {
+                    WatchDataRepository.setChatError("Unknown error")
+                    Timber.w("Received chat error with null data")
+                    return
+                }
+                val rawError = String(data, Charsets.UTF_8)
                 // Cap error message length to avoid displaying stack traces or internal details
                 val errorMsg = if (rawError.length > MAX_ERROR_LENGTH) {
                     rawError.take(MAX_ERROR_LENGTH) + "..."

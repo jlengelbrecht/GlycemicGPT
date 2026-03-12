@@ -42,7 +42,7 @@ class WearChatRelayService : WearableListenerService() {
 
     private fun handleChatRequest(messageEvent: MessageEvent) {
 
-        val requestText = String(messageEvent.data, Charsets.UTF_8).trim()
+        val requestText = messageEvent.data?.let { String(it, Charsets.UTF_8).trim() } ?: ""
         val sourceNodeId = messageEvent.sourceNodeId
 
         if (requestText.isEmpty()) {
