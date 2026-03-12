@@ -11,7 +11,9 @@ import com.glycemicgpt.weardevice.util.GlucoseDisplayUtils.sanitizeThresholds
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
+import org.json.JSONObject
 import timber.log.Timber
 
 class GlycemicDataListenerService : WearableListenerService() {
@@ -114,6 +116,37 @@ class GlycemicDataListenerService : WearableListenerService() {
         }
     }
 
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        when (messageEvent.path) {
+            WearDataContract.CHAT_RESPONSE_PATH -> {
+                try {
+                    val json = JSONObject(String(messageEvent.data, Charsets.UTF_8))
+                    val response = json.optString("response", "")
+                    val disclaimer = json.optString("disclaimer", "")
+                    WatchDataRepository.setChatResponse(response, disclaimer)
+                    Timber.d("Received chat response from phone (%d chars)", response.length)
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to parse chat response")
+                    WatchDataRepository.setChatError("Failed to parse response")
+                }
+            }
+
+            WearDataContract.CHAT_ERROR_PATH -> {
+                val rawError = String(messageEvent.data, Charsets.UTF_8)
+                // Cap error message length to avoid displaying stack traces or internal details
+                val errorMsg = if (rawError.length > MAX_ERROR_LENGTH) {
+                    rawError.take(MAX_ERROR_LENGTH) + "..."
+                } else {
+                    rawError
+                }
+                WatchDataRepository.setChatError(errorMsg)
+                Timber.d("Received chat error from phone (%d chars)", rawError.length)
+            }
+
+            else -> super.onMessageReceived(messageEvent)
+        }
+    }
+
     private fun vibrateForAlert(alertType: String) {
         try {
             val manager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -128,6 +161,10 @@ class GlycemicDataListenerService : WearableListenerService() {
         } catch (e: Exception) {
             Timber.w(e, "Failed to vibrate for alert")
         }
+    }
+
+    private companion object {
+        const val MAX_ERROR_LENGTH = 200
     }
 
     private fun requestComplicationUpdate(dataSourceClass: Class<*>) {
