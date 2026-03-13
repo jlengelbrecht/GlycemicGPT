@@ -1,6 +1,6 @@
 # GlycemicGPT Implementation Progress
 
-> Last Updated: 2026-03-11
+> Last Updated: 2026-03-13
 
 ## Summary
 
@@ -37,7 +37,7 @@
 | 29 | App Icons & Branding | 3/3 | **Complete** |
 | 30 | Advanced Web Dashboard Visualization | 9/9 | **Complete** |
 | 31 | Mobile Dashboard Parity & Hub-and-Spoke Redesign | 5/8 | **In Progress** |
-| 32 | Wear OS Watch Face Management | 6/10 | **In Progress** |
+| 32 | Wear OS Watch Face Management | 7/12 | **In Progress** |
 | 33 | Data Source Abstraction & CGM Intelligence | 0/12 | Planned |
 | 34 | Code Quality & Technical Debt Elimination | 0/17 | Planned |
 | 35 | AI Intelligence Pipeline | 0/19 | Planned |
@@ -65,7 +65,7 @@
 **Epic 29 (App Icons & Branding):** 3/3 complete
 **Epic 30 (Web Dashboard Visualization):** 10/10 complete
 **Epic 31 (Mobile Dashboard Parity):** 5/8 complete (2 cancelled)
-**Epic 32 (Wear OS Watch Face Management):** 7/10 complete
+**Epic 32 (Wear OS Watch Face Management):** 7/12 complete
 **Epic 33 (Data Source Abstraction):** 0/12 planned
 **Epic 34 (Code Quality):** 0/17 planned
 **Epic 35 (AI Intelligence Pipeline):** 0/19 planned
@@ -73,7 +73,7 @@
 **Epic 37 (Longitudinal Reports):** 0/6 planned
 **Epic 38 (Historical Data Import):** 0/8 planned
 **Epic 39 (Backend-Driven Protocol & Play Store):** 0/15 planned
-**Overall Progress:** 161/268 stories planned/complete
+**Overall Progress:** 161/270 stories planned/complete
 
 ### Standalone Bug Fixes
 
@@ -1270,7 +1270,9 @@ Any new stats calculations (CGM summary, insulin summary, AGP percentiles, 5-buc
 | 32.7 | Ambient mode & battery optimization | Planned | |
 | 32.8 | Watch-to-phone AI chat & alert dismiss | Complete | #365 |
 | 32.9 | Remove old wear/ module & cleanup | Complete | #364 |
-| 32.10 | Update documentation & dev scripts | Planned | |
+| 32.10 | Update documentation & dev scripts | In Progress | #366 |
+| 32.11 | Fix watch face push validation token | Planned | |
+| 32.12 | Watch APK self-update via phone app | Planned | |
 
 ### Story 32.1: Create :wear-device module, migrate watch services
 
