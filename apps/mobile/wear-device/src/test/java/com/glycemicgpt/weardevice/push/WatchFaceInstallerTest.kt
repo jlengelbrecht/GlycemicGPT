@@ -1,7 +1,6 @@
 package com.glycemicgpt.weardevice.push
 
 import android.content.Context
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
