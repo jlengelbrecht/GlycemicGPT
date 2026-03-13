@@ -11,7 +11,9 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.glycemicgpt.weardevice"
+        // Must match the phone app's applicationId for Wearable Data Layer routing.
+        // The namespace (com.glycemicgpt.weardevice) remains separate for R class isolation.
+        applicationId = "com.glycemicgpt.mobile"
         minSdk = 35
         targetSdk = 35
 
