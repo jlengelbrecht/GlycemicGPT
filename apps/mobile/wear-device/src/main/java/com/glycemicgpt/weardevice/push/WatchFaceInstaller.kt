@@ -29,7 +29,7 @@ class WatchFaceInstaller(private val context: Context) {
     companion object {
         private const val WEAR_OS_6_API = 36
         /** Base package name for the GlycemicGPT watch face (without build-type suffix). */
-        private const val WATCHFACE_PACKAGE_PREFIX = "com.glycemicgpt.watchface"
+        private const val WATCHFACE_PACKAGE_PREFIX = "com.glycemicgpt.mobile.watchfacepush"
 
         fun isSupported(): Boolean = Build.VERSION.SDK_INT >= WEAR_OS_6_API
     }
