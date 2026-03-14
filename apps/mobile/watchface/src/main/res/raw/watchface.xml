@@ -1,199 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  GlycemicGPT Watch Face Format (WFF v1)
+  GlycemicGPT Watch Face Format (WFF v2)
 
-  Layout (glucose centric, modeled after xDrip):
-     [BG value] [trend]        Large color coded BG plus trend arrows (top)
-       [delta mg/dl]           Delta from previous reading
-        [3m ago]               Freshness / data age (color coded)
-      [IoB: 2.45u]            Insulin on board (optional)
-     Sun 3/9  9:09 PM         Date plus time (medium)
-    +====================+
-    |  sparkline graph   |     Large glucose graph (bottom half)
-    +====================+
-    6pm  7pm  8pm  9:09
-
-  Complications:
-    Slot 0: BG hero (SHORT_TEXT) via BgComplicationDataSource
-    Slot 2: IoB (SHORT_TEXT) via IoBComplicationDataSource
-    Slot 4: CGM sparkline graph (SMALL_IMAGE) placeholder (no provider yet)
-
-  UserConfiguration:
-    show_iob (boolean): toggle IoB display
-    show_graph (boolean): toggle sparkline graph
-    show_seconds (boolean): toggle seconds in time display
+  Minimal version for Watch Face Push API validation testing.
+  Displays time, date, and BG complication.
 -->
 <WatchFace clipShape="CIRCLE" width="450" height="450">
 
     <Metadata key="CLOCK_TYPE" value="DIGITAL"/>
     <Metadata key="PREVIEW_TIME" value="10:08:32"/>
 
-    <!-- User Configuration -->
-    <UserConfigurations>
-        <BooleanConfiguration
-            id="show_iob"
-            displayName="Show IoB"
-            defaultValue="TRUE" />
-        <BooleanConfiguration
-            id="show_graph"
-            displayName="Show Graph"
-            defaultValue="TRUE" />
-        <BooleanConfiguration
-            id="show_seconds"
-            displayName="Show Seconds"
-            defaultValue="FALSE" />
-    </UserConfigurations>
-
-    <!-- Single Scene (active plus ambient via Variant) -->
     <Scene backgroundColor="#ff000000">
 
-        <!-- BG Hero (slot 0): top center -->
-        <ComplicationSlot
-            x="35" y="25" width="380" height="130"
-            slotId="0"
-            displayName="Blood Glucose"
-            supportedTypes="SMALL_IMAGE SHORT_TEXT EMPTY">
-            <Complication type="SMALL_IMAGE">
-                <PartImage x="0" y="0" width="380" height="130">
-                    <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
-                </PartImage>
-            </Complication>
-            <Complication type="SHORT_TEXT">
-                <PartText x="0" y="30" width="380" height="70">
-                    <Text align="CENTER">
-                        <Font family="SYNC_TO_DEVICE" size="48" weight="BOLD" color="#ffffffff">
-                            <Template>%s<Parameter expression="[COMPLICATION.TEXT]"/></Template>
-                        </Font>
-                    </Text>
-                </PartText>
-            </Complication>
-            <DefaultProviderPolicy
-                defaultSystemProvider="EMPTY"
-                defaultSystemProviderType="EMPTY"
-                primaryProvider="com.glycemicgpt.mobile.debug/com.glycemicgpt.weardevice.complications.BgComplicationDataSource"/>
-        </ComplicationSlot>
-
-        <!-- IoB (slot 2, conditional) -->
-        <Group x="0" y="0" width="450" height="450">
-            <Condition>
-                <Expressions>
-                    <Expression name="show_iob_val"><![CDATA[[CONFIGURATION.show_iob] == true]]></Expression>
-                </Expressions>
-                <Compare expression="show_iob_val">
-                    <ComplicationSlot
-                        x="125" y="160" width="200" height="30"
-                        slotId="2"
-                        displayName="Insulin on Board"
-                        supportedTypes="SHORT_TEXT EMPTY">
-                        <Complication type="SHORT_TEXT">
-                            <PartText x="0" y="0" width="200" height="30">
-                                <Text align="CENTER">
-                                    <Font family="SYNC_TO_DEVICE" size="16" weight="NORMAL" color="#ff9CA3AF">
-                                        <Template>%s<Parameter expression="[COMPLICATION.TEXT]"/></Template>
-                                    </Font>
-                                </Text>
-                            </PartText>
-                        </Complication>
-                        <DefaultProviderPolicy
-                            defaultSystemProvider="EMPTY"
-                            defaultSystemProviderType="EMPTY"
-                            primaryProvider="com.glycemicgpt.mobile.debug/com.glycemicgpt.weardevice.complications.IoBComplicationDataSource"/>
-                    </ComplicationSlot>
-                </Compare>
-            </Condition>
-        </Group>
-
-        <!-- Date Display -->
-        <DigitalClock x="0" y="192" width="450" height="25">
-            <TimeText format="EEE M/d" hourFormat="SYNC_TO_DEVICE" align="CENTER"
-                x="0" y="0" width="450" height="22" alpha="255">
-                <Variant mode="AMBIENT" target="alpha" value="0"/>
-                <Font family="SYNC_TO_DEVICE" size="16" weight="NORMAL" slant="NORMAL"
-                    color="#99ffffff"/>
-            </TimeText>
-        </DigitalClock>
-
-        <!-- Time Display (prominent) -->
-        <DigitalClock x="0" y="215" width="450" height="50">
-            <!-- Active mode: h:mm a with bold weight -->
-            <TimeText format="h:mm a" hourFormat="SYNC_TO_DEVICE" align="CENTER"
-                x="0" y="0" width="450" height="45" alpha="255">
-                <Variant mode="AMBIENT" target="alpha" value="0"/>
-                <Font family="SYNC_TO_DEVICE" size="32" weight="BOLD" slant="NORMAL"
-                    color="#ffffffff"/>
-            </TimeText>
-            <!-- Ambient mode: h:mm with thin weight, larger -->
+        <!-- Time Display: bold in active, thin in ambient to reduce burn-in -->
+        <DigitalClock x="0" y="150" width="450" height="100">
             <TimeText format="h:mm" hourFormat="SYNC_TO_DEVICE" align="CENTER"
-                x="0" y="0" width="450" height="45" alpha="0">
-                <Variant mode="AMBIENT" target="alpha" value="255"/>
-                <Font family="SYNC_TO_DEVICE" size="56" weight="THIN" slant="NORMAL"
-                    color="#ffffffff"/>
+                x="0" y="0" width="450" height="100">
+                <Font family="SYNC_TO_DEVICE" size="72" weight="BOLD"
+                    color="#ffffffff">
+                    <Variant mode="AMBIENT" target="weight" value="THIN"/>
+                    <Variant mode="AMBIENT" target="color" value="#99ffffff"/>
+                </Font>
             </TimeText>
         </DigitalClock>
 
-        <!-- Seconds (conditional, small, below time) -->
-        <Group x="0" y="0" width="450" height="450">
-            <Condition>
-                <Expressions>
-                    <Expression name="show_sec"><![CDATA[[CONFIGURATION.show_seconds] == true]]></Expression>
-                </Expressions>
-                <Compare expression="show_sec">
-                    <DigitalClock x="0" y="260" width="450" height="20">
-                        <TimeText format=":ss" hourFormat="SYNC_TO_DEVICE" align="CENTER"
-                            x="0" y="0" width="450" height="18" alpha="255">
-                            <Variant mode="AMBIENT" target="alpha" value="0"/>
-                            <Font family="SYNC_TO_DEVICE" size="14" weight="NORMAL" slant="NORMAL"
-                                color="#66ffffff"/>
-                        </TimeText>
-                    </DigitalClock>
-                </Compare>
-            </Condition>
-        </Group>
-
-        <!-- Sparkline Graph (slot 4, conditional, bottom half) -->
-        <Group x="0" y="0" width="450" height="450">
-            <Condition>
-                <Expressions>
-                    <Expression name="show_graph_val"><![CDATA[[CONFIGURATION.show_graph] == true]]></Expression>
-                </Expressions>
-                <Compare expression="show_graph_val">
-                    <ComplicationSlot
-                        x="40" y="275" width="370" height="160"
-                        slotId="4"
-                        displayName="Glucose Graph"
-                        supportedTypes="SMALL_IMAGE EMPTY">
-                        <Complication type="SMALL_IMAGE">
-                            <PartImage x="0" y="0" width="370" height="160" alpha="255">
-                                <Variant mode="AMBIENT" target="alpha" value="0"/>
-                                <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
-                            </PartImage>
-                        </Complication>
-                        <DefaultProviderPolicy
-                            defaultSystemProvider="EMPTY"
-                            defaultSystemProviderType="EMPTY"/>
-                    </ComplicationSlot>
-                </Compare>
-            </Condition>
-        </Group>
-
-        <!-- AI Chat label (bottom right, subtle) -->
-        <PartText x="295" y="410" width="100" height="26" alpha="255">
+        <!-- GlycemicGPT label: hidden in ambient to reduce burn-in -->
+        <PartText x="125" y="350" width="200" height="30" alpha="255">
             <Variant mode="AMBIENT" target="alpha" value="0"/>
             <Text align="CENTER">
-                <Font family="SYNC_TO_DEVICE" size="11" weight="BOLD" slant="NORMAL"
-                    color="#663B82F6">AI Chat</Font>
+                <Font family="SYNC_TO_DEVICE" size="14" weight="BOLD"
+                    color="#663B82F6">GlycemicGPT</Font>
             </Text>
         </PartText>
-
-        <!-- Ambient only date (below time in ambient) -->
-        <DigitalClock x="0" y="275" width="450" height="25">
-            <TimeText format="EEE, MMM d" hourFormat="SYNC_TO_DEVICE" align="CENTER"
-                x="0" y="0" width="450" height="22" alpha="0">
-                <Variant mode="AMBIENT" target="alpha" value="255"/>
-                <Font family="SYNC_TO_DEVICE" size="14" weight="THIN" slant="NORMAL"
-                    color="#66ffffff"/>
-            </TimeText>
-        </DigitalClock>
 
     </Scene>
 

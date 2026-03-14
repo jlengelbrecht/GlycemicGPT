@@ -10,11 +10,11 @@
         android:label="GlycemicGPT Watch Face">
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="true" />
+            android:value="false" />
 
         <property
             android:name="com.google.wear.watchface.format.version"
-            android:value="1" />
+            android:value="2" />
     </application>
 
 </manifest>

@@ -6,6 +6,7 @@ import android.os.ParcelFileDescriptor
 import androidx.annotation.RequiresApi
 import androidx.wear.watchface.push.WatchFacePushManager
 import com.google.android.wearable.watchface.validator.client.DwfValidatorFactory
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -115,10 +116,15 @@ class WatchFaceInstaller(private val context: Context) {
 
             if (existing != null) Result.Updated(slotId) else Result.Installed(slotId)
         } catch (e: WatchFacePushManager.AddWatchFaceException) {
+            rethrowIfCancellation(e)
             Result.Error("Install failed: ${e.message}")
         } catch (e: WatchFacePushManager.UpdateWatchFaceException) {
+            rethrowIfCancellation(e)
             Result.Error("Update failed: ${e.message}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            rethrowIfCancellation(e)
             Result.Error("Unexpected error: ${e.message}")
         }
     }
@@ -134,12 +140,11 @@ class WatchFaceInstaller(private val context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 val validator = DwfValidatorFactory.create()
-                // Strip build-type suffix so the validator sees the base applicationId.
-                // context.packageName includes the suffix (e.g., ".debug") in non-release
-                // builds, which can cause token mismatch during install.
-                val appPackageName = context.packageName
-                    .replace(Regex("\\.(debug|staging|beta)$"), "")
-                val result = validator.validate(apkFile, appPackageName)
+                // Use the actual package name (including .debug suffix for debug builds).
+                // The Watch Face Push API requires the watch face package to start with
+                // the client's actual package name, so both the validator and the Push API
+                // must see the same (unsanitized) package name.
+                val result = validator.validate(apkFile, context.packageName)
                 val failures = result.failures()
                 if (failures.isEmpty()) {
                     val token = result.validationToken()
@@ -192,6 +197,15 @@ class WatchFaceInstaller(private val context: Context) {
         } catch (e: WatchFacePushManager.RemoveWatchFaceException) {
             Timber.w(e, "Failed to remove watch face")
             false
+        }
+    }
+
+    /** Rethrow if the exception's cause chain contains a [CancellationException]. */
+    private fun rethrowIfCancellation(e: Throwable) {
+        var cause: Throwable? = e.cause
+        while (cause != null) {
+            if (cause is CancellationException) throw cause
+            cause = cause.cause
         }
     }
 
