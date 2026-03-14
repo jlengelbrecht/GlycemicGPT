@@ -3,7 +3,7 @@
   GlycemicGPT Watch Face Format (WFF v2)
 
   Minimal version for Watch Face Push API validation testing.
-  Displays time, date, and BG complication.
+  Displays time and GlycemicGPT branding label.
 -->
 <WatchFace clipShape="CIRCLE" width="450" height="450">
 

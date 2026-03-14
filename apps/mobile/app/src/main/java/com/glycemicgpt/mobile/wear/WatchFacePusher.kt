@@ -54,7 +54,7 @@ class WatchFacePusher @Inject constructor(
          * Generate with: sha256sum apps/mobile/app/src/main/assets/glycemicgpt-watchface.apk
          */
         internal const val WATCHFACE_SHA256 =
-            "28c3f12d5a6c1dde6326201adbbe9beff466ce965c5545341eb612f731e7ece5"
+            "55eeaf636820a9667e3a3a7b8d042338cecb4cdabdba56adef3d1df9d0ea87f7"
     }
 
     /**
