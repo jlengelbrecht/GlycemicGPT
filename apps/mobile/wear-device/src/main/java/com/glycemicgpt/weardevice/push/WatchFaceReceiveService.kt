@@ -1,5 +1,9 @@
 package com.glycemicgpt.weardevice.push
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.pm.ServiceInfo
 import com.glycemicgpt.weardevice.data.WearDataContract
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.Wearable
@@ -8,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -20,6 +25,7 @@ import timber.log.Timber
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Receives watch face APK bytes from the phone app via ChannelClient
@@ -41,19 +47,72 @@ class WatchFaceReceiveService : WearableListenerService() {
         private const val RECEIVE_TIMEOUT_MS = 120_000L
         /** APK magic bytes (PK zip header) */
         private val APK_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
+        private const val NOTIFICATION_CHANNEL_ID = "watchface_push"
+        private const val FOREGROUND_ID = 9001
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val installMutex = Mutex()
+    private val activePushCount = AtomicInteger(0)
+    private val foregroundLock = Any()
 
     override fun onChannelOpened(channel: ChannelClient.Channel) {
         if (channel.path != WearDataContract.WATCHFACE_PUSH_CHANNEL) return
 
         Timber.d("Watch face push channel opened from phone")
-        scope.launch {
-            installMutex.withLock {
-                receiveAndInstallWatchFace(channel)
+        synchronized(foregroundLock) {
+            if (activePushCount.getAndIncrement() == 0) {
+                tryPromoteToForeground()
             }
+        }
+        scope.launch {
+            try {
+                installMutex.withLock {
+                    receiveAndInstallWatchFace(channel)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Catches setup failures (e.g. createTempFile on full disk)
+                // that occur before receiveAndInstallWatchFace's internal try/finally.
+                Timber.e(e, "Watch face push failed before transfer started")
+                sendStatus("error", error = e.message ?: "Setup failed")
+                try {
+                    Wearable.getChannelClient(this@WatchFaceReceiveService)
+                        .close(channel).await()
+                } catch (ce: Exception) {
+                    Timber.w(ce, "Failed to close channel after setup failure")
+                }
+            } finally {
+                synchronized(foregroundLock) {
+                    if (activePushCount.decrementAndGet() == 0) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun tryPromoteToForeground() {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            if (nm.getNotificationChannel(NOTIFICATION_CHANNEL_ID) == null) {
+                nm.createNotificationChannel(
+                    NotificationChannel(
+                        NOTIFICATION_CHANNEL_ID,
+                        "Watch Face Install",
+                        NotificationManager.IMPORTANCE_LOW,
+                    ),
+                )
+            }
+            val notification = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("Installing watch face")
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setOngoing(true)
+                .build()
+            startForeground(FOREGROUND_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to promote to foreground, continuing without protection")
         }
     }
 
@@ -123,6 +182,8 @@ class WatchFaceReceiveService : WearableListenerService() {
                     sendStatus("error", error = result.message)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "Failed to receive/install watch face")
             sendStatus("error", error = e.message ?: "Unknown error")
