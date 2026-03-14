@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -69,6 +70,8 @@ class WatchFaceReceiveService : WearableListenerService() {
                 installMutex.withLock {
                     receiveAndInstallWatchFace(channel)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Catches setup failures (e.g. createTempFile on full disk)
                 // that occur before receiveAndInstallWatchFace's internal try/finally.
@@ -179,6 +182,8 @@ class WatchFaceReceiveService : WearableListenerService() {
                     sendStatus("error", error = result.message)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Timber.e(e, "Failed to receive/install watch face")
             sendStatus("error", error = e.message ?: "Unknown error")
