@@ -171,6 +171,7 @@ data class SettingsUiState(
 private const val AUTO_DISMISS_MS = 5_000L
 private const val PUSH_TIMEOUT_MS = 150_000L
 private const val TELEMETRY_TIMEOUT_MS = 10_000L
+private const val WATCH_DISCOVERY_TIMEOUT_MS = 5_000L
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -568,7 +569,7 @@ class SettingsViewModel @Inject constructor(
 
                 // Try CapabilityClient first (capability-advertised nodes)
                 try {
-                    val capInfo = withTimeout(5_000L) {
+                    val capInfo = withTimeout(WATCH_DISCOVERY_TIMEOUT_MS) {
                         Wearable.getCapabilityClient(appContext)
                             .getCapability(
                                 WearDataContract.WATCH_APP_CAPABILITY,
@@ -580,25 +581,24 @@ class SettingsViewModel @Inject constructor(
                     anyNode = nearbyNode ?: capInfo.nodes.firstOrNull()
                     appInstalled = capInfo.nodes.isNotEmpty()
                     Timber.d("CapabilityClient: %d nodes, nearby=%s", capInfo.nodes.size, nearbyNode?.displayName)
-                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                } catch (e: TimeoutCancellationException) {
                     Timber.w("CapabilityClient timed out")
                 } catch (e: Exception) {
                     Timber.w(e, "CapabilityClient lookup failed")
                 }
 
-                // Fallback to NodeClient if no capability nodes found
+                // Fallback to NodeClient if no capability nodes found.
+                // NodeClient returns ALL connected watches, not just ones with our app,
+                // so we only use it for device name/connectivity -- NOT appInstalled.
                 if (anyNode == null) {
                     try {
-                        val nodes = withTimeout(5_000L) {
+                        val nodes = withTimeout(WATCH_DISCOVERY_TIMEOUT_MS) {
                             Wearable.getNodeClient(appContext).connectedNodes.await()
                         }
                         Timber.d("NodeClient fallback: %d connected nodes", nodes.size)
                         nearbyNode = nodes.firstOrNull { it.isNearby }
                         anyNode = nearbyNode ?: nodes.firstOrNull()
-                        if (anyNode != null) {
-                            appInstalled = true
-                        }
-                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    } catch (e: TimeoutCancellationException) {
                         Timber.w("NodeClient timed out")
                     } catch (e: Exception) {
                         Timber.w(e, "NodeClient fallback failed")
@@ -618,6 +618,8 @@ class SettingsViewModel @Inject constructor(
                 if (nearbyNode != null) {
                     syncWatchFaceConfig(_uiState.value.watchFaceConfig)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.w(e, "Failed to check watch status")
                 _uiState.value = _uiState.value.copy(

@@ -29,8 +29,12 @@ class WatchFaceInstaller(private val context: Context) {
 
     companion object {
         private const val WEAR_OS_6_API = 36
-        /** Base package name for the GlycemicGPT watch face (without build-type suffix). */
-        private const val WATCHFACE_PACKAGE_PREFIX = "com.glycemicgpt.mobile.watchfacepush"
+        /**
+         * Marker substring present in all GlycemicGPT watch face package names.
+         * Debug: com.glycemicgpt.mobile.debug.watchfacepush.glycemicgpt
+         * Release: com.glycemicgpt.mobile.watchfacepush.glycemicgpt
+         */
+        private const val WATCHFACE_PACKAGE_MARKER = ".watchfacepush."
 
         fun isSupported(): Boolean = Build.VERSION.SDK_INT >= WEAR_OS_6_API
     }
@@ -91,17 +95,39 @@ class WatchFaceInstaller(private val context: Context) {
             val token = generateValidationToken(apkFile)
                 ?: return Result.Error("Watch face APK failed validation")
 
-            val pfd = ParcelFileDescriptor.open(apkFile, ParcelFileDescriptor.MODE_READ_ONLY)
-            val details = try {
-                if (existing != null) {
-                    Timber.d("Updating existing watch face in slot: %s", existing.slotId)
+            val details = if (existing != null) {
+                Timber.d("Updating existing watch face in slot: %s", existing.slotId)
+                val pfd = ParcelFileDescriptor.open(apkFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                try {
                     pushManager.updateWatchFace(existing.slotId, pfd, token)
-                } else {
-                    Timber.d("Installing new watch face")
-                    pushManager.addWatchFace(pfd, token)
+                } finally {
+                    pfd.close()
                 }
-            } finally {
-                pfd.close()
+            } else {
+                Timber.d("Installing new watch face")
+                try {
+                    val pfd = ParcelFileDescriptor.open(apkFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                    try {
+                        pushManager.addWatchFace(pfd, token)
+                    } finally {
+                        pfd.close()
+                    }
+                } catch (e: WatchFacePushManager.AddWatchFaceException) {
+                    rethrowIfCancellation(e)
+                    // Slot limit reached: remove all our old faces and retry once
+                    if (e.message?.contains("limit", ignoreCase = true) == true) {
+                        Timber.w("Slot limit reached, removing old faces and retrying")
+                        removeAllOurFaces(pushManager)
+                        val pfd = ParcelFileDescriptor.open(apkFile, ParcelFileDescriptor.MODE_READ_ONLY)
+                        try {
+                            pushManager.addWatchFace(pfd, token)
+                        } finally {
+                            pfd.close()
+                        }
+                    } else {
+                        throw e
+                    }
+                }
             }
 
             val slotId = details.slotId
@@ -210,9 +236,30 @@ class WatchFaceInstaller(private val context: Context) {
     }
 
     /**
-     * Find an existing GlycemicGPT watch face by matching [packageName] prefix.
-     * The list order from [WatchFacePushManager.listWatchFaces] is not guaranteed stable,
-     * so we match by package name rather than taking the first entry.
+     * Remove all GlycemicGPT watch faces to free up slots when the limit is reached.
+     */
+    @RequiresApi(WEAR_OS_6_API)
+    private suspend fun removeAllOurFaces(pushManager: WatchFacePushManager) {
+        try {
+            val response = pushManager.listWatchFaces()
+            response.installedWatchFaceDetails
+                .filter { it.packageName.contains(WATCHFACE_PACKAGE_MARKER) }
+                .forEach { details ->
+                    try {
+                        pushManager.removeWatchFace(details.slotId)
+                        Timber.d("Removed old watch face: slot=%s package=%s", details.slotId, details.packageName)
+                    } catch (e: WatchFacePushManager.RemoveWatchFaceException) {
+                        Timber.w(e, "Failed to remove watch face slot %s", details.slotId)
+                    }
+                }
+        } catch (e: WatchFacePushManager.ListWatchFacesException) {
+            Timber.w(e, "Failed to list watch faces for cleanup")
+        }
+    }
+
+    /**
+     * Find an existing GlycemicGPT watch face by matching the [WATCHFACE_PACKAGE_MARKER]
+     * substring in the package name. This matches both debug and release variants.
      */
     @RequiresApi(WEAR_OS_6_API)
     private suspend fun findExistingFace(
@@ -220,8 +267,12 @@ class WatchFaceInstaller(private val context: Context) {
     ): WatchFacePushManager.WatchFaceDetails? {
         return try {
             val response = pushManager.listWatchFaces()
-            response.installedWatchFaceDetails.firstOrNull { details ->
-                details.packageName.startsWith(WATCHFACE_PACKAGE_PREFIX)
+            val faces = response.installedWatchFaceDetails
+            faces.forEach { details ->
+                Timber.d("Installed watch face: package=%s slot=%s", details.packageName, details.slotId)
+            }
+            faces.firstOrNull { details ->
+                details.packageName.contains(WATCHFACE_PACKAGE_MARKER)
             }
         } catch (e: WatchFacePushManager.ListWatchFacesException) {
             Timber.w(e, "Failed to list watch faces, treating as fresh install")

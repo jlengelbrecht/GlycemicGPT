@@ -269,8 +269,11 @@ class WatchFaceReceiveService : WearableListenerService() {
      */
     private suspend fun sendStatus(status: String, slotId: String? = null, error: String? = null) {
         try {
-            val messageClient = Wearable.getMessageClient(this)
-            val nodeClient = Wearable.getNodeClient(this)
+            // Use applicationContext: this method may be called from NonCancellable
+            // blocks after the service scope is cancelled and onDestroy has run.
+            val ctx = applicationContext
+            val messageClient = Wearable.getMessageClient(ctx)
+            val nodeClient = Wearable.getNodeClient(ctx)
             val nodes = nodeClient.connectedNodes.await()
             val payload = buildString {
                 append("status=").appendLine(sanitize(status))

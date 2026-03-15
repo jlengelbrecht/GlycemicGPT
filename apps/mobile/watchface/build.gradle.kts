@@ -55,6 +55,8 @@ android {
         }
         release {
             isMinifyEnabled = false
+            // TODO: Add a dedicated release signing config before production distribution.
+            // Currently uses debug keystore for both variants.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -103,7 +105,11 @@ android.applicationVariants.all {
         doLast {
             val apkDir = variant.outputs.first().outputFile.parentFile
             apkDir.listFiles()?.filter { it.extension == "apk" }?.forEach { apk ->
-                // 1. Strip classes.dex and AGP build metadata
+                // 1. Strip classes.dex and AGP build metadata.
+                //    isIgnoreExitValue handles the case where entries don't exist
+                //    (zip returns exit code 11). Other failures (corruption, missing
+                //    zip binary) would still proceed, but zipalign/apksigner below
+                //    will fail hard on a broken APK.
                 exec {
                     commandLine("zip", "-d", apk.absolutePath, "classes.dex",
                         "META-INF/com/android/build/gradle/app-metadata.properties")
