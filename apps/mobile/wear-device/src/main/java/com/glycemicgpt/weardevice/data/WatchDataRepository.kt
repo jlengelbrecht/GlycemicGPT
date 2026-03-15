@@ -50,6 +50,12 @@ object WatchDataRepository {
     private val _cgm = MutableStateFlow<CgmState?>(null)
     val cgm: StateFlow<CgmState?> = _cgm.asStateFlow()
 
+    /** Circular buffer of recent CGM readings for sparkline graph (up to 6 hours at 5-min intervals). */
+    private val _cgmHistory = MutableStateFlow<List<CgmState>>(emptyList())
+    val cgmHistory: StateFlow<List<CgmState>> = _cgmHistory.asStateFlow()
+
+    private const val MAX_CGM_HISTORY = 72 // 6 hours at 5-min intervals
+
     private val _alert = MutableStateFlow<AlertState?>(null)
     val alert: StateFlow<AlertState?> = _alert.asStateFlow()
 
@@ -72,7 +78,19 @@ object WatchDataRepository {
         urgentLow: Int,
         urgentHigh: Int,
     ) {
-        _cgm.value = CgmState(mgDl, trend, timestampMs, low, high, urgentLow, urgentHigh)
+        val state = CgmState(mgDl, trend, timestampMs, low, high, urgentLow, urgentHigh)
+        _cgm.value = state
+
+        // Append to history buffer, dedup by timestamp, keep most recent MAX_CGM_HISTORY
+        val current = _cgmHistory.value.toMutableList()
+        if (current.none { it.timestampMs == timestampMs }) {
+            current.add(state)
+            if (current.size > MAX_CGM_HISTORY) {
+                _cgmHistory.value = current.drop(current.size - MAX_CGM_HISTORY)
+            } else {
+                _cgmHistory.value = current
+            }
+        }
     }
 
     fun updateAlert(type: String, bgValue: Int, timestampMs: Long, message: String) {

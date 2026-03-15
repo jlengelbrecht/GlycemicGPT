@@ -95,8 +95,28 @@
                 primaryProviderType="SHORT_TEXT"/>
         </ComplicationSlot>
 
+        <!-- Glucose Graph (slot 2): sparkline below IoB -->
+        <ComplicationSlot
+            x="25" y="200" width="400" height="90"
+            slotId="2"
+            displayName="Glucose Graph"
+            supportedTypes="SMALL_IMAGE EMPTY">
+            <BoundingOval x="0" y="0" width="400" height="90"/>
+            <Complication type="SMALL_IMAGE">
+                <PartImage x="0" y="0" width="400" height="90">
+                    <Image resource="[COMPLICATION.SMALL_IMAGE]"/>
+                </PartImage>
+            </Complication>
+            <!-- NOTE: primaryProvider uses the debug package name. See slot 0 comment. -->
+            <DefaultProviderPolicy
+                defaultSystemProvider="EMPTY"
+                defaultSystemProviderType="EMPTY"
+                primaryProvider="com.glycemicgpt.mobile.debug/com.glycemicgpt.weardevice.complications.GraphComplicationDataSource"
+                primaryProviderType="SMALL_IMAGE"/>
+        </ComplicationSlot>
+
         <!-- Time display: two TimeText elements for interactive/ambient swap -->
-        <DigitalClock x="0" y="200" width="450" height="130">
+        <DigitalClock x="0" y="295" width="450" height="100">
             <!-- Interactive mode: bold white -->
             <TimeText format="hh:mm" hourFormat="SYNC_TO_DEVICE" align="CENTER"
                 x="0" y="0" width="450" height="100" alpha="255">
@@ -114,7 +134,7 @@
         </DigitalClock>
 
         <!-- GlycemicGPT label: hidden in ambient -->
-        <PartText x="125" y="370" width="200" height="30" alpha="255">
+        <PartText x="125" y="400" width="200" height="30" alpha="255">
             <Variant mode="AMBIENT" target="alpha" value="0"/>
             <Text align="CENTER">
                 <Font family="SYNC_TO_DEVICE" size="14" weight="BOLD"
