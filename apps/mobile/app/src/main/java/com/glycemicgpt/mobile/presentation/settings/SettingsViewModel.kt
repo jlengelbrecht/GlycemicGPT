@@ -583,6 +583,8 @@ class SettingsViewModel @Inject constructor(
                     Timber.d("CapabilityClient: %d nodes, nearby=%s", capInfo.nodes.size, nearbyNode?.displayName)
                 } catch (e: TimeoutCancellationException) {
                     Timber.w("CapabilityClient timed out")
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.w(e, "CapabilityClient lookup failed")
                 }
@@ -600,6 +602,8 @@ class SettingsViewModel @Inject constructor(
                         anyNode = nearbyNode ?: nodes.firstOrNull()
                     } catch (e: TimeoutCancellationException) {
                         Timber.w("NodeClient timed out")
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         Timber.w(e, "NodeClient fallback failed")
                     }

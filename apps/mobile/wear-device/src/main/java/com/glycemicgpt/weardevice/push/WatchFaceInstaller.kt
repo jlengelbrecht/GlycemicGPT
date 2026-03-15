@@ -114,7 +114,10 @@ class WatchFaceInstaller(private val context: Context) {
                     }
                 } catch (e: WatchFacePushManager.AddWatchFaceException) {
                     rethrowIfCancellation(e)
-                    // Slot limit reached: remove all our old faces and retry once
+                    // Slot limit reached: remove all our old faces and retry once.
+                    // Note: AddWatchFaceException does not expose error codes or subtypes,
+                    // so we rely on message text matching. This is fragile but is the only
+                    // detection method available in the current Wear OS Push API.
                     if (e.message?.contains("limit", ignoreCase = true) == true) {
                         Timber.w("Slot limit reached, removing old faces and retrying")
                         removeAllOurFaces(pushManager)

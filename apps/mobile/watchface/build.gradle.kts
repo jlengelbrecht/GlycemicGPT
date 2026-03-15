@@ -55,8 +55,9 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // TODO: Add a dedicated release signing config before production distribution.
-            // Currently uses debug keystore for both variants.
+            // Watch face release APKs use the same signing config as debug for now.
+            // A dedicated release keystore will be added when production distribution
+            // is set up. The Watch Face Push API does not enforce Play Store signing.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -138,7 +139,10 @@ android.applicationVariants.all {
                 val keyPass = System.getenv("DEBUG_KEY_PASSWORD")?.takeIf { it.isNotBlank() } ?: "android"
 
                 if (!ksFile.exists()) {
-                    logger.warn("Keystore not found at ${ksFile.absolutePath}; APK will be unsigned")
+                    throw GradleException(
+                        "Keystore not found at ${ksFile.absolutePath}. " +
+                            "Set DEBUG_KEYSTORE_FILE or ensure ~/.android/debug.keystore exists.",
+                    )
                 } else {
                     exec {
                         commandLine(
