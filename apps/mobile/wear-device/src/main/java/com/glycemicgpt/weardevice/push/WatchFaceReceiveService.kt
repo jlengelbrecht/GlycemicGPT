@@ -81,7 +81,7 @@ class WatchFaceReceiveService : WearableListenerService() {
                 withContext(NonCancellable) {
                     sendStatus("error", error = e.message ?: "Setup failed")
                     try {
-                        Wearable.getChannelClient(this@WatchFaceReceiveService)
+                        Wearable.getChannelClient(applicationContext)
                             .close(channel).await()
                     } catch (ce: Exception) {
                         Timber.w(ce, "Failed to close channel after setup failure")
@@ -202,7 +202,7 @@ class WatchFaceReceiveService : WearableListenerService() {
             tempFile.delete()
             withContext(NonCancellable) {
                 try {
-                    Wearable.getChannelClient(this@WatchFaceReceiveService)
+                    Wearable.getChannelClient(applicationContext)
                         .close(channel).await()
                 } catch (e: Exception) {
                     Timber.w(e, "Failed to close channel")

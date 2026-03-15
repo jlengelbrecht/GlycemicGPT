@@ -618,8 +618,8 @@ class SettingsViewModel @Inject constructor(
                 if (appInstalled) {
                     loadWatchDataTelemetry()
                 }
-                // Push current config to watch when connected
-                if (nearbyNode != null) {
+                // Push current config to watch when connected and app is installed
+                if (nearbyNode != null && appInstalled) {
                     syncWatchFaceConfig(_uiState.value.watchFaceConfig)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
