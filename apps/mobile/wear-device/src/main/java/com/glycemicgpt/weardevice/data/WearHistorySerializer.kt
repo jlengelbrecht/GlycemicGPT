@@ -11,8 +11,15 @@ object WearHistorySerializer {
     const val BOLUS_RECORD_SIZE = 21
     const val IOB_RECORD_SIZE = 12
 
+    /** Check that data has enough bytes, using Long arithmetic to prevent Int overflow. */
+    private fun hasEnoughBytes(data: ByteArray, count: Int, recordSize: Int): Boolean {
+        if (count < 0) return false
+        val requiredBytes = count.toLong() * recordSize.toLong()
+        return requiredBytes <= data.size.toLong()
+    }
+
     fun decodeBasalHistory(data: ByteArray, count: Int): List<BasalRecord> {
-        if (data.size < count * BASAL_RECORD_SIZE) return emptyList()
+        if (!hasEnoughBytes(data, count, BASAL_RECORD_SIZE)) return emptyList()
         val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         return (0 until count).map {
             val rate = buffer.float
@@ -28,7 +35,7 @@ object WearHistorySerializer {
     }
 
     fun decodeBolusHistory(data: ByteArray, count: Int): List<BolusRecord> {
-        if (data.size < count * BOLUS_RECORD_SIZE) return emptyList()
+        if (!hasEnoughBytes(data, count, BOLUS_RECORD_SIZE)) return emptyList()
         val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         return (0 until count).map {
             val units = buffer.float
@@ -48,7 +55,7 @@ object WearHistorySerializer {
     }
 
     fun decodeIoBHistory(data: ByteArray, count: Int): List<IoBRecord> {
-        if (data.size < count * IOB_RECORD_SIZE) return emptyList()
+        if (!hasEnoughBytes(data, count, IOB_RECORD_SIZE)) return emptyList()
         val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
         return (0 until count).map {
             IoBRecord(

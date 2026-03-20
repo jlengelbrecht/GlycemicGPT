@@ -138,8 +138,17 @@ class WatchFaceReceiveService : WearableListenerService() {
         if (!WatchFacePermissionActivity.hasPermission(applicationContext)) {
             Timber.d("Requesting SET_PUSHED_WATCH_FACE_AS_ACTIVE permission before push install")
             applicationContext.startActivity(WatchFacePermissionActivity.createIntent(applicationContext))
-            // Brief delay to allow permission dialog to show and be auto-granted
-            delay(2000)
+            delay(3000)
+            if (!WatchFacePermissionActivity.hasPermission(applicationContext)) {
+                Timber.w("SET_PUSHED_WATCH_FACE_AS_ACTIVE permission not granted after prompt")
+                sendStatus("error", error = "Permission denied -- cannot activate watch face")
+                try {
+                    Wearable.getChannelClient(this).close(channel).await()
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to close channel")
+                }
+                return
+            }
         }
 
         val tempFile = File.createTempFile("watchface-push-", ".apk", cacheDir)

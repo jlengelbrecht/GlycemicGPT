@@ -86,9 +86,9 @@ class GlycemicDataListenerService : WearableListenerService() {
                         WatchDataRepository.updateBolusHistory(
                             records.filter {
                                 it.timestampMs > 0 &&
-                                    it.units >= 0f &&
-                                    it.correctionUnits >= 0f &&
-                                    it.mealUnits >= 0f
+                                    it.units in 0f..MAX_BOLUS_UNITS &&
+                                    it.correctionUnits in 0f..MAX_BOLUS_UNITS &&
+                                    it.mealUnits in 0f..MAX_BOLUS_UNITS
                             }
                                 .map {
                                     WatchDataRepository.BolusHistoryRecord(
@@ -260,6 +260,8 @@ class GlycemicDataListenerService : WearableListenerService() {
     private companion object {
         const val MAX_ERROR_LENGTH = 200
         const val MAX_HISTORY_RECORDS = 500
+        /** Hard cap per Tandem pump safety limits (max single bolus 25U). */
+        const val MAX_BOLUS_UNITS = 25f
     }
 
     private fun requestComplicationUpdate(dataSourceClass: Class<*>) {
