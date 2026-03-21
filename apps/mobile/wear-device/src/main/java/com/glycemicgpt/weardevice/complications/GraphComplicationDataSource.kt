@@ -1,5 +1,7 @@
 package com.glycemicgpt.weardevice.complications
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -14,9 +16,21 @@ import android.graphics.drawable.Icon
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.glycemicgpt.weardevice.data.WatchDataRepository
+import com.glycemicgpt.weardevice.presentation.ChatActivity
 import com.glycemicgpt.weardevice.util.GlucoseDisplayUtils
 
 class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
+
+    private val tapPendingIntent by lazy {
+        val intent = Intent(this, ChatActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(EXTRA_SOURCE, SOURCE_GRAPH)
+        }
+        PendingIntent.getActivity(
+            this, REQUEST_CODE_GRAPH, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
 
     companion object {
         private const val IMG_WIDTH = 400
@@ -25,6 +39,9 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
         private const val LINE_WIDTH = 3f
         private const val RANGE_LINE_WIDTH = 1f
         private const val MIN_READINGS = 3
+        const val EXTRA_SOURCE = "complication_source"
+        const val SOURCE_GRAPH = "graph"
+        private const val REQUEST_CODE_GRAPH = 2
     }
 
     override fun getPreviewData(type: ComplicationType): ComplicationData {
@@ -63,7 +80,7 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
             contentDescription = PlainComplicationText.Builder(
                 "Glucose trend: ${readings.size} readings over ${config.graphRangeHours}h"
             ).build(),
-        ).build()
+        ).setTapAction(tapPendingIntent).build()
     }
 
     private fun renderGraph(

@@ -1,5 +1,7 @@
 package com.glycemicgpt.weardevice.complications
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.LongTextComplicationData
@@ -9,8 +11,26 @@ import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.glycemicgpt.weardevice.data.WatchDataRepository
+import com.glycemicgpt.weardevice.presentation.ChatActivity
 
 class IoBComplicationDataSource : SuspendingComplicationDataSourceService() {
+
+    private val tapPendingIntent by lazy {
+        val intent = Intent(this, ChatActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(EXTRA_SOURCE, SOURCE_IOB)
+        }
+        PendingIntent.getActivity(
+            this, REQUEST_CODE_IOB, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    companion object {
+        const val EXTRA_SOURCE = "complication_source"
+        const val SOURCE_IOB = "iob"
+        private const val REQUEST_CODE_IOB = 1
+    }
 
     override fun getPreviewData(type: ComplicationType): ComplicationData {
         val text = PlainComplicationText.Builder("2.45").build()
@@ -45,10 +65,12 @@ class IoBComplicationDataSource : SuspendingComplicationDataSourceService() {
         val title = PlainComplicationText.Builder("IoB").build()
         val description = PlainComplicationText.Builder(descriptionText).build()
 
+        val tap = tapPendingIntent
         return when (request.complicationType) {
             ComplicationType.SHORT_TEXT ->
                 ShortTextComplicationData.Builder(text = text, contentDescription = description)
                     .setTitle(title)
+                    .setTapAction(tap)
                     .build()
             ComplicationType.LONG_TEXT ->
                 LongTextComplicationData.Builder(
@@ -56,6 +78,7 @@ class IoBComplicationDataSource : SuspendingComplicationDataSourceService() {
                     contentDescription = description,
                 )
                     .setTitle(title)
+                    .setTapAction(tap)
                     .build()
             else -> NoDataComplicationData()
         }

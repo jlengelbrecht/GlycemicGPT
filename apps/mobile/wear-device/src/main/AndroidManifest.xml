@@ -50,13 +50,13 @@
             </intent-filter>
         </service>
 
-        <!-- Alert dismiss activity (launched via explicit intent from within the app) -->
+        <!-- Alert dismiss activity (launched via complication tap PendingIntent or explicit intent) -->
         <activity
             android:name=".presentation.AlertsActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
-        <!-- AI chat activity (launched via explicit intent from within the app) -->
+        <!-- AI chat activity (launched via complication tap PendingIntent or explicit intent) -->
         <activity
             android:name=".presentation.ChatActivity"
             android:exported="false"

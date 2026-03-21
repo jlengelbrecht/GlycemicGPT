@@ -1,5 +1,7 @@
 package com.glycemicgpt.weardevice.complications
 
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
 import androidx.wear.watchface.complications.data.LongTextComplicationData
@@ -9,9 +11,27 @@ import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.glycemicgpt.weardevice.data.WatchDataRepository
+import com.glycemicgpt.weardevice.presentation.AlertsActivity
 import com.glycemicgpt.weardevice.util.GlucoseDisplayUtils
 
 class BgComplicationDataSource : SuspendingComplicationDataSourceService() {
+
+    private val tapPendingIntent by lazy {
+        val intent = Intent(this, AlertsActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(EXTRA_SOURCE, SOURCE_BG)
+        }
+        PendingIntent.getActivity(
+            this, REQUEST_CODE_BG, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    companion object {
+        const val EXTRA_SOURCE = "complication_source"
+        const val SOURCE_BG = "bg"
+        private const val REQUEST_CODE_BG = 0
+    }
 
     override fun getPreviewData(type: ComplicationType): ComplicationData {
         val text = PlainComplicationText.Builder("120 \u2192").build()
@@ -51,10 +71,12 @@ class BgComplicationDataSource : SuspendingComplicationDataSourceService() {
         val title = PlainComplicationText.Builder("BG").build()
         val description = PlainComplicationText.Builder(descriptionText).build()
 
+        val tap = tapPendingIntent
         return when (request.complicationType) {
             ComplicationType.SHORT_TEXT ->
                 ShortTextComplicationData.Builder(text = text, contentDescription = description)
                     .setTitle(title)
+                    .setTapAction(tap)
                     .build()
             ComplicationType.LONG_TEXT ->
                 LongTextComplicationData.Builder(
@@ -64,6 +86,7 @@ class BgComplicationDataSource : SuspendingComplicationDataSourceService() {
                     contentDescription = description,
                 )
                     .setTitle(title)
+                    .setTapAction(tap)
                     .build()
             else -> NoDataComplicationData()
         }
