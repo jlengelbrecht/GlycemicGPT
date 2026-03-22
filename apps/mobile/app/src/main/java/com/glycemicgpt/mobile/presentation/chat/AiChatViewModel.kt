@@ -20,6 +20,24 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
+data class TtsVoiceOption(
+    val name: String,
+    val locale: Locale,
+    val isDefault: Boolean,
+) {
+    val displayName: String
+        get() {
+            val parts = name.split("-", "#")
+            val gender = when {
+                parts.any { it.contains("female", ignoreCase = true) } -> "Female"
+                parts.any { it.contains("male", ignoreCase = true) } -> "Male"
+                else -> null
+            }
+            val label = "${locale.displayLanguage} (${locale.displayCountry})"
+            return if (gender != null) "$label - $gender" else label
+        }
+}
+
 enum class MessageRole { USER, ASSISTANT }
 
 data class ChatMessage(
@@ -62,12 +80,19 @@ class AiChatViewModel @Inject constructor(
     private val _ttsEnabled = MutableStateFlow(false)
     val ttsEnabled: StateFlow<Boolean> = _ttsEnabled.asStateFlow()
 
+    private val _availableVoices = MutableStateFlow<List<TtsVoiceOption>>(emptyList())
+    val availableVoices: StateFlow<List<TtsVoiceOption>> = _availableVoices.asStateFlow()
+
+    private val _selectedVoiceName = MutableStateFlow<String?>(null)
+    val selectedVoiceName: StateFlow<String?> = _selectedVoiceName.asStateFlow()
+
     private var tts: TextToSpeech? = null
     private var ttsReady = false
 
     init {
         checkProvider()
         _ttsEnabled.value = appSettingsStore.aiTtsEnabled
+        _selectedVoiceName.value = appSettingsStore.aiTtsVoice
     }
 
     fun initTts(context: Context) {
@@ -76,6 +101,8 @@ class AiChatViewModel @Inject constructor(
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.getDefault()
                 ttsReady = true
+                loadAvailableVoices()
+                applySelectedVoice()
                 Timber.d("TTS engine initialized")
             } else {
                 Timber.w("TTS init failed with status %d", status)
@@ -84,10 +111,45 @@ class AiChatViewModel @Inject constructor(
         }
     }
 
+    private fun loadAvailableVoices() {
+        val engine = tts ?: return
+        val deviceLocale = Locale.getDefault()
+        val voices = engine.voices
+            ?.filter { it.locale.language == deviceLocale.language && !it.isNetworkConnectionRequired }
+            ?.sortedBy { it.name }
+            ?.map { TtsVoiceOption(name = it.name, locale = it.locale, isDefault = it.name == engine.defaultVoice?.name) }
+            ?: emptyList()
+        _availableVoices.value = voices
+    }
+
+    private fun applySelectedVoice() {
+        val engine = tts ?: return
+        val voiceName = appSettingsStore.aiTtsVoice
+        if (voiceName.isNotEmpty()) {
+            val voice = engine.voices?.find { it.name == voiceName }
+            if (voice != null) {
+                engine.voice = voice
+                return
+            }
+        }
+        // Fall back to default voice
+        engine.language = Locale.getDefault()
+    }
+
+    fun selectVoice(voiceName: String) {
+        appSettingsStore.aiTtsVoice = voiceName
+        _selectedVoiceName.value = voiceName
+        applySelectedVoice()
+    }
+
     fun toggleTts() {
         val newValue = !appSettingsStore.aiTtsEnabled
         appSettingsStore.aiTtsEnabled = newValue
         _ttsEnabled.value = newValue
+    }
+
+    fun stopSpeaking() {
+        tts?.stop()
     }
 
     private fun speakText(text: String) {
@@ -199,24 +261,46 @@ class AiChatViewModel @Inject constructor(
 }
 
 /**
- * Strip common Markdown formatting for TTS readability.
+ * Pre-compiled patterns to strip Markdown for natural TTS readability.
  */
-private val MD_BOLD = Regex("""\*\*(.+?)\*\*""")
-private val MD_ITALIC = Regex("""\*(.+?)\*""")
-private val MD_HEADING = Regex("""^#{1,6}\s+""", RegexOption.MULTILINE)
-private val MD_BULLET = Regex("""^[-*]\s+""", RegexOption.MULTILINE)
-private val MD_NUMBERED = Regex("""^\d+\.\s+""", RegexOption.MULTILINE)
-private val MD_LINK = Regex("""\[(.+?)]\(.+?\)""")
-private val MD_INLINE_CODE = Regex("""`(.+?)`""")
+private object TtsMarkdownPatterns {
+    val FENCED_CODE = Regex("""```[\s\S]*?```""")
+    val HORIZONTAL_RULE = Regex("""^[-*_]{3,}\s*$""", RegexOption.MULTILINE)
+    val HEADING = Regex("""^#{1,6}\s+""", RegexOption.MULTILINE)
+    val BOLD_ITALIC_STAR = Regex("""\*{3}(.+?)\*{3}""")
+    val BOLD_ITALIC_UNDER = Regex("""_{3}(.+?)_{3}""")
+    val BOLD_STAR = Regex("""\*{2}(.+?)\*{2}""")
+    val BOLD_UNDER = Regex("""_{2}(.+?)_{2}""")
+    val ITALIC_STAR = Regex("""\*(.+?)\*""")
+    val TABLE_SEPARATOR = Regex("""^\|[-:| ]+\|\s*$""", RegexOption.MULTILINE)
+    val TABLE_ROW = Regex("""^\|(.+)\|\s*$""", RegexOption.MULTILINE)
+    val BULLET = Regex("""^[-*+]\s+""", RegexOption.MULTILINE)
+    val NUMBERED = Regex("""^\d+\.\s+""", RegexOption.MULTILINE)
+    val LINK = Regex("""\[(.+?)]\(.+?\)""")
+    val IMAGE = Regex("""!\[[^\]]*]\([^)]*\)""")
+    val INLINE_CODE = Regex("""`([^`]+)`""")
+    val BLANK_LINES = Regex("""\n{3,}""")
+}
 
 private fun stripMarkdownForTts(text: String): String {
-    var result = text
-    result = MD_BOLD.replace(result, "$1")
-    result = MD_ITALIC.replace(result, "$1")
-    result = MD_HEADING.replace(result, "")
-    result = MD_BULLET.replace(result, "")
-    result = MD_NUMBERED.replace(result, "")
-    result = MD_LINK.replace(result, "$1")
-    result = MD_INLINE_CODE.replace(result, "$1")
-    return result.trim()
+    return text
+        .replace(TtsMarkdownPatterns.FENCED_CODE, "")
+        .replace(TtsMarkdownPatterns.HORIZONTAL_RULE, "")
+        .replace(TtsMarkdownPatterns.HEADING, "")
+        .replace(TtsMarkdownPatterns.BOLD_ITALIC_STAR, "$1")
+        .replace(TtsMarkdownPatterns.BOLD_ITALIC_UNDER, "$1")
+        .replace(TtsMarkdownPatterns.BOLD_STAR, "$1")
+        .replace(TtsMarkdownPatterns.BOLD_UNDER, "$1")
+        .replace(TtsMarkdownPatterns.ITALIC_STAR, "$1")
+        .replace(TtsMarkdownPatterns.TABLE_SEPARATOR, "")
+        .replace(TtsMarkdownPatterns.TABLE_ROW) { match ->
+            match.groupValues[1].split("|").joinToString(", ") { it.trim() }
+        }
+        .replace(TtsMarkdownPatterns.IMAGE, "")
+        .replace(TtsMarkdownPatterns.BULLET, "")
+        .replace(TtsMarkdownPatterns.NUMBERED, "")
+        .replace(TtsMarkdownPatterns.LINK, "$1")
+        .replace(TtsMarkdownPatterns.INLINE_CODE, "$1")
+        .replace(TtsMarkdownPatterns.BLANK_LINES, "\n")
+        .trim()
 }

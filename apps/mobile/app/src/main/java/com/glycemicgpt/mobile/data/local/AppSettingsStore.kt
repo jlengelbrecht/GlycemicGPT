@@ -179,6 +179,11 @@ class AppSettingsStore @Inject constructor(
         get() = prefs.getBoolean(KEY_AI_TTS_ENABLED, false)
         set(value) { prefs.edit().putBoolean(KEY_AI_TTS_ENABLED, value).apply() }
 
+    /** Selected TTS voice name (empty = system default). */
+    var aiTtsVoice: String
+        get() = prefs.getString(KEY_AI_TTS_VOICE, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_AI_TTS_VOICE, value).apply() }
+
     fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
     }
@@ -212,5 +217,6 @@ class AppSettingsStore @Inject constructor(
         private const val KEY_WATCHFACE_SHOW_IOB_OVERLAY = "watchface_show_iob_overlay"
         private const val KEY_WATCHFACE_SHOW_MODES = "watchface_show_modes"
         private const val KEY_AI_TTS_ENABLED = "ai_tts_enabled"
+        private const val KEY_AI_TTS_VOICE = "ai_tts_voice"
     }
 }
