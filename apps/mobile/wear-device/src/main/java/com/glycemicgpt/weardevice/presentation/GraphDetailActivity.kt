@@ -32,7 +32,9 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import com.glycemicgpt.weardevice.complications.WatchGraphRenderer
 import com.glycemicgpt.weardevice.data.WatchDataRepository
-import com.glycemicgpt.weardevice.util.GlucoseDisplayUtils
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class GraphDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +60,9 @@ private fun GraphDetailScreen() {
     val iobHistory by WatchDataRepository.iobHistory.collectAsState()
 
     val rangeMs = config.graphRangeHours * 3_600_000L
-    val cutoff = System.currentTimeMillis() - rangeMs
+    val cutoff = remember(cgmHistory, config.graphRangeHours) {
+        System.currentTimeMillis() - rangeMs
+    }
     val readings = remember(cgmHistory, cutoff) {
         cgmHistory.filter { it.timestampMs >= cutoff }.sortedBy { it.timestampMs }
     }
@@ -192,11 +196,12 @@ private fun DrawScope.drawTooltip(tooltip: TooltipData) {
 
     val textWidth = textPaint.measureText(tooltip.text)
     val padding = 8f
-    val bubbleWidth = textWidth + padding * 2
+    val bubbleWidth = minOf(textWidth + padding * 2, size.width)
     val bubbleHeight = 32f
 
     // Position above the dot, clamp to canvas bounds
-    val bubbleX = (tooltip.x - bubbleWidth / 2f).coerceIn(0f, size.width - bubbleWidth)
+    val maxLeft = (size.width - bubbleWidth).coerceAtLeast(0f)
+    val bubbleX = (tooltip.x - bubbleWidth / 2f).coerceIn(0f, maxLeft)
     val bubbleY = (tooltip.y - bubbleHeight - 12f).coerceAtLeast(0f)
 
     val canvas = drawContext.canvas.nativeCanvas
@@ -266,10 +271,9 @@ private fun findNearestReading(
     val r = readings[nearestIdx]
     val dotX = graphLeft + ((r.timestampMs - minX) / xRange) * graphWidth
     val dotY = graphBottom - ((r.mgDl - minY) / yRange) * graphHeight
-    val ageMs = System.currentTimeMillis() - r.timestampMs
-    val ageText = GlucoseDisplayUtils.formatAge(ageMs)
+    val timeText = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(r.timestampMs))
     return TooltipData(
-        text = "${r.mgDl} mg/dL  $ageText",
+        text = "${r.mgDl} mg/dL  $timeText",
         x = dotX,
         y = dotY,
     )

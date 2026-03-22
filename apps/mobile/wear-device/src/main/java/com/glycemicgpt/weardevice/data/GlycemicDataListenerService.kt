@@ -57,9 +57,11 @@ class GlycemicDataListenerService : WearableListenerService() {
                 WearDataContract.CATEGORY_LABELS_PATH -> {
                     val json = dataMap.getString(WearDataContract.KEY_CATEGORY_LABELS_JSON, "")
                     val labels = parseCategoryLabelsJson(json)
-                    WatchDataRepository.updateCategoryLabels(labels)
-                    categoryLabelsUpdated = true
-                    Timber.d("Received category labels from phone: %d entries", labels.size)
+                    if (labels != null) {
+                        WatchDataRepository.updateCategoryLabels(labels)
+                        categoryLabelsUpdated = true
+                        Timber.d("Received category labels from phone: %d entries", labels.size)
+                    }
                 }
             }
         }
@@ -279,7 +281,7 @@ class GlycemicDataListenerService : WearableListenerService() {
         }
     }
 
-    private fun parseCategoryLabelsJson(json: String): Map<String, String> {
+    private fun parseCategoryLabelsJson(json: String): Map<String, String>? {
         if (json.isBlank()) return emptyMap()
         return try {
             val obj = JSONObject(json)
@@ -290,7 +292,7 @@ class GlycemicDataListenerService : WearableListenerService() {
             }
         } catch (e: Exception) {
             Timber.w(e, "Failed to parse category labels JSON")
-            emptyMap()
+            null
         }
     }
 

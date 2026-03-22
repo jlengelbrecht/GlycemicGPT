@@ -34,7 +34,8 @@ class AlertsComplicationDataSource : SuspendingComplicationDataSourceService() {
         }
 
         val alert = WatchDataRepository.alert.value
-        val hasActiveAlert = alert != null
+        val hasActiveAlert = alert != null &&
+            !alert.type.equals("none", ignoreCase = true)
         val isUrgent = alert?.type?.startsWith("urgent", ignoreCase = true) == true
         val tintColor = when {
             isUrgent -> COLOR_URGENT

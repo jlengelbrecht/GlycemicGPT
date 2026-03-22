@@ -144,8 +144,7 @@ class WearChatRelayService : WearableListenerService() {
             raw.contains("Unable to resolve host", ignoreCase = true) -> "No internet connection."
             raw.contains("401", ignoreCase = true) -> "Session expired. Open phone app to sign in."
             raw.contains("500", ignoreCase = true) -> "Server error. Try again later."
-            raw.length > MAX_ERROR_DISPLAY_LENGTH -> raw.take(MAX_ERROR_DISPLAY_LENGTH) + "..."
-            else -> raw
+            else -> "Something went wrong. Try again later."
         }
     }
 
@@ -173,6 +172,5 @@ class WearChatRelayService : WearableListenerService() {
     companion object {
         const val MAX_MESSAGE_LENGTH = 500
         private const val CHAT_API_TIMEOUT_MS = 90_000L
-        private const val MAX_ERROR_DISPLAY_LENGTH = 100
     }
 }

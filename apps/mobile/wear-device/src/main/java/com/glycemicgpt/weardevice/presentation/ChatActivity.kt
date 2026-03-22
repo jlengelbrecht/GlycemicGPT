@@ -110,6 +110,8 @@ private fun WearChatScreen(prefillQuery: String?) {
                 hasSent = true
                 voiceError = null
                 sendQuery(scope, context, spokenText)
+            } else {
+                voiceError = "Couldn't understand. Try again."
             }
         }
     }

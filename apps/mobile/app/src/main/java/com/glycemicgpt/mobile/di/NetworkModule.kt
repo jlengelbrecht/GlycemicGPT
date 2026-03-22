@@ -79,6 +79,7 @@ object NetworkModule {
     @Named("chat")
     fun provideChatApi(client: OkHttpClient, moshi: Moshi): GlycemicGptApi {
         val chatClient = client.newBuilder()
+            .apply { interceptors().removeAll { it is HttpLoggingInterceptor } }
             .readTimeout(90, TimeUnit.SECONDS)
             .dispatcher(Dispatcher())
             .connectionPool(ConnectionPool(2, 90, TimeUnit.SECONDS))
