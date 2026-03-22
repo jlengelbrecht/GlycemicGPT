@@ -21,6 +21,18 @@ object WearDataContract {
     const val KEY_GLUCOSE_URGENT_LOW = "glucose_urg_low"
     const val KEY_GLUCOSE_URGENT_HIGH = "glucose_urg_high"
 
+    // Bolus history path (phone -> watch via DataClient)
+    const val BOLUS_HISTORY_PATH = "/glycemicgpt/bolus_history"
+
+    // Bolus history keys (array encoded as parallel arrays)
+    const val KEY_BOLUS_UNITS = "bolus_units"
+    const val KEY_BOLUS_CORRECTION_UNITS = "bolus_corr_units"
+    const val KEY_BOLUS_MEAL_UNITS = "bolus_meal_units"
+    const val KEY_BOLUS_IS_AUTOMATED = "bolus_automated"
+    const val KEY_BOLUS_IS_CORRECTION = "bolus_correction"
+    const val KEY_BOLUS_TIMESTAMPS = "bolus_ts"
+    const val KEY_BOLUS_CATEGORIES = "bolus_categories"
+
     // Alert keys
     const val KEY_ALERT_TYPE = "alert_type"
     const val KEY_ALERT_BG_VALUE = "alert_bg"
@@ -56,6 +68,10 @@ object WearDataContract {
 
     // Watch face config sync path (phone -> watch via DataClient)
     const val CONFIG_PATH = "/glycemicgpt/watchface/config"
+
+    // Category labels path (phone -> watch via DataClient)
+    const val CATEGORY_LABELS_PATH = "/glycemicgpt/category_labels"
+    const val KEY_CATEGORY_LABELS_JSON = "cat_labels_json"
 
     // Watch face config keys
     const val KEY_CONFIG_SHOW_IOB = "cfg_show_iob"

@@ -1,8 +1,13 @@
 package com.glycemicgpt.weardevice.presentation
 
+import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -10,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -28,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.CircularProgressIndicator
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
@@ -64,6 +71,21 @@ private fun WearChatScreen(prefillQuery: String?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var hasSent by remember { mutableStateOf(false) }
+
+    // Voice/keyboard input launcher using system speech recognizer
+    val voiceLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenText = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                hasSent = true
+                sendQuery(scope, context, spokenText)
+            }
+        }
+    }
 
     // Timeout: if loading for more than 30s, show error
     LaunchedEffect(chatState) {
@@ -125,12 +147,12 @@ private fun WearChatScreen(prefillQuery: String?) {
 
                     is ChatState.Success -> {
                         Text(
-                            text = state.response,
-                            style = MaterialTheme.typography.body2,
+                            text = stripMarkdown(state.response),
+                            style = MaterialTheme.typography.caption1,
                             textAlign = TextAlign.Start,
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = state.disclaimer.ifBlank { DEFAULT_AI_DISCLAIMER },
                             style = MaterialTheme.typography.caption3,
@@ -138,6 +160,8 @@ private fun WearChatScreen(prefillQuery: String?) {
                             textAlign = TextAlign.Start,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        // Extra padding so disclaimer doesn't clip at bottom of round screen
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
 
                     is ChatState.Idle -> {
@@ -164,6 +188,40 @@ private fun WearChatScreen(prefillQuery: String?) {
                                 textAlign = TextAlign.Center,
                             )
                             Spacer(modifier = Modifier.height(8.dp))
+
+                            // Voice input button (launches system speech recognizer)
+                            Button(
+                                onClick = {
+                                    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                        putExtra(
+                                            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                                        )
+                                        putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask a question...")
+                                    }
+                                    try {
+                                        voiceLauncher.launch(intent)
+                                    } catch (e: android.content.ActivityNotFoundException) {
+                                        timber.log.Timber.w("No speech recognizer available")
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(0.9f),
+                                colors = ButtonDefaults.buttonColors(
+                                    backgroundColor = Color(0xFF3B82F6),
+                                ),
+                            ) {
+                                Text("Ask a question...", textAlign = TextAlign.Center)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = "Quick questions",
+                                style = MaterialTheme.typography.caption3,
+                                color = Color(0xFF9CA3AF),
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
 
                             for (query in QUICK_QUERIES) {
                                 Button(
@@ -218,3 +276,47 @@ private val QUICK_QUERIES = listOf(
 
 private const val CHAT_TIMEOUT_MS = 30_000L
 private const val DEFAULT_AI_DISCLAIMER = "Not medical advice. Consult your doctor."
+
+/** Pre-compiled regexes for markdown stripping (avoid recompilation per call). */
+private object MarkdownPatterns {
+    val FENCED_CODE = Regex("""```[\s\S]*?```""")
+    val HEADERS = Regex("""^#{1,6}\s+""", RegexOption.MULTILINE)
+    val BOLD_ITALIC_STAR = Regex("""\*{3}(.+?)\*{3}""")
+    val BOLD_ITALIC_UNDER = Regex("""_{3}(.+?)_{3}""")
+    val BOLD_STAR = Regex("""\*{2}(.+?)\*{2}""")
+    val BOLD_UNDER = Regex("""_{2}(.+?)_{2}""")
+    val ITALIC_STAR = Regex("""\*(.+?)\*""")
+    val ITALIC_UNDER = Regex("""(^|\s)_(.+?)_(?=\s|$)""")
+    val HORIZONTAL_RULE = Regex("""^[-*_]{3,}\s*$""", RegexOption.MULTILINE)
+    val TABLE_SEPARATOR = Regex("""^\|[-:| ]+\|\s*$""", RegexOption.MULTILINE)
+    val TABLE_ROW = Regex("""^\|(.+)\|\s*$""", RegexOption.MULTILINE)
+    val INLINE_CODE = Regex("""`([^`]+)`""")
+    val IMAGE = Regex("""!\[[^\]]*]\([^)]*\)""")
+    val LINK = Regex("""\[([^\]]+)]\([^)]*\)""")
+    val BULLET = Regex("""^[-*+]\s+""", RegexOption.MULTILINE)
+    val BLANK_LINES = Regex("""\n{3,}""")
+}
+
+/** Strips markdown syntax to produce clean readable plaintext for the watch screen. */
+private fun stripMarkdown(md: String): String {
+    return md
+        .replace(MarkdownPatterns.FENCED_CODE, "")
+        .replace(MarkdownPatterns.HEADERS, "")
+        .replace(MarkdownPatterns.BOLD_ITALIC_STAR, "$1")
+        .replace(MarkdownPatterns.BOLD_ITALIC_UNDER, "$1")
+        .replace(MarkdownPatterns.BOLD_STAR, "$1")
+        .replace(MarkdownPatterns.BOLD_UNDER, "$1")
+        .replace(MarkdownPatterns.ITALIC_STAR, "$1")
+        .replace(MarkdownPatterns.ITALIC_UNDER, "$1$2")
+        .replace(MarkdownPatterns.HORIZONTAL_RULE, "")
+        .replace(MarkdownPatterns.TABLE_SEPARATOR, "")
+        .replace(MarkdownPatterns.TABLE_ROW) { match ->
+            match.groupValues[1].split("|").joinToString("  ") { it.trim() }
+        }
+        .replace(MarkdownPatterns.INLINE_CODE, "$1")
+        .replace(MarkdownPatterns.IMAGE, "")
+        .replace(MarkdownPatterns.LINK, "$1")
+        .replace(MarkdownPatterns.BULLET, "\u2022 ")
+        .replace(MarkdownPatterns.BLANK_LINES, "\n\n")
+        .trim()
+}

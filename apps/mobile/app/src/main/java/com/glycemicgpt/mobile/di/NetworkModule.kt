@@ -10,6 +10,8 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -75,7 +77,12 @@ object NetworkModule {
     @Singleton
     @Named("chat")
     fun provideChatApi(client: OkHttpClient, moshi: Moshi): GlycemicGptApi {
+        // Fully isolated OkHttp client for chat: separate dispatcher + connection pool
+        // prevents AlertStreamService SSE reconnection from disrupting long-running
+        // chat API calls (LLM inference takes 20-60s).
         val chatClient = client.newBuilder()
+            .dispatcher(Dispatcher())
+            .connectionPool(ConnectionPool(2, 90, TimeUnit.SECONDS))
             .readTimeout(90, TimeUnit.SECONDS)
             .build()
         return Retrofit.Builder()

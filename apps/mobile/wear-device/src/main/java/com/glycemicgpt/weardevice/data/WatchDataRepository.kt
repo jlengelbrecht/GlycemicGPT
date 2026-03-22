@@ -36,6 +36,20 @@ object WatchDataRepository {
         data class Error(val message: String) : ChatState()
     }
 
+    data class BolusHistoryRecord(
+        val units: Float,
+        val correctionUnits: Float,
+        val mealUnits: Float,
+        val isAutomated: Boolean,
+        val isCorrection: Boolean,
+        val timestampMs: Long,
+        /** Resolved platform category name (e.g. "AUTO_CORRECTION", "FOOD", "CORRECTION").
+         *  When non-empty, takes priority over raw flag-based derivation. This category
+         *  is resolved on the phone side via BolusCategoryMapper using the plugin's
+         *  BolusCategoryProvider + backend custom labels. */
+        val category: String = "",
+    )
+
     data class WatchFaceConfigState(
         val showIoB: Boolean = true,
         val showGraph: Boolean = true,
@@ -57,6 +71,16 @@ object WatchDataRepository {
 
     private const val MAX_CGM_HISTORY = 72 // 6 hours at 5-min intervals
     private const val DEDUP_WINDOW_MS = 30_000L // 30-second proximity window for timestamp dedup
+    private const val MAX_BOLUS_HISTORY = 48 // 6 hours of bolus events (generous cap)
+
+    /** Bolus history for graph overlay markers. */
+    private val _bolusHistory = MutableStateFlow<List<BolusHistoryRecord>>(emptyList())
+    val bolusHistory: StateFlow<List<BolusHistoryRecord>> = _bolusHistory.asStateFlow()
+
+    /** User-customized bolus category display labels synced from phone/backend.
+     *  Keys are BolusCategory names (e.g. "AUTO_CORRECTION"), values are display strings. */
+    private val _categoryLabels = MutableStateFlow<Map<String, String>>(emptyMap())
+    val categoryLabels: StateFlow<Map<String, String>> = _categoryLabels.asStateFlow()
 
     private val _alert = MutableStateFlow<AlertState?>(null)
     val alert: StateFlow<AlertState?> = _alert.asStateFlow()
@@ -99,6 +123,32 @@ object WatchDataRepository {
                 }
             }
         }
+    }
+
+    fun updateBolusHistory(records: List<BolusHistoryRecord>) {
+        _bolusHistory.value = records
+            .sortedByDescending { it.timestampMs }
+            .take(MAX_BOLUS_HISTORY)
+    }
+
+    fun addBolusRecord(record: BolusHistoryRecord) {
+        _bolusHistory.update { current ->
+            val isDuplicate = current.any {
+                kotlin.math.abs(it.timestampMs - record.timestampMs) < DEDUP_WINDOW_MS &&
+                    kotlin.math.abs(it.units - record.units) < 0.001f
+            }
+            if (isDuplicate) {
+                current
+            } else {
+                (current + record)
+                    .sortedByDescending { it.timestampMs }
+                    .take(MAX_BOLUS_HISTORY)
+            }
+        }
+    }
+
+    fun updateCategoryLabels(labels: Map<String, String>) {
+        _categoryLabels.value = labels
     }
 
     fun updateAlert(type: String, bgValue: Int, timestampMs: Long, message: String) {

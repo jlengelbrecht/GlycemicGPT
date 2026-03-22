@@ -5,6 +5,7 @@ import android.os.PowerManager
 import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
 import com.glycemicgpt.mobile.data.local.AlertSoundStore
+import com.glycemicgpt.mobile.data.local.AnalyticsSettingsStore
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
 import com.glycemicgpt.mobile.data.local.GlucoseRangeStore
 import com.glycemicgpt.mobile.data.local.PumpCredentialStore
@@ -103,6 +104,7 @@ class SettingsViewModelTest {
     }
     private val watchFacePusher = mockk<WatchFacePusher>(relaxed = true)
     private val wearDataSender = mockk<WearDataSender>(relaxed = true)
+    private val analyticsSettingsStore = mockk<AnalyticsSettingsStore>(relaxed = true)
     private val wearAppUpdateChecker = mockk<WearAppUpdateChecker>()
     private val wearApkPusher = mockk<WearApkPusher>(relaxed = true)
 
@@ -117,7 +119,7 @@ class SettingsViewModelTest {
     }
 
     private fun createViewModel() =
-        SettingsViewModel(appContext, pumpCredentialStore, appSettingsStore, glucoseRangeStore, safetyLimitsStore, authRepository, appUpdateChecker, authManager, alertSoundStore, alertNotificationManager, pluginRegistry, watchFacePusher, wearDataSender, wearAppUpdateChecker, wearApkPusher)
+        SettingsViewModel(appContext, pumpCredentialStore, appSettingsStore, glucoseRangeStore, safetyLimitsStore, authRepository, appUpdateChecker, authManager, alertSoundStore, alertNotificationManager, pluginRegistry, watchFacePusher, wearDataSender, analyticsSettingsStore, wearAppUpdateChecker, wearApkPusher)
 
     @Test
     fun `loadState initializes from stores`() {

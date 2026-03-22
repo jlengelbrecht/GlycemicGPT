@@ -61,6 +61,41 @@ class WearDataSender @Inject constructor(
         }
     }
 
+    data class BolusRecord(
+        val units: Float,
+        val correctionUnits: Float,
+        val mealUnits: Float,
+        val isAutomated: Boolean,
+        val isCorrection: Boolean,
+        val timestampMs: Long,
+        /** Resolved platform category name (e.g. "AUTO_CORRECTION", "FOOD").
+         *  Resolved on phone side via BolusCategoryMapper before sending to watch. */
+        val category: String = "",
+    )
+
+    suspend fun sendBolusHistory(records: List<BolusRecord>) {
+        if (records.isEmpty()) return
+        try {
+            val request = PutDataMapRequest.create(WearDataContract.BOLUS_HISTORY_PATH).apply {
+                dataMap.putFloatArray(WearDataContract.KEY_BOLUS_UNITS, records.map { it.units }.toFloatArray())
+                dataMap.putFloatArray(WearDataContract.KEY_BOLUS_CORRECTION_UNITS, records.map { it.correctionUnits }.toFloatArray())
+                dataMap.putFloatArray(WearDataContract.KEY_BOLUS_MEAL_UNITS, records.map { it.mealUnits }.toFloatArray())
+                dataMap.putLongArray(WearDataContract.KEY_BOLUS_IS_AUTOMATED, records.map { if (it.isAutomated) 1L else 0L }.toLongArray())
+                dataMap.putLongArray(WearDataContract.KEY_BOLUS_IS_CORRECTION, records.map { if (it.isCorrection) 1L else 0L }.toLongArray())
+                dataMap.putLongArray(WearDataContract.KEY_BOLUS_TIMESTAMPS, records.map { it.timestampMs }.toLongArray())
+                dataMap.putStringArray(WearDataContract.KEY_BOLUS_CATEGORIES, records.map { it.category }.toTypedArray())
+                dataMap.putLong("_ts", System.currentTimeMillis())
+            }.asPutDataRequest().setUrgent()
+
+            dataClient.putDataItem(request).await()
+            Timber.d("Sent bolus history to watch: %d records", records.size)
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to send bolus history to watch (no watch connected?)")
+        }
+    }
+
     suspend fun sendAlert(type: String, bgValue: Int, timestampMs: Long, message: String) {
         try {
             val request = PutDataMapRequest.create(WearDataContract.ALERT_PATH).apply {
@@ -79,6 +114,23 @@ class WearDataSender @Inject constructor(
 
     suspend fun clearAlert() {
         sendAlert(type = "none", bgValue = 0, timestampMs = System.currentTimeMillis(), message = "")
+    }
+
+    suspend fun sendCategoryLabels(labels: Map<String, String>) {
+        try {
+            val json = org.json.JSONObject(labels).toString()
+            val request = PutDataMapRequest.create(WearDataContract.CATEGORY_LABELS_PATH).apply {
+                dataMap.putString(WearDataContract.KEY_CATEGORY_LABELS_JSON, json)
+                dataMap.putLong("_ts", System.currentTimeMillis())
+            }.asPutDataRequest().setUrgent()
+
+            dataClient.putDataItem(request).await()
+            Timber.d("Sent category labels to watch: %d labels", labels.size)
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to send category labels to watch (no watch connected?)")
+        }
     }
 
     suspend fun sendWatchFaceConfig(

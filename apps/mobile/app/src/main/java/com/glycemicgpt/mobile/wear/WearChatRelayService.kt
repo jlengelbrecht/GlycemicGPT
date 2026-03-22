@@ -12,7 +12,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import timber.log.Timber
 import javax.inject.Inject
@@ -59,35 +62,46 @@ class WearChatRelayService : WearableListenerService() {
 
         if (requestText.isEmpty()) {
             Timber.w("Empty chat request received, ignoring")
-            serviceScope.launch {
-                sendError(sourceNodeId, "Empty message")
-            }
+            runBlocking { sendError(sourceNodeId, "Empty message") }
             return
         }
 
         // Enforce max message length to prevent abuse
         if (requestText.length > MAX_MESSAGE_LENGTH) {
             Timber.w("Chat request too long (%d chars), rejecting", requestText.length)
-            serviceScope.launch {
-                sendError(sourceNodeId, "Message too long (max $MAX_MESSAGE_LENGTH chars)")
-            }
+            runBlocking { sendError(sourceNodeId, "Message too long (max $MAX_MESSAGE_LENGTH chars)") }
             return
         }
 
         // Check auth state before making API call
         if (!authTokenStore.isLoggedIn()) {
             Timber.w("Chat request received but user is not logged in")
-            serviceScope.launch {
-                sendError(sourceNodeId, "Not signed in. Open the phone app to sign in.")
-            }
+            runBlocking { sendError(sourceNodeId, "Not signed in. Open the phone app to sign in.") }
             return
         }
 
         Timber.d("Received chat request from watch (%d chars)", requestText.length)
 
-        serviceScope.launch {
-            chatRepository.sendMessage(requestText)
-                .onSuccess { chatResponse ->
+        // Block the onMessageReceived binder thread to keep the WearableListenerService
+        // alive during the long-running LLM API call (20-60s). onMessageReceived runs on
+        // a background binder thread (not main), so this won't cause ANR.
+        // Without blocking, Android destroys the service after the callback returns,
+        // killing the HTTP connection mid-flight.
+        runBlocking {
+            // Timeout covers only the API call, not the watch response delivery
+            val result = withTimeoutOrNull(CHAT_API_TIMEOUT_MS) {
+                withContext(Dispatchers.IO) {
+                    chatRepository.sendMessage(requestText)
+                }
+            }
+
+            when {
+                result == null -> {
+                    Timber.w("Chat API call timed out after %d ms", CHAT_API_TIMEOUT_MS)
+                    sendError(sourceNodeId, "AI response took too long. Please try again.")
+                }
+                result.isSuccess -> {
+                    val chatResponse = result.getOrThrow()
                     val responseJson = JSONObject().apply {
                         put("response", chatResponse.response)
                         put("disclaimer", chatResponse.disclaimer)
@@ -106,11 +120,13 @@ class WearChatRelayService : WearableListenerService() {
                         Timber.w(e, "Failed to send chat response to watch")
                     }
                 }
-                .onFailure { error ->
-                    val errorMsg = error.message ?: "Unknown error"
+                else -> {
+                    val error = result.exceptionOrNull()
+                    val errorMsg = error?.message ?: "Unknown error"
                     Timber.w(error, "Chat request failed: %s", errorMsg)
                     sendError(sourceNodeId, errorMsg)
                 }
+            }
         }
     }
 
@@ -135,5 +151,6 @@ class WearChatRelayService : WearableListenerService() {
 
     companion object {
         const val MAX_MESSAGE_LENGTH = 500
+        const val CHAT_API_TIMEOUT_MS = 90_000L
     }
 }

@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.glycemicgpt.mobile.BuildConfig
 import com.glycemicgpt.mobile.data.auth.AuthManager
 import com.glycemicgpt.mobile.data.auth.AuthState
+import com.glycemicgpt.mobile.data.local.AnalyticsSettingsStore
 import com.glycemicgpt.mobile.data.local.AlertSoundCategory
 import com.glycemicgpt.mobile.data.local.AlertSoundStore
 import com.glycemicgpt.mobile.data.local.AppSettingsStore
@@ -211,6 +212,7 @@ class SettingsViewModel @Inject constructor(
     private val pluginRegistry: PluginRegistry,
     private val watchFacePusher: WatchFacePusher,
     private val wearDataSender: WearDataSender,
+    private val analyticsSettingsStore: AnalyticsSettingsStore,
     private val wearAppUpdateChecker: WearAppUpdateChecker,
     private val wearApkPusher: WearApkPusher,
 ) : ViewModel() {
@@ -969,8 +971,21 @@ class SettingsViewModel @Inject constructor(
                     graphRangeHours = config.graphRangeHours,
                     theme = config.theme.contractKey,
                 )
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Timber.w(e, "Failed to sync watch face config")
+            }
+            // Sync category labels alongside config so watch has custom bolus labels
+            try {
+                val labels = analyticsSettingsStore.categoryLabels
+                if (labels.isNotEmpty()) {
+                    wearDataSender.sendCategoryLabels(labels)
+                }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to sync category labels to watch")
             }
         }
     }

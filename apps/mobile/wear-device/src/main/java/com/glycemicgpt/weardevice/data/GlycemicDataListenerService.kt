@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
+import com.glycemicgpt.weardevice.complications.AlertsComplicationDataSource
 import com.glycemicgpt.weardevice.complications.BgComplicationDataSource
 import com.glycemicgpt.weardevice.complications.GraphComplicationDataSource
 import com.glycemicgpt.weardevice.complications.IoBComplicationDataSource
@@ -23,27 +24,50 @@ class GlycemicDataListenerService : WearableListenerService() {
         var iobUpdated = false
         var cgmUpdated = false
         var configUpdated = false
+        var alertUpdated = false
+        var bolusUpdated = false
 
         // Two-pass processing: config events first so that data/alert events
         // see the latest showAlert / showIoB state within the same batch.
         val changedEvents = dataEvents.filter { it.type == DataEvent.TYPE_CHANGED }
 
-        // Pass 1 -- config
+        // Pass 1 -- config + category labels (processed first so data events see latest state)
         changedEvents.forEach { event ->
             val path = event.dataItem.uri.path ?: return@forEach
-            if (path != WearDataContract.CONFIG_PATH) return@forEach
             val dataMap = DataMapItem.fromDataItem(event.dataItem).dataMap
 
-            WatchDataRepository.updateWatchFaceConfig(
-                showIoB = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_IOB, true),
-                showGraph = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_GRAPH, true),
-                showAlert = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_ALERT, true),
-                showSeconds = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_SECONDS, false),
-                graphRangeHours = dataMap.getInt(WearDataContract.KEY_CONFIG_GRAPH_RANGE_HOURS, 3),
-                theme = dataMap.getString(WearDataContract.KEY_CONFIG_THEME, "dark"),
-            )
-            configUpdated = true
-            Timber.d("Received watch face config from phone")
+            when (path) {
+                WearDataContract.CONFIG_PATH -> {
+                    WatchDataRepository.updateWatchFaceConfig(
+                        showIoB = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_IOB, true),
+                        showGraph = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_GRAPH, true),
+                        showAlert = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_ALERT, true),
+                        showSeconds = dataMap.getBoolean(WearDataContract.KEY_CONFIG_SHOW_SECONDS, false),
+                        graphRangeHours = dataMap.getInt(WearDataContract.KEY_CONFIG_GRAPH_RANGE_HOURS, 3),
+                        theme = dataMap.getString(WearDataContract.KEY_CONFIG_THEME, "dark"),
+                    )
+                    configUpdated = true
+                    Timber.d("Received watch face config from phone")
+                }
+
+                WearDataContract.CATEGORY_LABELS_PATH -> {
+                    val json = dataMap.getString(WearDataContract.KEY_CATEGORY_LABELS_JSON, "")
+                    if (json.isNotEmpty()) {
+                        try {
+                            val obj = org.json.JSONObject(json)
+                            val labels = buildMap {
+                                for (key in obj.keys()) {
+                                    put(key, obj.getString(key))
+                                }
+                            }
+                            WatchDataRepository.updateCategoryLabels(labels)
+                            Timber.d("Received category labels from phone: %d labels", labels.size)
+                        } catch (e: Exception) {
+                            Timber.w(e, "Failed to parse category labels JSON")
+                        }
+                    }
+                }
+            }
         }
 
         // Pass 2 -- data and alert events
@@ -97,10 +121,58 @@ class GlycemicDataListenerService : WearableListenerService() {
                         timestampMs = dataMap.getLong(WearDataContract.KEY_ALERT_TIMESTAMP),
                         message = dataMap.getString(WearDataContract.KEY_ALERT_MESSAGE, ""),
                     )
+                    alertUpdated = true
                     if (alertType != "none" && alertsEnabled) {
                         vibrateForAlert(alertType)
                     }
                     Timber.d("Received alert from phone: %s (vibrate=%b)", alertType, alertsEnabled)
+                }
+
+                WearDataContract.BOLUS_HISTORY_PATH -> {
+                    val units = dataMap.getFloatArray(WearDataContract.KEY_BOLUS_UNITS)
+                    val corrUnits = dataMap.getFloatArray(WearDataContract.KEY_BOLUS_CORRECTION_UNITS)
+                    val mealUnits = dataMap.getFloatArray(WearDataContract.KEY_BOLUS_MEAL_UNITS)
+                    val automated = dataMap.getLongArray(WearDataContract.KEY_BOLUS_IS_AUTOMATED)
+                    val correction = dataMap.getLongArray(WearDataContract.KEY_BOLUS_IS_CORRECTION)
+                    val timestamps = dataMap.getLongArray(WearDataContract.KEY_BOLUS_TIMESTAMPS)
+                    val categories = dataMap.getStringArray(WearDataContract.KEY_BOLUS_CATEGORIES)
+
+                    if (units != null && timestamps != null && units.size == timestamps.size) {
+                        val expectedSize = units.size
+                        if (corrUnits != null && corrUnits.size != expectedSize ||
+                            mealUnits != null && mealUnits.size != expectedSize
+                        ) {
+                            Timber.w("Bolus sub-arrays have mismatched lengths: units=%d corr=%d meal=%d",
+                                expectedSize, corrUnits?.size ?: 0, mealUnits?.size ?: 0)
+                        }
+                        val records = units.indices.mapNotNull { i ->
+                            val u = units[i]
+                            // Validate: finite, non-negative, within safety max (25U max bolus)
+                            if (!u.isFinite() || u < 0f || u > 25f) {
+                                Timber.w("Rejected invalid bolus units: %f", u)
+                                return@mapNotNull null
+                            }
+                            val rawCorr = corrUnits?.getOrNull(i) ?: 0f
+                            val rawMeal = mealUnits?.getOrNull(i) ?: 0f
+                            if (rawCorr !in 0f..25f || rawMeal !in 0f..25f) {
+                                Timber.w("Clamping out-of-range bolus sub-units: corr=%f meal=%f", rawCorr, rawMeal)
+                            }
+                            WatchDataRepository.BolusHistoryRecord(
+                                units = u,
+                                correctionUnits = rawCorr.coerceIn(0f, 25f),
+                                mealUnits = rawMeal.coerceIn(0f, 25f),
+                                isAutomated = (automated?.getOrNull(i) ?: 0L) != 0L,
+                                isCorrection = (correction?.getOrNull(i) ?: 0L) != 0L,
+                                timestampMs = timestamps[i],
+                                category = categories?.getOrNull(i) ?: "",
+                            )
+                        }
+                        WatchDataRepository.updateBolusHistory(records)
+                        bolusUpdated = true
+                        Timber.d("Received bolus history from phone: %d records", records.size)
+                    } else {
+                        Timber.w("Received malformed bolus history from phone")
+                    }
                 }
             }
         }
@@ -114,6 +186,12 @@ class GlycemicDataListenerService : WearableListenerService() {
         }
         if (cgmUpdated) {
             requestComplicationUpdate(BgComplicationDataSource::class.java)
+            requestComplicationUpdate(GraphComplicationDataSource::class.java)
+        }
+        if (alertUpdated) {
+            requestComplicationUpdate(AlertsComplicationDataSource::class.java)
+        }
+        if (bolusUpdated) {
             requestComplicationUpdate(GraphComplicationDataSource::class.java)
         }
     }
