@@ -778,24 +778,17 @@ class BleConnectionManager @Inject constructor(
                         // or we had a prior successful session (transient encryption
                         // renegotiation during reconnect -- e.g., phone woke from
                         // deep sleep and BLE link key refresh failed transiently).
-                        // Count failures and only give up after MAX_ENCRYPTION_FAILURES.
+                        //
+                        // NEVER remove the bond when hadSuccessfulSession=true.
+                        // The pump is a medical device -- removing the bond forces
+                        // the user to manually re-pair (pump must be in pairing mode).
+                        // Transient encryption failures from phone sleep/wake cycles
+                        // resolve on their own when the BLE stack renegotiates.
                         encryptionFailureCount++
-                        if (encryptionFailureCount >= MAX_ENCRYPTION_FAILURES) {
-                            Timber.e("Encryption failed %d consecutive times -- bond likely stale, removing for re-pairing",
-                                encryptionFailureCount)
-                            val addr = credentialStore.getPairedAddress()
-                            if (addr != null) removeBond(addr)
-                            autoReconnect = false
-                            authTimeoutJob?.cancel()
-                            reconnectJob?.cancel()
-                            cancelAutoConnectGatt()
-                            _connectionState.value = ConnectionState.AUTH_FAILED
-                            return
-                        }
                         if (wasFullyConnected) rapidDisconnectCount = 0
-                        Timber.d("Insufficient encryption %s (%d/%d) -- reconnecting (bond preserved)",
-                            if (wasFullyConnected) "during active session" else "before connected (prior session exists)",
-                            encryptionFailureCount, MAX_ENCRYPTION_FAILURES)
+                        Timber.d("Insufficient encryption %s (%d) -- reconnecting (bond preserved, prior session exists)",
+                            if (wasFullyConnected) "during active session" else "before connected",
+                            encryptionFailureCount)
                         // Fall through to normal disconnect/reconnect path
                     }
 
@@ -1051,13 +1044,29 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
-        // Start handshake timeout -- fail if auth doesn't complete in time
+        // Start handshake timeout -- fail if auth doesn't complete in time.
+        // If we had a prior successful session, treat timeout as transient
+        // and schedule reconnect rather than giving up with AUTH_FAILED.
         authTimeoutJob?.cancel()
+        @SuppressLint("MissingPermission")
         authTimeoutJob = scope.launch {
             delay(AUTH_TIMEOUT_MS)
             if (_connectionState.value == ConnectionState.AUTHENTICATING) {
-                Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
-                _connectionState.value = ConnectionState.AUTH_FAILED
+                if (hadSuccessfulSession) {
+                    Timber.w("Authentication handshake timed out after %d ms -- prior session exists, scheduling reconnect", AUTH_TIMEOUT_MS)
+                    synchronized(gattLock) {
+                        this@BleConnectionManager.gatt?.let {
+                            it.disconnect()
+                            it.close()
+                        }
+                        this@BleConnectionManager.gatt = null
+                    }
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                    if (autoReconnect) scheduleReconnect()
+                } else {
+                    Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                }
             }
         }
 
