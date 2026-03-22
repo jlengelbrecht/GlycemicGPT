@@ -52,7 +52,7 @@ import java.util.UUID
 class ChatActivity : ComponentActivity() {
 
     private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    @Volatile private var ttsReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

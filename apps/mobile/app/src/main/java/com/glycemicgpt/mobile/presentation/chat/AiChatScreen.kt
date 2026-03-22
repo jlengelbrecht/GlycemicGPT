@@ -63,7 +63,7 @@ fun AiChatScreen(
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        viewModel.initTts(context)
+        viewModel.initTts(context.applicationContext)
     }
 
     Column(

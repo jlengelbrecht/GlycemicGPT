@@ -87,7 +87,7 @@ class AiChatViewModel @Inject constructor(
     val selectedVoiceName: StateFlow<String?> = _selectedVoiceName.asStateFlow()
 
     private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    @Volatile private var ttsReady = false
 
     init {
         checkProvider()
@@ -272,6 +272,7 @@ private object TtsMarkdownPatterns {
     val BOLD_STAR = Regex("""\*{2}(.+?)\*{2}""")
     val BOLD_UNDER = Regex("""_{2}(.+?)_{2}""")
     val ITALIC_STAR = Regex("""\*(.+?)\*""")
+    val ITALIC_UNDER = Regex("""(^|\s)_(.+?)_(?=\s|$)""")
     val TABLE_SEPARATOR = Regex("""^\|[-:| ]+\|\s*$""", RegexOption.MULTILINE)
     val TABLE_ROW = Regex("""^\|(.+)\|\s*$""", RegexOption.MULTILINE)
     val BULLET = Regex("""^[-*+]\s+""", RegexOption.MULTILINE)
@@ -292,6 +293,7 @@ private fun stripMarkdownForTts(text: String): String {
         .replace(TtsMarkdownPatterns.BOLD_STAR, "$1")
         .replace(TtsMarkdownPatterns.BOLD_UNDER, "$1")
         .replace(TtsMarkdownPatterns.ITALIC_STAR, "$1")
+        .replace(TtsMarkdownPatterns.ITALIC_UNDER, "$1$2")
         .replace(TtsMarkdownPatterns.TABLE_SEPARATOR, "")
         .replace(TtsMarkdownPatterns.TABLE_ROW) { match ->
             match.groupValues[1].split("|").joinToString(", ") { it.trim() }
