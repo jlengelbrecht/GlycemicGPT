@@ -54,7 +54,7 @@ class AlertsComplicationDataSource : SuspendingComplicationDataSourceService() {
         val alert = WatchDataRepository.alert.value
         val bellColor = when {
             alert == null -> COLOR_DIM_WHITE
-            alert.type.startsWith("urgent") -> COLOR_ALERT_RED
+            alert.type.startsWith("urgent", ignoreCase = true) -> COLOR_ALERT_RED
             else -> COLOR_ALERT_YELLOW
         }
         val description = if (alert != null) "Active alert: ${alert.type}" else "No active alerts"
@@ -65,7 +65,7 @@ class AlertsComplicationDataSource : SuspendingComplicationDataSourceService() {
         val bitmap = renderBellIcon(bellColor)
         val icon = Icon.createWithBitmap(bitmap)
         return SmallImageComplicationData.Builder(
-            smallImage = SmallImage.Builder(icon, SmallImageType.ICON).build(),
+            smallImage = SmallImage.Builder(icon, SmallImageType.PHOTO).build(),
             contentDescription = PlainComplicationText.Builder(description).build(),
         ).setTapAction(tapPendingIntent).build()
     }

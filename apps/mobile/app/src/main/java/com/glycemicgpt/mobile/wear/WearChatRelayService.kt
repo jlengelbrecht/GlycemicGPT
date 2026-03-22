@@ -122,9 +122,8 @@ class WearChatRelayService : WearableListenerService() {
                 }
                 else -> {
                     val error = result.exceptionOrNull()
-                    val errorMsg = error?.message ?: "Unknown error"
-                    Timber.w(error, "Chat request failed: %s", errorMsg)
-                    sendError(sourceNodeId, errorMsg)
+                    Timber.w(error, "Chat request failed: %s", error?.message)
+                    sendError(sourceNodeId, "Request failed. Please try again.")
                 }
             }
         }

@@ -53,7 +53,7 @@ class ChatComplicationDataSource : SuspendingComplicationDataSourceService() {
         val bitmap = renderChatIcon()
         val icon = Icon.createWithBitmap(bitmap)
         return SmallImageComplicationData.Builder(
-            smallImage = SmallImage.Builder(icon, SmallImageType.ICON).build(),
+            smallImage = SmallImage.Builder(icon, SmallImageType.PHOTO).build(),
             contentDescription = PlainComplicationText.Builder("AI Chat").build(),
         ).setTapAction(tapPendingIntent).build()
     }

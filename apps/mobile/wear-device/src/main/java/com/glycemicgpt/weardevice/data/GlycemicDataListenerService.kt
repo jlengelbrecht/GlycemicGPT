@@ -149,13 +149,17 @@ class GlycemicDataListenerService : WearableListenerService() {
                             val u = units[i]
                             // Validate: finite, non-negative, within safety max (25U max bolus)
                             if (!u.isFinite() || u < 0f || u > 25f) {
-                                Timber.w("Rejected invalid bolus units: %f", u)
+                                Timber.w("Rejected invalid bolus units at index %d", i)
                                 return@mapNotNull null
                             }
                             val rawCorr = corrUnits?.getOrNull(i) ?: 0f
                             val rawMeal = mealUnits?.getOrNull(i) ?: 0f
+                            if (!rawCorr.isFinite() || !rawMeal.isFinite()) {
+                                Timber.w("Rejected non-finite bolus sub-units at index %d", i)
+                                return@mapNotNull null
+                            }
                             if (rawCorr !in 0f..25f || rawMeal !in 0f..25f) {
-                                Timber.w("Clamping out-of-range bolus sub-units: corr=%f meal=%f", rawCorr, rawMeal)
+                                Timber.w("Clamping out-of-range bolus sub-units at index %d", i)
                             }
                             WatchDataRepository.BolusHistoryRecord(
                                 units = u,
