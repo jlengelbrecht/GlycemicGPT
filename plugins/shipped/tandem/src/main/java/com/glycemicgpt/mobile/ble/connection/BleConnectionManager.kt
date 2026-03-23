@@ -786,9 +786,19 @@ class BleConnectionManager @Inject constructor(
                         // resolve on their own when the BLE stack renegotiates.
                         encryptionFailureCount++
                         if (wasFullyConnected) rapidDisconnectCount = 0
-                        Timber.d("Insufficient encryption %s (%d) -- reconnecting (bond preserved, prior session exists)",
+                        if (encryptionFailureCount >= MAX_ENCRYPTION_FAILURES) {
+                            Timber.e("Insufficient encryption persisted for %d consecutive attempts -- reporting AUTH_FAILED (bond preserved, user action may be required)",
+                                encryptionFailureCount)
+                            autoReconnect = false
+                            authTimeoutJob?.cancel()
+                            reconnectJob?.cancel()
+                            cancelAutoConnectGatt()
+                            _connectionState.value = ConnectionState.AUTH_FAILED
+                            return
+                        }
+                        Timber.d("Insufficient encryption %s (%d/%d) -- reconnecting (bond preserved, prior session exists)",
                             if (wasFullyConnected) "during active session" else "before connected",
-                            encryptionFailureCount)
+                            encryptionFailureCount, MAX_ENCRYPTION_FAILURES)
                         // Fall through to normal disconnect/reconnect path
                     }
 
@@ -1053,16 +1063,17 @@ class BleConnectionManager @Inject constructor(
             delay(AUTH_TIMEOUT_MS)
             if (_connectionState.value == ConnectionState.AUTHENTICATING) {
                 if (hadSuccessfulSession) {
-                    Timber.w("Authentication handshake timed out after %d ms -- prior session exists, scheduling reconnect", AUTH_TIMEOUT_MS)
-                    synchronized(gattLock) {
-                        this@BleConnectionManager.gatt?.let {
-                            it.disconnect()
-                            it.close()
-                        }
-                        this@BleConnectionManager.gatt = null
-                    }
-                    _connectionState.value = ConnectionState.DISCONNECTED
-                    if (autoReconnect) scheduleReconnect()
+                    Timber.w("Authentication handshake timed out after %d ms -- prior session exists, disconnecting (onConnectionStateChange will handle reconnect)", AUTH_TIMEOUT_MS)
+                    settleJob?.cancel()
+                    settleJob = null
+                    // Only call disconnect() -- do NOT close() or null the gatt here.
+                    // The onConnectionStateChange callback will fire with STATE_DISCONNECTED,
+                    // perform cleanup (close + null gatt), and call scheduleReconnect().
+                    // Calling scheduleReconnect() here AND in the callback would cause
+                    // double-scheduling.
+                    @SuppressLint("MissingPermission")
+                    val currentGatt = synchronized(gattLock) { this@BleConnectionManager.gatt }
+                    currentGatt?.disconnect()
                 } else {
                     Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
                     _connectionState.value = ConnectionState.AUTH_FAILED
@@ -1323,9 +1334,12 @@ class BleConnectionManager @Inject constructor(
         private const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
 
         /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects (during active sessions
-         *  or reconnection after a prior successful session) before treating the bond
-         *  as genuinely stale and removing it. */
-        private const val MAX_ENCRYPTION_FAILURES = 3
+         *  or reconnection after a prior successful session) before reporting
+         *  AUTH_FAILED so the UI can prompt the user. The bond is NOT removed
+         *  automatically -- the user must decide whether to re-pair. Set high
+         *  because transient encryption renegotiation failures from phone sleep/wake
+         *  cycles are common and resolve on their own. */
+        private const val MAX_ENCRYPTION_FAILURES = 20
 
         /** Max attempts in the fast reconnection phase before transitioning to
          *  slow (patient) reconnection. With 32s max backoff, 10 attempts takes

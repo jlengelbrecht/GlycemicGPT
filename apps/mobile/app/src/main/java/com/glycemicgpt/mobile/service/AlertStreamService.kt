@@ -46,8 +46,6 @@ class AlertStreamService : Service() {
         const val NOTIFICATION_ID = 2
         private const val MAX_BACKOFF_MS = 60_000L
         private const val STABLE_CONNECTION_MS = 10_000L // Must be open 10s before resetting backoff
-        private const val MAX_CONSECUTIVE_FAILURES = 10 // Stop after 10 rapid failures
-
         fun start(context: Context) {
             context.startForegroundService(Intent(context, AlertStreamService::class.java))
         }
@@ -67,6 +65,7 @@ class AlertStreamService : Service() {
     private val reconnectAttempt = AtomicInteger(0)
     private val reconnectScheduled = AtomicBoolean(false)
     private var reconnectJob: Job? = null
+    @Volatile
     private var connectionOpenedAtMs = 0L
 
     // Reuse a single OkHttpClient across reconnects to avoid resource leaks
@@ -250,12 +249,7 @@ class AlertStreamService : Service() {
             return
         }
 
-        val attempt = reconnectAttempt.getAndIncrement()
-
-        // Circuit breaker: if we've failed too many times rapidly, slow way down
-        if (attempt >= MAX_CONSECUTIVE_FAILURES) {
-            Timber.w("Alert stream hit %d consecutive failures, backing off to max", attempt)
-        }
+        val attempt = reconnectAttempt.get()
 
         val backoffMs = minOf(
             1000L * (1 shl attempt.coerceAtMost(6)),
@@ -264,17 +258,22 @@ class AlertStreamService : Service() {
 
         reconnectJob?.cancel()
         reconnectJob = serviceScope.launch {
-            Timber.d("Reconnecting alert stream in %d ms (attempt %d)", backoffMs, attempt)
-            delay(backoffMs)
-            reconnectScheduled.set(false)
+            try {
+                Timber.d("Reconnecting alert stream in %d ms (attempt %d)", backoffMs, attempt)
+                delay(backoffMs)
 
-            if (authTokenStore.hasActiveSession()) {
-                connectToStream()
-            } else {
-                Timber.d("No active session, stopping alert stream service")
-                stopSelf()
+                if (authTokenStore.hasActiveSession()) {
+                    connectToStream()
+                } else {
+                    Timber.d("No active session, stopping alert stream service")
+                    stopSelf()
+                }
+            } finally {
+                reconnectScheduled.set(false)
             }
         }
+
+        reconnectAttempt.incrementAndGet()
     }
 
     private fun createNotificationChannel() {

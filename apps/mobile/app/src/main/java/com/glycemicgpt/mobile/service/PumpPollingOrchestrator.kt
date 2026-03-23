@@ -402,16 +402,16 @@ class PumpPollingOrchestrator @Inject constructor(
         var totalBolus = 0
         var totalBasal = 0
         var batchCount = 0
-        val catchUpDeadline = System.currentTimeMillis() + MAX_BACKFILL_DURATION_MS
+        val startNanos = System.nanoTime()
 
-        while (System.currentTimeMillis() < catchUpDeadline) {
+        while ((System.nanoTime() - startNanos) / 1_000_000 < MAX_BACKFILL_DURATION_MS) {
             val result = pumpDriver.getHistoryLogs(sinceSequence = lastSequenceNumber)
 
             if (result.isFailure) {
                 Timber.w(result.exceptionOrNull(), "Failed to poll history logs (batch %d)", batchCount)
                 break
             }
-            val records = result.getOrThrow()
+            val records = result.getOrNull() ?: break
 
             if (records.isEmpty()) {
                 if (batchCount > 0) {
@@ -434,7 +434,12 @@ class PumpPollingOrchestrator @Inject constructor(
                 )
             }
             rawHistoryLogDao.insertAll(entities)
-            lastSequenceNumber = records.maxOfOrNull { it.sequenceNumber } ?: lastSequenceNumber
+            val newMaxSeq = records.maxOfOrNull { it.sequenceNumber } ?: lastSequenceNumber
+            if (newMaxSeq <= lastSequenceNumber) {
+                Timber.w("History sequence not advancing (batch %d, stuck at %d), breaking", batchCount, lastSequenceNumber)
+                break
+            }
+            lastSequenceNumber = newMaxSeq
             Timber.d("Fetched batch %d: %d history records (seq up to %d)", batchCount, records.size, lastSequenceNumber)
 
             // Extract and save CGM readings to fill chart gaps
@@ -460,12 +465,11 @@ class PumpPollingOrchestrator @Inject constructor(
                 totalBasal += basalReadings.size
             }
 
+            // Trigger backend sync after each batch so data is uploaded incrementally
+            backendSyncManager?.triggerSync()
+
             // Brief pause between batches to let other BLE operations through
             delay(BACKFILL_BATCH_STAGGER_MS)
-        }
-
-        if (totalRecords > 0) {
-            backendSyncManager?.triggerSync()
         }
     }
 
