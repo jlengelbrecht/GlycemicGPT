@@ -57,21 +57,19 @@ class WearChatRelayService : WearableListenerService() {
     private fun handleAlertDismiss() {
         Timber.d("Received alert dismiss from watch")
         startWork()
-        serviceScope.launch {
-            try {
+        try {
+            runBlocking {
                 val serverId = alertRepository.getLatestUnacknowledgedServerId()
                 if (serverId != null) {
                     alertRepository.acknowledgeAlert(serverId)
                     Timber.d("Acknowledged alert %s from watch dismiss", serverId)
                 }
                 wearDataSender.clearAlert()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Timber.w(e, "Failed to acknowledge alert on phone side")
-            } finally {
-                finishWork()
             }
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to acknowledge alert on phone side")
+        } finally {
+            finishWork()
         }
     }
 
