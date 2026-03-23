@@ -778,13 +778,17 @@ class BleConnectionManager @Inject constructor(
                         // or we had a prior successful session (transient encryption
                         // renegotiation during reconnect -- e.g., phone woke from
                         // deep sleep and BLE link key refresh failed transiently).
-                        // Count failures and only give up after MAX_ENCRYPTION_FAILURES.
+                        //
+                        // NEVER remove the bond when hadSuccessfulSession=true.
+                        // The pump is a medical device -- removing the bond forces
+                        // the user to manually re-pair (pump must be in pairing mode).
+                        // Transient encryption failures from phone sleep/wake cycles
+                        // resolve on their own when the BLE stack renegotiates.
                         encryptionFailureCount++
+                        if (wasFullyConnected) rapidDisconnectCount = 0
                         if (encryptionFailureCount >= MAX_ENCRYPTION_FAILURES) {
-                            Timber.e("Encryption failed %d consecutive times -- bond likely stale, removing for re-pairing",
+                            Timber.e("Insufficient encryption persisted for %d consecutive attempts -- reporting AUTH_FAILED (bond preserved, user action may be required)",
                                 encryptionFailureCount)
-                            val addr = credentialStore.getPairedAddress()
-                            if (addr != null) removeBond(addr)
                             autoReconnect = false
                             authTimeoutJob?.cancel()
                             reconnectJob?.cancel()
@@ -792,9 +796,8 @@ class BleConnectionManager @Inject constructor(
                             _connectionState.value = ConnectionState.AUTH_FAILED
                             return
                         }
-                        if (wasFullyConnected) rapidDisconnectCount = 0
-                        Timber.d("Insufficient encryption %s (%d/%d) -- reconnecting (bond preserved)",
-                            if (wasFullyConnected) "during active session" else "before connected (prior session exists)",
+                        Timber.d("Insufficient encryption %s (%d/%d) -- reconnecting (bond preserved, prior session exists)",
+                            if (wasFullyConnected) "during active session" else "before connected",
                             encryptionFailureCount, MAX_ENCRYPTION_FAILURES)
                         // Fall through to normal disconnect/reconnect path
                     }
@@ -1051,13 +1054,30 @@ class BleConnectionManager @Inject constructor(
             return
         }
 
-        // Start handshake timeout -- fail if auth doesn't complete in time
+        // Start handshake timeout -- fail if auth doesn't complete in time.
+        // If we had a prior successful session, treat timeout as transient
+        // and schedule reconnect rather than giving up with AUTH_FAILED.
         authTimeoutJob?.cancel()
+        @SuppressLint("MissingPermission")
         authTimeoutJob = scope.launch {
             delay(AUTH_TIMEOUT_MS)
             if (_connectionState.value == ConnectionState.AUTHENTICATING) {
-                Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
-                _connectionState.value = ConnectionState.AUTH_FAILED
+                if (hadSuccessfulSession) {
+                    Timber.w("Authentication handshake timed out after %d ms -- prior session exists, disconnecting (onConnectionStateChange will handle reconnect)", AUTH_TIMEOUT_MS)
+                    settleJob?.cancel()
+                    settleJob = null
+                    // Only call disconnect() -- do NOT close() or null the gatt here.
+                    // The onConnectionStateChange callback will fire with STATE_DISCONNECTED,
+                    // perform cleanup (close + null gatt), and call scheduleReconnect().
+                    // Calling scheduleReconnect() here AND in the callback would cause
+                    // double-scheduling.
+                    @SuppressLint("MissingPermission")
+                    val currentGatt = synchronized(gattLock) { this@BleConnectionManager.gatt }
+                    currentGatt?.disconnect()
+                } else {
+                    Timber.e("Authentication handshake timed out after %d ms", AUTH_TIMEOUT_MS)
+                    _connectionState.value = ConnectionState.AUTH_FAILED
+                }
             }
         }
 
@@ -1314,9 +1334,12 @@ class BleConnectionManager @Inject constructor(
         private const val MAX_ZERO_RESPONSE_CONNECTIONS = 3
 
         /** Max consecutive INSUFFICIENT_ENCRYPTION disconnects (during active sessions
-         *  or reconnection after a prior successful session) before treating the bond
-         *  as genuinely stale and removing it. */
-        private const val MAX_ENCRYPTION_FAILURES = 3
+         *  or reconnection after a prior successful session) before reporting
+         *  AUTH_FAILED so the UI can prompt the user. The bond is NOT removed
+         *  automatically -- the user must decide whether to re-pair. Set high
+         *  because transient encryption renegotiation failures from phone sleep/wake
+         *  cycles are common and resolve on their own. */
+        private const val MAX_ENCRYPTION_FAILURES = 20
 
         /** Max attempts in the fast reconnection phase before transitioning to
          *  slow (patient) reconnection. With 32s max backoff, 10 attempts takes
