@@ -67,6 +67,8 @@ class AlertStreamService : Service() {
     private var reconnectJob: Job? = null
     @Volatile
     private var connectionOpenedAtMs = 0L
+    /** Generation counter to prevent stale callbacks from racing with new connections. */
+    private val connectionGeneration = AtomicInteger(0)
 
     // Reuse a single OkHttpClient across reconnects to avoid resource leaks
     private val sseClient: OkHttpClient by lazy {
@@ -120,6 +122,9 @@ class AlertStreamService : Service() {
             return
         }
 
+        // Increment generation so stale callbacks from the cancelled EventSource
+        // are ignored when they fire after a new connection is established.
+        val gen = connectionGeneration.incrementAndGet()
         connectionOpenedAtMs = 0L
 
         val request = Request.Builder()
@@ -160,6 +165,9 @@ class AlertStreamService : Service() {
                     t: Throwable?,
                     response: Response?,
                 ) {
+                    // Ignore callbacks from a stale connection generation
+                    if (connectionGeneration.get() != gen) return
+
                     val code = response?.code
                     val attempt = reconnectAttempt.get()
                     Timber.w(
@@ -169,7 +177,6 @@ class AlertStreamService : Service() {
 
                     if (code == 401 || code == 403) {
                         Timber.w("Alert stream auth rejected (HTTP %d), backing off longer", code)
-                        // Force high backoff for auth failures -- token refresh needs time
                         reconnectAttempt.set(5.coerceAtLeast(attempt))
                     }
 
@@ -177,6 +184,7 @@ class AlertStreamService : Service() {
                 }
 
                 override fun onClosed(eventSource: EventSource) {
+                    if (connectionGeneration.get() != gen) return
                     Timber.d("Alert SSE stream closed by server")
                     scheduleReconnect()
                 }
