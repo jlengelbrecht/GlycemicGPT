@@ -19,22 +19,34 @@ import java.net.SocketTimeoutException
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 
 data class TtsVoiceOption(
     val name: String,
     val locale: Locale,
     val isDefault: Boolean,
+    val quality: Int,
+    val needsNetwork: Boolean,
 ) {
     val displayName: String
         get() {
-            val parts = name.split("-", "#")
-            val gender = when {
-                parts.any { it.contains("female", ignoreCase = true) } -> "Female"
-                parts.any { it.contains("male", ignoreCase = true) } -> "Male"
-                else -> null
-            }
-            val label = "${locale.displayLanguage} (${locale.displayCountry})"
-            return if (gender != null) "$label - $gender" else label
+            // Extract the voice variant from names like "en-us-x-iob-local" or "en-GB-SMTf00"
+            val variant = name
+                .substringAfter("x-", "")
+                .substringBefore("-")
+                .ifEmpty { name.substringAfterLast("-").ifEmpty { name.takeLast(3) } }
+                .uppercase()
+
+            val accent = locale.displayCountry.ifEmpty { locale.displayLanguage }
+            val qualityLabel = if (quality >= 400) "HD" else ""
+            val networkLabel = if (needsNetwork) "Online" else ""
+            val suffix = listOfNotNull(
+                qualityLabel.ifEmpty { null },
+                networkLabel.ifEmpty { null },
+            ).joinToString(", ")
+
+            val base = "$accent - Voice $variant"
+            return if (suffix.isNotEmpty()) "$base ($suffix)" else base
         }
 }
 
@@ -102,8 +114,10 @@ class AiChatViewModel @Inject constructor(
             if (status == TextToSpeech.SUCCESS) {
                 tts?.language = Locale.getDefault()
                 ttsReady = true
-                loadAvailableVoices()
-                applySelectedVoice()
+                viewModelScope.launch {
+                    loadAvailableVoices()
+                    applySelectedVoice()
+                }
                 Timber.d("TTS engine initialized")
             } else {
                 Timber.w("TTS init failed with status %d", status)
@@ -117,11 +131,20 @@ class AiChatViewModel @Inject constructor(
         val engine = tts ?: return
         val deviceLocale = Locale.getDefault()
         val voices = engine.voices
-            ?.filter { it.locale.language == deviceLocale.language && !it.isNetworkConnectionRequired }
-            ?.sortedBy { it.name }
-            ?.map { TtsVoiceOption(name = it.name, locale = it.locale, isDefault = it.name == engine.defaultVoice?.name) }
+            ?.filter { it.locale.language == deviceLocale.language }
+            ?.sortedWith(compareBy({ it.isNetworkConnectionRequired }, { it.locale.country }, { it.name }))
+            ?.map {
+                TtsVoiceOption(
+                    name = it.name,
+                    locale = it.locale,
+                    isDefault = it.name == engine.defaultVoice?.name,
+                    quality = it.quality,
+                    needsNetwork = it.isNetworkConnectionRequired,
+                )
+            }
             ?: emptyList()
         _availableVoices.value = voices
+        Timber.d("Loaded %d TTS voices for locale %s", voices.size, deviceLocale.language)
     }
 
     private fun applySelectedVoice() {
@@ -139,16 +162,22 @@ class AiChatViewModel @Inject constructor(
     }
 
     fun selectVoice(voiceName: String) {
+        if (_availableVoices.value.none { it.name == voiceName }) return
         appSettingsStore.aiTtsVoice = voiceName
         _selectedVoiceName.value = voiceName
         applySelectedVoice()
+        syncWatchConfig()
     }
 
     fun toggleTts() {
         val newValue = !appSettingsStore.aiTtsEnabled
         appSettingsStore.aiTtsEnabled = newValue
         _ttsEnabled.value = newValue
-        // Sync TTS setting to watch immediately
+        if (!newValue) tts?.stop()
+        syncWatchConfig()
+    }
+
+    private fun syncWatchConfig() {
         viewModelScope.launch {
             try {
                 wearDataSender.sendWatchFaceConfig(
@@ -158,10 +187,17 @@ class AiChatViewModel @Inject constructor(
                     showSeconds = appSettingsStore.watchFaceShowSeconds,
                     graphRangeHours = appSettingsStore.watchFaceGraphRangeHours,
                     theme = appSettingsStore.watchFaceTheme,
-                    aiTtsEnabled = newValue,
+                    showBasalOverlay = appSettingsStore.watchFaceShowBasalOverlay,
+                    showBolusMarkers = appSettingsStore.watchFaceShowBolusMarkers,
+                    showIoBOverlay = appSettingsStore.watchFaceShowIoBOverlay,
+                    showModeBands = appSettingsStore.watchFaceShowModeBands,
+                    aiTtsEnabled = appSettingsStore.aiTtsEnabled,
+                    aiTtsVoice = appSettingsStore.aiTtsVoice,
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Timber.w(e, "Failed to sync TTS setting to watch")
+                Timber.w(e, "Failed to sync config to watch")
             }
         }
     }
@@ -228,7 +264,7 @@ class AiChatViewModel @Inject constructor(
                         )
                     }
                     if (appSettingsStore.aiTtsEnabled) {
-                        speakText(response.response + "\n\n" + response.disclaimer)
+                        speakText(response.response + ". This is not medical advice.")
                     }
                 }
                 .onFailure { e ->
