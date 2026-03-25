@@ -46,6 +46,59 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+// -- Pre-allocated Paint objects (Issue 6: avoid allocating inside DrawScope) --
+
+private object GraphPaints {
+    val thresholdLabel: android.graphics.Paint by lazy {
+        android.graphics.Paint().apply {
+            color = 0xB3FFFFFF.toInt() // white, 0.7 alpha
+            textSize = 20f
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.RIGHT
+            isFakeBoldText = true
+        }
+    }
+
+    val bolusLabel: android.graphics.Paint by lazy {
+        android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 16f
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+    }
+
+    val timeAxisLabel: android.graphics.Paint by lazy {
+        android.graphics.Paint().apply {
+            color = 0x99FFFFFF.toInt() // white, 0.6 alpha
+            textSize = 16f
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+    }
+
+    val tooltipText: android.graphics.Paint by lazy {
+        android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 22f
+            isAntiAlias = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+    }
+}
+
+// -- Pre-allocated SimpleDateFormat instances (Issue 13: avoid allocating in draw loop) --
+
+private val timeAxisFormat: SimpleDateFormat by lazy {
+    SimpleDateFormat("h:mm", Locale.getDefault())
+}
+
+private val tooltipTimeFormat: SimpleDateFormat by lazy {
+    SimpleDateFormat("h:mm a", Locale.getDefault())
+}
+
 class GraphDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -157,8 +210,6 @@ private fun GraphDetailScreen() {
                     ) {
                         val low = readings.last().low
                         val high = readings.last().high
-                        val urgentLow = readings.last().urgentLow
-                        val urgentHigh = readings.last().urgentHigh
 
                         Canvas(
                             modifier = Modifier
@@ -166,9 +217,28 @@ private fun GraphDetailScreen() {
                                 .pointerInput(Unit) {
                                     detectDragGestures { _, dragAmount ->
                                         panOffsetPx += dragAmount.x
+                                        // Clamp pan to prevent dead zones.
+                                        // Positive pan = drag right = scroll back in time.
+                                        // Lower bound: 0 (can't scroll past "now").
+                                        // Upper bound: pixel offset where viewport
+                                        // reaches earliest available data.
+                                        val graphW = size.width.toFloat() -
+                                            GRAPH_PADDING - GRAPH_PADDING_RIGHT
+                                        val maxPanPx = if (graphW > 0f) {
+                                            val scrollableMs = now - cutoff - rangeMs
+                                            if (scrollableMs > 0L) {
+                                                (scrollableMs.toFloat() /
+                                                    rangeMs.toFloat()) * graphW
+                                            } else {
+                                                0f
+                                            }
+                                        } else {
+                                            0f
+                                        }
+                                        panOffsetPx = panOffsetPx.coerceIn(0f, maxPanPx)
                                     }
                                 }
-                                .pointerInput(readings, panOffsetPx) {
+                                .pointerInput(readings) {
                                     detectTapGestures { offset ->
                                         tooltip = findNearestReading(
                                             tapOffset = offset,
@@ -348,10 +418,11 @@ private fun computeViewport(
     val viewportEnd = (nowMs - panMs).coerceIn(dataStartMs + viewportRangeMs, nowMs)
     val viewportStart = viewportEnd - viewportRangeMs
 
+    val clampedStart = viewportStart.coerceAtLeast(dataStartMs)
     return ViewportInfo(
-        startMs = viewportStart.coerceAtLeast(dataStartMs),
+        startMs = clampedStart,
         endMs = viewportEnd,
-        rangeMs = viewportRangeMs,
+        rangeMs = viewportEnd - clampedStart,
     )
 }
 
@@ -403,17 +474,9 @@ private fun DrawScope.drawThresholdLines(
     )
 
     // Y-axis threshold labels
-    val labelPaint = android.graphics.Paint().apply {
-        color = 0xB3FFFFFF.toInt() // white, 0.7 alpha
-        textSize = 20f
-        isAntiAlias = true
-        textAlign = android.graphics.Paint.Align.RIGHT
-        isFakeBoldText = true
-    }
-
     val canvas = drawContext.canvas.nativeCanvas
-    canvas.drawText(low.toString(), graphRect.left - 4f, lowY + 6f, labelPaint)
-    canvas.drawText(high.toString(), graphRect.left - 4f, highY + 6f, labelPaint)
+    canvas.drawText(low.toString(), graphRect.left - 4f, lowY + 6f, GraphPaints.thresholdLabel)
+    canvas.drawText(high.toString(), graphRect.left - 4f, highY + 6f, GraphPaints.thresholdLabel)
 }
 
 private fun DrawScope.drawModeBands(
@@ -510,14 +573,6 @@ private fun DrawScope.drawBolusMarkers(
     xPos: (Long) -> Float,
     categoryLabels: Map<String, String>,
 ) {
-    val labelPaint = android.graphics.Paint().apply {
-        color = android.graphics.Color.WHITE
-        textSize = 16f
-        isAntiAlias = true
-        textAlign = android.graphics.Paint.Align.CENTER
-        isFakeBoldText = true
-    }
-
     val markerCenterY = graphRect.top + BOLUS_MARKER_TOP_OFFSET + BOLUS_DIAMOND_HALF * 2
 
     for (record in bolusHistory) {
@@ -544,7 +599,7 @@ private fun DrawScope.drawBolusMarkers(
             unitText,
             clampedX,
             markerCenterY - BOLUS_DIAMOND_HALF * 2 - 3f,
-            labelPaint,
+            GraphPaints.bolusLabel,
         )
     }
 }
@@ -562,7 +617,7 @@ private fun buildBolusLabel(
     // Check for category label (e.g., "Auto Co." for auto-correction)
     val catLabel = categoryLabels[record.category]
     return if (record.isAutomated && record.isCorrection) {
-        catLabel ?: "Auto Co."
+        "$unitsStr ${catLabel ?: "Auto"}"
     } else if (catLabel != null) {
         "$unitsStr $catLabel"
     } else {
@@ -682,13 +737,6 @@ private fun DrawScope.drawTimeAxis(
     graphRect: Rect,
     xPos: (Long) -> Float,
 ) {
-    val labelPaint = android.graphics.Paint().apply {
-        color = 0x99FFFFFF.toInt() // white, 0.6 alpha
-        textSize = 16f
-        isAntiAlias = true
-        textAlign = android.graphics.Paint.Align.CENTER
-    }
-
     val tickColor = Color(0x40FFFFFF)
 
     // Determine hour mark interval based on viewport range
@@ -698,8 +746,6 @@ private fun DrawScope.drawTimeAxis(
         rangeHours <= 3 -> 3_600_000L // 1-hour marks
         else -> 7_200_000L // 2-hour marks for 6h
     }
-
-    val timeFormat = SimpleDateFormat("h:mm", Locale.getDefault())
 
     // Find the first interval mark after the viewport start
     val cal = Calendar.getInstance()
@@ -723,10 +769,10 @@ private fun DrawScope.drawTimeAxis(
             )
             // Time label
             canvas.drawText(
-                timeFormat.format(Date(cal.timeInMillis)),
+                timeAxisFormat.format(Date(cal.timeInMillis)),
                 x,
                 graphRect.bottom + 16f,
-                labelPaint,
+                GraphPaints.timeAxisLabel,
             )
         }
         cal.timeInMillis += intervalMs
@@ -734,15 +780,7 @@ private fun DrawScope.drawTimeAxis(
 }
 
 private fun DrawScope.drawTooltip(tooltip: TooltipData) {
-    val textPaint = android.graphics.Paint().apply {
-        color = android.graphics.Color.WHITE
-        textSize = 22f
-        isAntiAlias = true
-        textAlign = android.graphics.Paint.Align.CENTER
-        isFakeBoldText = true
-    }
-
-    val textWidth = textPaint.measureText(tooltip.text)
+    val textWidth = GraphPaints.tooltipText.measureText(tooltip.text)
     val padding = 10f
     val bubbleWidth = textWidth + padding * 2
     val bubbleHeight = 30f
@@ -763,7 +801,7 @@ private fun DrawScope.drawTooltip(tooltip: TooltipData) {
         tooltip.text,
         bubbleX + bubbleWidth / 2f,
         bubbleY + bubbleHeight - 8f,
-        textPaint,
+        GraphPaints.tooltipText,
     )
 }
 
@@ -825,7 +863,7 @@ private fun findNearestReading(
     val r = readings[nearestIdx]
     val dotX = xPos(r.timestampMs)
     val dotY = yPos(r.mgDl)
-    val timeText = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(r.timestampMs))
+    val timeText = tooltipTimeFormat.format(Date(r.timestampMs))
     return TooltipData(
         text = "${r.mgDl} mg/dL  $timeText",
         x = dotX,

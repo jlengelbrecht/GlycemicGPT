@@ -315,7 +315,7 @@ class GlycemicDataListenerService : WearableListenerService() {
         /** Complication update throttle intervals to reduce battery drain. */
         const val BG_UPDATE_THROTTLE_MS = 30_000L    // max once per 30s
         const val IOB_UPDATE_THROTTLE_MS = 60_000L   // max once per 60s
-        const val GRAPH_UPDATE_THROTTLE_MS = 300_000L // max once per 5 min
+        const val GRAPH_UPDATE_THROTTLE_MS = 120_000L // max once per 2 min
     }
 
     private fun requestThrottledBgUpdate() {

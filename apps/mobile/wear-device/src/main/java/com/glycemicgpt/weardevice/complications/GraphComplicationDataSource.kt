@@ -14,6 +14,7 @@ import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.glycemicgpt.weardevice.data.WatchDataRepository
 import com.glycemicgpt.weardevice.presentation.GraphDetailActivity
+import java.util.Objects
 
 class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
 
@@ -69,9 +70,9 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
         )
 
         // Cache the rendered bitmap and only re-render when data changes.
-        val dataHash = readings.hashCode() xor basalHistory.hashCode() xor
-            bolusHistory.hashCode() xor iobHistory.hashCode() xor
-            graphConfig.hashCode() xor (low shl 16 or high)
+        val dataHash = Objects.hash(
+            readings, basalHistory, bolusHistory, iobHistory, graphConfig, low, high,
+        )
 
         val bitmap = if (dataHash == cachedDataHash && cachedBitmap != null) {
             cachedBitmap!!
