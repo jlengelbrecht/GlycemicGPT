@@ -20,6 +20,10 @@ import timber.log.Timber
 
 class GlycemicDataListenerService : WearableListenerService() {
 
+    @Volatile private var lastBgUpdateMs = 0L
+    @Volatile private var lastIoBUpdateMs = 0L
+    @Volatile private var lastGraphUpdateMs = 0L
+
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         var iobUpdated = false
         var cgmUpdated = false
@@ -198,25 +202,28 @@ class GlycemicDataListenerService : WearableListenerService() {
         }
 
         if (configUpdated) {
-            // Config change may affect which complications are visible or how the graph renders
+            // Config change may affect which complications are visible -- update immediately
             requestComplicationUpdate(IoBComplicationDataSource::class.java)
             requestComplicationUpdate(GraphComplicationDataSource::class.java)
         }
         if (iobUpdated) {
-            requestComplicationUpdate(IoBComplicationDataSource::class.java)
+            requestThrottledIoBUpdate()
         }
         if (cgmUpdated) {
-            requestComplicationUpdate(BgComplicationDataSource::class.java)
-            requestComplicationUpdate(GraphComplicationDataSource::class.java)
+            requestThrottledBgUpdate()
+            requestThrottledGraphUpdate()
         }
         if (historyUpdated) {
+            // Backfill data should render immediately
             requestComplicationUpdate(GraphComplicationDataSource::class.java)
+            lastGraphUpdateMs = System.currentTimeMillis()
         }
         if (alertUpdated) {
+            // Alerts are safety-critical -- always update immediately
             requestComplicationUpdate(AlertsComplicationDataSource::class.java)
         }
         if (categoryLabelsUpdated) {
-            requestComplicationUpdate(GraphComplicationDataSource::class.java)
+            requestThrottledGraphUpdate()
         }
     }
 
@@ -305,6 +312,34 @@ class GlycemicDataListenerService : WearableListenerService() {
         const val MAX_BOLUS_UNITS = 25f
         /** Hard cap per Tandem pump safety limits (max basal 15 U/hr). */
         const val MAX_BASAL_RATE = 15f
+        /** Complication update throttle intervals to reduce battery drain. */
+        const val BG_UPDATE_THROTTLE_MS = 30_000L    // max once per 30s
+        const val IOB_UPDATE_THROTTLE_MS = 60_000L   // max once per 60s
+        const val GRAPH_UPDATE_THROTTLE_MS = 300_000L // max once per 5 min
+    }
+
+    private fun requestThrottledBgUpdate() {
+        val now = System.currentTimeMillis()
+        if (now - lastBgUpdateMs >= BG_UPDATE_THROTTLE_MS) {
+            lastBgUpdateMs = now
+            requestComplicationUpdate(BgComplicationDataSource::class.java)
+        }
+    }
+
+    private fun requestThrottledIoBUpdate() {
+        val now = System.currentTimeMillis()
+        if (now - lastIoBUpdateMs >= IOB_UPDATE_THROTTLE_MS) {
+            lastIoBUpdateMs = now
+            requestComplicationUpdate(IoBComplicationDataSource::class.java)
+        }
+    }
+
+    private fun requestThrottledGraphUpdate() {
+        val now = System.currentTimeMillis()
+        if (now - lastGraphUpdateMs >= GRAPH_UPDATE_THROTTLE_MS) {
+            lastGraphUpdateMs = now
+            requestComplicationUpdate(GraphComplicationDataSource::class.java)
+        }
     }
 
     private fun requestComplicationUpdate(dataSourceClass: Class<*>) {

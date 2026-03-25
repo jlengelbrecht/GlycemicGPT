@@ -147,6 +147,7 @@ private fun GraphDetailScreen() {
                                 },
                         ) {
                             drawImage(bitmap, size)
+                            drawRangeLabels(low, high, readings, size)
                             tooltip?.let { drawTooltip(it) }
                         }
                     }
@@ -179,6 +180,38 @@ private fun DrawScope.drawImage(
         0f, 0f, size.width, size.height,
     )
     canvas.drawBitmap(bitmap, srcRect, dstRect, null)
+}
+
+private fun DrawScope.drawRangeLabels(
+    low: Int,
+    high: Int,
+    readings: List<WatchDataRepository.CgmState>,
+    size: androidx.compose.ui.geometry.Size,
+) {
+    val padding = 4f
+    val graphTop = padding
+    val graphBottom = size.height - padding
+    val graphHeight = graphBottom - graphTop
+
+    val values = readings.map { it.mgDl }
+    val minY = minOf(values.min(), low - 10).coerceAtLeast(20)
+    val maxY = maxOf(values.max(), high + 10).coerceAtMost(500)
+    val yRange = (maxY - minY).toFloat().coerceAtLeast(1f)
+
+    fun yPos(mgDl: Int): Float =
+        graphBottom - ((mgDl - minY) / yRange) * graphHeight
+
+    val labelPaint = android.graphics.Paint().apply {
+        color = 0xB3FFFFFF.toInt() // white, 0.7 alpha
+        textSize = 18f
+        isAntiAlias = true
+        textAlign = android.graphics.Paint.Align.LEFT
+        isFakeBoldText = true
+    }
+
+    val canvas = drawContext.canvas.nativeCanvas
+    canvas.drawText(low.toString(), padding + 2f, yPos(low) - 3f, labelPaint)
+    canvas.drawText(high.toString(), padding + 2f, yPos(high) - 3f, labelPaint)
 }
 
 private fun DrawScope.drawTooltip(tooltip: TooltipData) {

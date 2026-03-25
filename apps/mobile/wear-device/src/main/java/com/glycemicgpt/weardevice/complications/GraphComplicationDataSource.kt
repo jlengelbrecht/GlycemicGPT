@@ -22,6 +22,9 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
         private const val GRAPH_REQUEST_CODE = 2000
     }
 
+    private var cachedBitmap: android.graphics.Bitmap? = null
+    private var cachedDataHash: Int = 0
+
     override fun getPreviewData(type: ComplicationType): ComplicationData {
         if (type != ComplicationType.SMALL_IMAGE) return NoDataComplicationData()
         val bitmap = WatchGraphRenderer.renderPreview()
@@ -60,20 +63,32 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
 
         val graphConfig = WatchGraphRenderer.GraphConfig(
             showBasalOverlay = config.showBasalOverlay,
-            showBolusMarkers = config.showBolusMarkers,
+            showBolusMarkers = false, // too small for bolus markers at 400x100
             showIoBOverlay = config.showIoBOverlay,
             showModeBands = config.showModeBands,
         )
 
-        val bitmap = WatchGraphRenderer.render(
-            cgmReadings = readings,
-            basalHistory = basalHistory,
-            bolusHistory = bolusHistory,
-            iobHistory = iobHistory,
-            low = low,
-            high = high,
-            config = graphConfig,
-        )
+        // Cache the rendered bitmap and only re-render when data changes.
+        val dataHash = readings.hashCode() xor basalHistory.hashCode() xor
+            bolusHistory.hashCode() xor iobHistory.hashCode() xor
+            graphConfig.hashCode() xor (low shl 16 or high)
+
+        val bitmap = if (dataHash == cachedDataHash && cachedBitmap != null) {
+            cachedBitmap!!
+        } else {
+            WatchGraphRenderer.render(
+                cgmReadings = readings,
+                basalHistory = basalHistory,
+                bolusHistory = bolusHistory,
+                iobHistory = iobHistory,
+                low = low,
+                high = high,
+                config = graphConfig,
+            ).also {
+                cachedBitmap = it
+                cachedDataHash = dataHash
+            }
+        }
 
         val icon = Icon.createWithBitmap(bitmap)
 
