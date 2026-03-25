@@ -41,6 +41,10 @@ class GraphComplicationDataSource : SuspendingComplicationDataSourceService() {
             return NoDataComplicationData()
         }
 
+        // Ensure persisted data is restored -- the complication service may be
+        // invoked in a fresh process before Application.onCreate() runs.
+        WatchDataRepository.init(applicationContext)
+
         val config = WatchDataRepository.watchFaceConfig.value
         if (!config.showGraph) return NoDataComplicationData()
 

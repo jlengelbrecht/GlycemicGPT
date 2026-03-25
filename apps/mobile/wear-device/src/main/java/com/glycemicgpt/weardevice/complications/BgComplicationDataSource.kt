@@ -41,6 +41,7 @@ class BgComplicationDataSource : SuspendingComplicationDataSourceService() {
     }
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData {
+        WatchDataRepository.init(applicationContext)
         val now = System.currentTimeMillis()
         val staleThresholdMs = 15 * 60_000L // 15 minutes
         val cgmState = WatchDataRepository.cgm.value?.takeIf {
