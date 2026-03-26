@@ -67,6 +67,14 @@ class SuggestionsResponse(BaseModel):
     )
 
 
+class SourceRecommendation(BaseModel):
+    """A domain the AI recommends adding."""
+
+    domain: str
+    url: str
+    reason: str
+
+
 class ResearchRunResponse(BaseModel):
     """Response after triggering a research run."""
 
@@ -75,3 +83,4 @@ class ResearchRunResponse(BaseModel):
     new: int
     unchanged: int
     errors: int
+    recommendations: list[SourceRecommendation] = Field(default_factory=list)

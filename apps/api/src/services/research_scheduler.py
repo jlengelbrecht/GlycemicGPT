@@ -11,7 +11,7 @@ from sqlalchemy import distinct, select
 from src.database import get_session_maker
 from src.logging_config import get_logger
 from src.models.research_source import ResearchSource
-from src.services.research_pipeline import research_for_user
+from src.services.ai_researcher import ai_research_for_user
 
 logger = get_logger(__name__)
 
@@ -44,7 +44,7 @@ async def run_research_pipeline_all_users() -> None:
     for user_id in user_ids:
         try:
             async with get_session_maker()() as user_db:
-                await research_for_user(user_db, user_id)
+                await ai_research_for_user(user_db, user_id)
                 success += 1
         except Exception:
             logger.error(

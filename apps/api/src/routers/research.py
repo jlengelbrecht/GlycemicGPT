@@ -184,14 +184,32 @@ async def trigger_research(
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunResponse:
-    """Manually trigger the research pipeline for the current user.
+    """Manually trigger the AI research pipeline for the current user.
 
-    Rate limited to 2 runs per hour to prevent abuse.
+    The AI evaluates sources, follows links within allowed domains,
+    and produces structured clinical knowledge. Rate limited to 2/hour.
     """
-    from src.services.research_pipeline import research_for_user
+    from src.schemas.research import SourceRecommendation
+    from src.services.ai_researcher import ai_research_for_user
 
-    result = await research_for_user(db, current_user.id)
-    return ResearchRunResponse(**result)
+    result = await ai_research_for_user(db, current_user.id)
+    recs = [
+        SourceRecommendation(
+            domain=r.get("domain", ""),
+            url=r.get("url", ""),
+            reason=r.get("reason", ""),
+        )
+        for r in result.get("recommendations", [])
+        if r.get("domain") and r.get("url")
+    ]
+    return ResearchRunResponse(
+        sources=result["sources"],
+        updated=result.get("updated", 0),
+        new=result.get("new", 0),
+        unchanged=result.get("unchanged", 0),
+        errors=result.get("errors", 0),
+        recommendations=recs,
+    )
 
 
 @router.get(
