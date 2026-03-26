@@ -92,13 +92,15 @@ class TestCalculateMetrics:
         correction_result = MagicMock()
         correction_result.scalar.return_value = 0
 
-        # Mock insulin breakdown queries: bolus, manual_corr, auto_corr, basal
+        # Mock insulin breakdown queries: bolus, manual_corr, auto_corr, seed_basal, basal
         bolus_result = MagicMock()
         bolus_result.one.return_value = (2, 10.0)
         manual_corr_result = MagicMock()
         manual_corr_result.one.return_value = (1, 5.0)
         auto_corr_result = MagicMock()
         auto_corr_result.one.return_value = (1, 2.5)
+        seed_basal_result = MagicMock()
+        seed_basal_result.first.return_value = None  # no pre-window basal
         basal_result = MagicMock()
         basal_result.all.return_value = []  # no basal events
 
@@ -108,6 +110,7 @@ class TestCalculateMetrics:
             bolus_result,
             manual_corr_result,
             auto_corr_result,
+            seed_basal_result,
             basal_result,
         ]
 
@@ -147,6 +150,8 @@ class TestCalculateMetrics:
         manual_corr_result.one.return_value = (0, 0.0)
         auto_corr_result = MagicMock()
         auto_corr_result.one.return_value = (0, 0.0)
+        seed_basal_result = MagicMock()
+        seed_basal_result.first.return_value = None
         basal_result = MagicMock()
         basal_result.all.return_value = []
 
@@ -156,6 +161,7 @@ class TestCalculateMetrics:
             bolus_result,
             manual_corr_result,
             auto_corr_result,
+            seed_basal_result,
             basal_result,
         ]
 
@@ -189,6 +195,8 @@ class TestCalculateMetrics:
         manual_corr_result.one.return_value = (0, 0.0)
         auto_corr_result = MagicMock()
         auto_corr_result.one.return_value = (0, 0.0)
+        seed_basal_result = MagicMock()
+        seed_basal_result.first.return_value = None
         basal_result = MagicMock()
         basal_result.all.return_value = []
 
@@ -198,6 +206,7 @@ class TestCalculateMetrics:
             bolus_result,
             manual_corr_result,
             auto_corr_result,
+            seed_basal_result,
             basal_result,
         ]
 

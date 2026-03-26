@@ -88,8 +88,13 @@ async def build_glucose_section(
     if not readings:
         return None
 
-    latest = readings[0]
-    values = [r.value for r in readings]
+    # Filter out impossible CGM values before computing aggregates
+    valid_readings = [r for r in readings if 20 <= r.value <= 500]
+    if not valid_readings:
+        return None
+
+    latest = valid_readings[0]
+    values = [r.value for r in valid_readings]
     min_val = min(values)
     max_val = max(values)
     avg_val = sum(values) / len(values)
@@ -161,7 +166,7 @@ async def build_pump_section(
             manual_bolus_count += 1
             if event.units:
                 manual_bolus_units += event.units
-        elif event.event_type == PumpEventType.CORRECTION:
+        elif event.event_type == PumpEventType.CORRECTION and event.is_automated:
             auto_correction_count += 1
             if event.units:
                 auto_correction_units += event.units
@@ -354,12 +359,15 @@ async def get_pump_profile_summary(
     from src.models.pump_profile import PumpProfile
 
     result = await db.execute(
-        select(PumpProfile).where(
+        select(PumpProfile)
+        .where(
             PumpProfile.user_id == user_id,
-            PumpProfile.is_active == True,  # noqa: E712
+            PumpProfile.is_active.is_(True),
         )
+        .order_by(PumpProfile.synced_at.desc())
+        .limit(1)
     )
-    profile = result.scalars().first()
+    profile = result.scalar_one_or_none()
     if not profile:
         return None
 

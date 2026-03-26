@@ -218,7 +218,21 @@ async def calculate_metrics(
     auto_corr_count = auto_corr_row[0] or 0
     auto_corr_units = float(auto_corr_row[1] or 0)
 
-    # Basal delivery: integrate rate (u/hr) x time between consecutive events
+    # Basal delivery: integrate rate (u/hr) x time across the window.
+    # Fetch the last basal event BEFORE the window to seed the active rate,
+    # then all in-window events. Each segment runs until the next event or
+    # period_end, clamped to the window boundaries.
+    seed_result = await db.execute(
+        select(PumpEvent.event_timestamp, PumpEvent.units)
+        .where(
+            PumpEvent.user_id == user_id,
+            PumpEvent.event_timestamp < period_start,
+            PumpEvent.event_type == PumpEventType.BASAL,
+            PumpEvent.units.is_not(None),
+        )
+        .order_by(PumpEvent.event_timestamp.desc())
+        .limit(1)
+    )
     basal_result = await db.execute(
         select(PumpEvent.event_timestamp, PumpEvent.units)
         .where(
@@ -230,13 +244,18 @@ async def calculate_metrics(
         )
         .order_by(PumpEvent.event_timestamp)
     )
-    basal_events = basal_result.all()
+    basal_events = list(basal_result.all())
+    seed = seed_result.first()
+    if seed:
+        basal_events.insert(0, seed)
 
     basal_units = 0.0
-    for i in range(len(basal_events) - 1):
-        rate = basal_events[i][1]  # u/hr
-        t_start = basal_events[i][0]
-        t_end = basal_events[i + 1][0]
+    for i, (event_ts, rate) in enumerate(basal_events):
+        t_start = max(event_ts, period_start)
+        next_ts = basal_events[i + 1][0] if i + 1 < len(basal_events) else period_end
+        t_end = min(next_ts, period_end)
+        if t_end <= t_start:
+            continue
         duration_hours = (t_end - t_start).total_seconds() / 3600
         # Cap individual segment to 1 hour to handle gaps in data
         duration_hours = min(duration_hours, 1.0)

@@ -118,7 +118,7 @@ class TestGetPumpProfileSummary:
     async def test_returns_none_when_no_active_profile(self):
         db = AsyncMock()
         mock_result = MagicMock()
-        mock_result.scalars.return_value.first.return_value = None
+        mock_result.scalar_one_or_none.return_value = None
         db.execute.return_value = mock_result
 
         result = await get_pump_profile_summary(db, uuid.uuid4())
@@ -129,7 +129,7 @@ class TestGetPumpProfileSummary:
         db = AsyncMock()
         profile = _make_profile_model()
         mock_result = MagicMock()
-        mock_result.scalars.return_value.first.return_value = profile
+        mock_result.scalar_one_or_none.return_value = profile
         db.execute.return_value = mock_result
 
         result = await get_pump_profile_summary(db, uuid.uuid4())
@@ -148,7 +148,7 @@ class TestGetPumpProfileSummary:
         db = AsyncMock()
         profile = _make_profile_model(segments=["bad_segment", {"time": "00:00"}])
         mock_result = MagicMock()
-        mock_result.scalars.return_value.first.return_value = profile
+        mock_result.scalar_one_or_none.return_value = profile
         db.execute.return_value = mock_result
 
         result = await get_pump_profile_summary(db, uuid.uuid4())
@@ -160,7 +160,7 @@ class TestGetPumpProfileSummary:
         db = AsyncMock()
         profile = _make_profile_model(segments=[{}])
         mock_result = MagicMock()
-        mock_result.scalars.return_value.first.return_value = profile
+        mock_result.scalar_one_or_none.return_value = profile
         db.execute.return_value = mock_result
 
         result = await get_pump_profile_summary(db, uuid.uuid4())

@@ -448,11 +448,12 @@ def _mock_none_scalar() -> MagicMock:
 
 
 def _mock_scalars_first(value: object) -> MagicMock:
-    """Create a mock DB result that returns value via scalars().first()."""
+    """Create a mock DB result that returns value via scalars().first() or scalar_one_or_none()."""
     result = MagicMock()
     scalars_mock = MagicMock()
     scalars_mock.first.return_value = value
     result.scalars.return_value = scalars_mock
+    result.scalar_one_or_none.return_value = value
     return result
 
 

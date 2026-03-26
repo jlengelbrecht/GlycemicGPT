@@ -61,14 +61,14 @@ vs over-corrected (glucose dropped below 70 mg/dL), the average observed ISF \
 
 When the user's pump profile is provided, compare the observed ISF against \
 the user's currently configured correction factors for each time period. \
-Reference the actual configured values in your suggestions (e.g., "Your \
-configured morning ISF is 1:50 but observed corrections average 40 mg/dL \
-drop per unit, suggesting 1:45 may be more accurate").
+Reference the current configured values when explaining the pattern, but keep \
+recommendations directional only (e.g., "your morning ISF is currently 1:50 \
+but observed corrections suggest it may be weaker than needed for this period").
 
 Guidelines:
 - Identify which time periods show consistent under- or over-correction
-- For problematic periods, suggest a specific correction factor direction \
-using the user's actual current ISF as the starting point
+- For problematic periods, suggest whether the factor may need to be stronger \
+or weaker, using the current ISF only as context
 - Explain reasoning: "Your morning corrections average only X mg/dL drop per \
 unit, suggesting your ISF may be too weak for this period"
 - Use encouraging, non-judgmental language
