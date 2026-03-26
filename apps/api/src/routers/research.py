@@ -2,13 +2,14 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import DiabeticOrAdminUser
 from src.database import get_db
 from src.logging_config import get_logger
+from src.middleware.rate_limit import limiter
 from src.models.research_source import ResearchSource
 from src.schemas.auth import ErrorResponse
 from src.schemas.research import (
@@ -68,8 +69,6 @@ async def add_research_source(
     """Add a new research source URL."""
     from sqlalchemy import func
 
-    from src.schemas.ai_provider import _validate_base_url
-
     # Check source limit
     count_result = await db.execute(
         select(func.count()).where(ResearchSource.user_id == current_user.id)
@@ -90,11 +89,16 @@ async def add_research_source(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="This URL is already configured")
 
-    # SSRF validation
+    # SSRF validation (use research-specific validator that always blocks private IPs)
     try:
-        _validate_base_url(request.url)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        from src.services.research_pipeline import _validate_research_url
+
+        _validate_research_url(request.url)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid URL. Research sources must use HTTPS and target public addresses.",
+        )
 
     source = ResearchSource(
         user_id=current_user.id,
@@ -171,13 +175,19 @@ async def delete_research_source(
     response_model=ResearchRunResponse,
     responses={
         401: {"model": ErrorResponse, "description": "Not authenticated"},
+        429: {"model": ErrorResponse, "description": "Rate limited"},
     },
 )
+@limiter.limit("2/hour")
 async def trigger_research(
+    request: Request,
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
 ) -> ResearchRunResponse:
-    """Manually trigger the research pipeline for the current user."""
+    """Manually trigger the research pipeline for the current user.
+
+    Rate limited to 2 runs per hour to prevent abuse.
+    """
     from src.services.research_pipeline import research_for_user
 
     result = await research_for_user(db, current_user.id)

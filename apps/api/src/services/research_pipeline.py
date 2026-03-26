@@ -107,22 +107,88 @@ def _compute_hash(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()
 
 
+def _validate_research_url(url: str) -> None:
+    """Validate a research URL at fetch time (defense in depth).
+
+    Unlike AI provider URLs, research sources must NEVER target private
+    networks, regardless of allow_private_ai_urls setting.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("Research sources must use HTTPS")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Invalid URL")
+
+    # Always block cloud metadata
+    blocked_hosts = {"169.254.169.254", "metadata.google.internal", "metadata.internal"}
+    if hostname.lower() in blocked_hosts:
+        raise ValueError("Invalid URL")
+
+    # Always block private/loopback IPs for research (no bypass)
+    try:
+        addrs = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for entry in addrs:
+            addr = ipaddress.ip_address(entry[4][0])
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+            ):
+                raise ValueError("Invalid URL")
+    except (socket.gaierror, OSError) as exc:
+        raise ValueError("Invalid URL") from exc
+
+
 async def fetch_source_content(url: str) -> str | None:
     """Fetch content from a research source URL.
 
-    Returns extracted text content, or None on failure.
-    SSRF protection is handled at source creation time.
+    SSRF protection: re-validates URL at fetch time (not just creation),
+    blocks redirects, checks Content-Length before download.
     """
+    # Re-validate at fetch time (defense against DNS rebinding)
+    try:
+        _validate_research_url(url)
+    except ValueError:
+        logger.warning("Research URL failed fetch-time validation", url=url)
+        return None
+
     try:
         async with httpx.AsyncClient(
             timeout=FETCH_TIMEOUT_SECONDS,
-            follow_redirects=True,
+            follow_redirects=False,  # Redirects disabled to prevent SSRF
             headers={"User-Agent": "GlycemicGPT Research Bot/1.0"},
         ) as client:
             response = await client.get(url)
+
+            # Reject redirects explicitly
+            if response.is_redirect:
+                logger.warning(
+                    "Research source returned redirect (blocked)",
+                    url=url,
+                    location=response.headers.get("location", ""),
+                )
+                return None
+
             response.raise_for_status()
 
-            # Check content size
+            # Check Content-Length before reading body (prevent OOM)
+            content_length = response.headers.get("content-length")
+            if content_length and int(content_length) > MAX_CONTENT_BYTES:
+                logger.warning(
+                    "Research source content too large (Content-Length)",
+                    url=url,
+                    size=content_length,
+                )
+                return None
+
+            # Check actual body size
             if len(response.content) > MAX_CONTENT_BYTES:
                 logger.warning(
                     "Research source content too large",
@@ -287,8 +353,10 @@ async def research_for_user(
     for source in sources:
         try:
             status = await research_source(db, source)
+            await db.commit()  # Commit after each source for isolation
             summary[status["status"]] = summary.get(status["status"], 0) + 1
         except Exception:
+            await db.rollback()
             logger.error(
                 "Research failed for source",
                 url=source.url,
@@ -296,8 +364,6 @@ async def research_for_user(
                 exc_info=True,
             )
             summary["errors"] += 1
-
-    await db.commit()
 
     logger.info(
         "Research pipeline completed for user",
