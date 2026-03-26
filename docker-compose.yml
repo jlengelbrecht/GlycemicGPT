@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-glycemicgpt}
@@ -63,6 +63,8 @@ services:
       AI_SIDECAR_URL: http://ai-sidecar:3456
       AI_SIDECAR_API_KEY: ${SIDECAR_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+    volumes:
+      - embedding_cache:/root/.cache/fastembed
     depends_on:
       db:
         condition: service_healthy
@@ -101,3 +103,4 @@ volumes:
   redis_data:
   sidecar_auth:
   sidecar_codex:
+  embedding_cache:

@@ -64,6 +64,18 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     logger.info("Background scheduler started")
 
+    # Seed knowledge base on first startup (Story 35.9)
+    try:
+        from src.database import get_session_maker
+        from src.services.knowledge_seed import seed_knowledge_base
+
+        async with get_session_maker()() as db:
+            seeded = await seed_knowledge_base(db)
+            if seeded > 0:
+                logger.info("Knowledge base bootstrap complete", chunks=seeded)
+    except Exception:
+        logger.warning("Knowledge base seed skipped", exc_info=True)
+
     yield
 
     # Shutdown
