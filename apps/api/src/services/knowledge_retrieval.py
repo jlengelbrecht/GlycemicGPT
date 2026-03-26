@@ -132,8 +132,8 @@ def format_knowledge_for_prompt(chunks: list[KnowledgeChunk]) -> str | None:
         content = chunk.content.strip()
         if total_chars + len(content) > max_knowledge_chars:
             break
-        tier_label = chunk.trust_tier.upper()
-        source = chunk.source_name or chunk.source_type
+        tier_label = (chunk.trust_tier or "UNKNOWN").upper()
+        source = chunk.source_name or chunk.source_type or "unknown source"
         lines.append(f"[{tier_label} - {source}]")
         lines.append(content)
         lines.append("[END REFERENCE]")

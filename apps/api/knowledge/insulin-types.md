@@ -26,7 +26,8 @@
 
 ### Fiasp (faster insulin aspart)
 - Manufacturer: Novo Nordisk
-- Onset: approximately 2.5 minutes (subcutaneous), up to 5 minutes faster than Novolog
+- Plasma appearance: approximately 2.5 minutes
+- Clinical onset (glucose-lowering effect): 10-25 minutes (approximately 5-6 minutes faster than Novolog)
 - Peak: 45-90 minutes (earlier peak than standard rapid-acting)
 - Duration: 3-5 hours
 - Available concentrations: U-100
@@ -62,7 +63,7 @@
 
 When insulin is delivered via an insulin pump, the pharmacokinetic profile differs slightly from manual injection:
 - Continuous subcutaneous infusion creates a more stable basal insulin level
-- Bolus delivery through the pump follows the same onset/peak/duration as manual injection
+- For standard rapid-acting insulins, bolus delivery via pump has similar pharmacokinetics to manual injection. Ultra-rapid formulations (Fiasp, Lyumjev) may show even faster onset in pump delivery compared to manual injection
 - Infusion site condition affects absorption: sites used for more than 3 days may show reduced absorption
 - Body temperature, exercise, and site location (abdomen vs arm vs thigh) affect absorption rates
 - Duration of Insulin Action (DIA) in pump settings should typically be set to 4-6 hours for rapid-acting insulins, matching the metabolic effect duration rather than the detectable insulin duration

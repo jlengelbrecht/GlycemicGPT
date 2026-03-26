@@ -33,6 +33,9 @@ def _chunk_text(
     semantic units together. Falls back to character-level splitting
     if paragraphs are too long.
     """
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be less than chunk_size")
+
     paragraphs = text.split("\n\n")
     chunks: list[str] = []
     current = ""

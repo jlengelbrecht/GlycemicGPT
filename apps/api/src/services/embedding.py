@@ -4,13 +4,16 @@ Generates text embeddings using fastembed (in-process, CPU-only).
 The model downloads on first use (~500MB) and caches to disk.
 """
 
+import threading
+
 from src.config import settings
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Lazy-loaded model instance
+# Lazy-loaded model instance with thread-safe initialization
 _model = None
+_model_lock = threading.Lock()
 
 # Default model -- good balance of quality and size, runs on CPU
 DEFAULT_EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
@@ -20,14 +23,17 @@ def _get_model():
     """Get or initialize the embedding model (lazy loading)."""
     global _model
     if _model is None:
-        from fastembed import TextEmbedding
+        with _model_lock:
+            if _model is None:  # Double-check after acquiring lock
+                from fastembed import TextEmbedding
 
-        model_name = (
-            getattr(settings, "embedding_model", None) or DEFAULT_EMBEDDING_MODEL
-        )
-        logger.info("Loading embedding model", model=model_name)
-        _model = TextEmbedding(model_name=model_name)
-        logger.info("Embedding model loaded", model=model_name)
+                model_name = (
+                    getattr(settings, "embedding_model", None)
+                    or DEFAULT_EMBEDDING_MODEL
+                )
+                logger.info("Loading embedding model", model=model_name)
+                _model = TextEmbedding(model_name=model_name)
+                logger.info("Embedding model loaded", model=model_name)
     return _model
 
 

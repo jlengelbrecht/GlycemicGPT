@@ -50,8 +50,9 @@ Overnight glucose control is critical for overall diabetes management. Common pa
 
 Control-IQ Sleep Mode:
 - Tightens target range to 112.5-120 mg/dL (vs standard 112.5-160 mg/dL)
-- More aggressive with automated corrections
-- Less aggressive with basal rate increases to reduce hypoglycemia risk
+- Does NOT deliver automated correction boluses (basal adjustments only)
+- Increases basal insulin when predicted glucose exceeds 120 mg/dL (lower threshold than standard mode's 160 mg/dL)
+- Reduces basal insulin when predicted glucose drops below 112.5 mg/dL
 - Should be scheduled for typical sleep hours in pump settings
 
 ## Time in Range (TIR) Targets
