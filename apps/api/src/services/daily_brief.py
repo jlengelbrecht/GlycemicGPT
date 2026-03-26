@@ -158,13 +158,21 @@ async def calculate_metrics(
     )
     correction_count = correction_result.scalar() or 0
 
-    # Query total insulin delivered
+    # Query total insulin delivered via discrete bolus/correction events.
+    # Basal events store the *rate* (u/hr), not delivered doses, so they
+    # must be excluded to avoid wildly inflated totals.  Reservoir and
+    # battery events also carry a units field (level / percentage).
+    insulin_delivery_types = [
+        PumpEventType.BOLUS,
+        PumpEventType.CORRECTION,
+    ]
     insulin_result = await db.execute(
         select(func.sum(PumpEvent.units)).where(
             PumpEvent.user_id == user_id,
             PumpEvent.event_timestamp >= period_start,
             PumpEvent.event_timestamp < period_end,
             PumpEvent.units.is_not(None),
+            PumpEvent.event_type.in_(insulin_delivery_types),
         )
     )
     total_insulin = insulin_result.scalar()
