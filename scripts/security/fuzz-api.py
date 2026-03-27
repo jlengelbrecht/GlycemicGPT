@@ -73,7 +73,10 @@ def setup_session(client: httpx.Client) -> bool:
     Returns True if login succeeded (cookies are set on the client).
     """
     email = f"fuzz_{uuid.uuid4().hex[:10]}@example.com"
-    password = os.environ.get("TEST_PASSWORD", f"Fuzz-{uuid.uuid4().hex[:8]}!")
+    password = os.environ.get("TEST_PASSWORD")
+    if not password:
+        print("WARNING: TEST_PASSWORD not set, generating random password")
+        password = f"Fuzz-{uuid.uuid4().hex[:16]}!"
 
     client.post(
         f"{API_URL}/api/auth/register",

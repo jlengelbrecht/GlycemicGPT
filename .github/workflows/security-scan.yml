@@ -149,10 +149,16 @@ jobs:
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
         run: python scripts/security/test-research-security.py
 
+      - name: Reset rate limits before fuzzer
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
+
       - name: Run API fuzzer
         id: fuzzer
         env:
           API_URL: http://localhost:8001
+          TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: python scripts/security/fuzz-api.py
 
