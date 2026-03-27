@@ -253,7 +253,7 @@ async def get_knowledge_stats(
         .where(*base_filters)
         .group_by(KnowledgeChunk.trust_tier)
     )
-    by_tier = {row[0]: row[1] for row in tier_result.all()}
+    by_tier = {(row[0] or "UNKNOWN"): row[1] for row in tier_result.all()}
 
     # Document count (matching grouped definition from list_documents)
     stats_subq = (
