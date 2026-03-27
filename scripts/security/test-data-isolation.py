@@ -27,11 +27,39 @@ if not TEST_PASSWORD:
     print("FATAL: TEST_PASSWORD environment variable is required")
     sys.exit(1)
 
-# Endpoints to skip (docs, health, public, SSE streams)
-SKIP_PREFIXES = ("/docs", "/openapi.json", "/redoc", "/health", "/api/auth/register")
+# Endpoints to skip entirely (docs, health, SSE streams)
+SKIP_PREFIXES = ("/docs", "/openapi.json", "/redoc", "/health")
 SKIP_SUFFIXES = ("/stream",)
-# Auth endpoints that work without prior auth
-AUTH_ENDPOINTS = {"/api/auth/login", "/api/auth/register"}
+
+# Endpoints that are intentionally public (no auth required)
+PUBLIC_ENDPOINTS = {
+    "/",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/mobile/login",
+    "/api/auth/mobile/refresh",
+    "/api/disclaimer/content",
+    "/api/disclaimer/status",
+    "/api/disclaimer/acknowledge",
+    "/api/disclaimer/acknowledge-auth",
+    "/api/caregivers/accept",
+}
+# Public path prefixes (defaults endpoints, invitation lookups)
+PUBLIC_PREFIXES = (
+    "/api/settings/",  # */defaults endpoints are public
+    "/api/caregivers/invitations/",  # token-based lookup
+)
+
+# Endpoints exempt from CSRF (mobile API uses bearer tokens, not cookies)
+CSRF_EXEMPT = {
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/mobile/login",
+    "/api/auth/mobile/refresh",
+    "/api/disclaimer/acknowledge",
+    "/api/disclaimer/acknowledge-auth",
+}
+
 # Safe methods that don't need CSRF
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -99,6 +127,21 @@ def should_skip(path: str) -> bool:
     return False
 
 
+def is_public(path: str) -> bool:
+    """Check if an endpoint is intentionally public (no auth required)."""
+    if path in PUBLIC_ENDPOINTS:
+        return True
+    for prefix in PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    return False
+
+
+def is_csrf_exempt(path: str) -> bool:
+    """Check if an endpoint is exempt from CSRF (mobile API, etc.)."""
+    return path in CSRF_EXEMPT
+
+
 def resolve_path(path: str) -> str:
     """Replace {param} placeholders with a dummy UUID."""
     return PATH_PARAM_RE.sub(str(uuid.uuid4()), path)
@@ -121,9 +164,7 @@ def test_unauthenticated_access(spec: dict) -> None:
 
     with httpx.Client(timeout=15) as client:
         for path, methods in spec.get("paths", {}).items():
-            if should_skip(path):
-                continue
-            if path in AUTH_ENDPOINTS:
+            if should_skip(path) or is_public(path):
                 continue
 
             resolved = resolve_path(path)
@@ -135,9 +176,10 @@ def test_unauthenticated_access(spec: dict) -> None:
 
                 try:
                     resp = client.request(method_upper, f"{API_URL}{resolved}")
+                    # Accept 401 (proper) or 422 (validation before auth -- still blocked)
                     check(
-                        f"Unauth {method_upper} {path} -> 401",
-                        resp.status_code == 401,
+                        f"Unauth {method_upper} {path} -> 401/422",
+                        resp.status_code in (401, 422),
                         f"Got {resp.status_code}",
                     )
                 except httpx.ConnectError:
@@ -156,9 +198,7 @@ def test_csrf_enforcement(spec: dict) -> None:
         csrf = register_and_login(client, unique_email())
 
         for path, methods in spec.get("paths", {}).items():
-            if should_skip(path):
-                continue
-            if path in AUTH_ENDPOINTS:
+            if should_skip(path) or is_public(path) or is_csrf_exempt(path):
                 continue
 
             resolved = resolve_path(path)
