@@ -123,37 +123,43 @@ def test_source_limits() -> None:
     with httpx.Client(timeout=30) as client:
         csrf = register_and_login(client, unique_email())
 
-        # Add 10 sources (the max)
+        # Add 10 sources (the max) using resolvable domains
+        # Use subpaths on a single real domain to avoid DNS resolution failures
+        added = 0
         for i in range(10):
             resp = client.post(
                 f"{API_URL}/api/ai/research/sources",
                 json={
-                    "url": f"https://www.example{i}.com/docs",
+                    "url": f"https://www.google.com/search?q=test{i}",
                     "name": f"Source {i}",
                 },
                 headers={"X-CSRF-Token": csrf},
             )
-            if i < 10:
-                check(
-                    f"Source {i+1}/10 added",
-                    resp.status_code == 201,
-                    f"Got {resp.status_code}",
-                )
+            if resp.status_code == 201:
+                added += 1
+            check(
+                f"Source {i+1}/10 added",
+                resp.status_code == 201,
+                f"Got {resp.status_code}",
+            )
 
-        # 11th should fail
+        # 11th should fail (only if all 10 were added)
         resp = client.post(
             f"{API_URL}/api/ai/research/sources",
             json={
-                "url": "https://www.example11.com/docs",
+                "url": "https://www.google.com/search?q=overflow",
                 "name": "Source 11 (should fail)",
             },
             headers={"X-CSRF-Token": csrf},
         )
-        check(
-            "11th source rejected (limit 10)",
-            resp.status_code == 400,
-            f"Got {resp.status_code}",
-        )
+        if added == 10:
+            check(
+                "11th source rejected (limit 10)",
+                resp.status_code == 400,
+                f"Got {resp.status_code}",
+            )
+        else:
+            print(f"    SKIP: Only {added}/10 sources were added, cannot test limit")
 
 
 # ---------------------------------------------------------------------------
