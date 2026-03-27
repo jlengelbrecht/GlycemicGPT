@@ -50,13 +50,10 @@ async def list_documents(
         base_filters.append(KnowledgeChunk.trust_tier == trust_tier)
 
     if search:
-        search_pattern = f"%{search}%"
-        base_filters.append(
-            or_(
-                KnowledgeChunk.source_name.ilike(search_pattern),
-                KnowledgeChunk.content.ilike(search_pattern),
-            )
-        )
+        # Escape ILIKE wildcards, search source_name only (not content -- too expensive)
+        escaped = search.replace("%", r"\%").replace("_", r"\_")
+        search_pattern = f"%{escaped}%"
+        base_filters.append(KnowledgeChunk.source_name.ilike(search_pattern))
 
     # Get grouped documents with aggregates
     group_cols = [
@@ -85,19 +82,14 @@ async def list_documents(
         .order_by(func.max(KnowledgeChunk.created_at).desc())
     )
 
-    # Get total count first
-    count_query = select(
-        func.count(
-            func.distinct(
-                func.concat(
-                    KnowledgeChunk.source_name,
-                    "||",
-                    func.coalesce(KnowledgeChunk.source_url, ""),
-                )
-            )
-        )
-    ).where(*base_filters)
-    total_doc_result = await db.execute(count_query)
+    # Get total document count using subquery (count grouped rows)
+    subq = (
+        select(KnowledgeChunk.source_name)
+        .where(*base_filters)
+        .group_by(*group_cols)
+        .subquery()
+    )
+    total_doc_result = await db.execute(select(func.count()).select_from(subq))
     total_documents = total_doc_result.scalar() or 0
 
     # Total chunks
@@ -212,25 +204,32 @@ async def delete_document(
     else:
         filters.append(KnowledgeChunk.source_url.is_(None))
 
-    result = await db.execute(select(KnowledgeChunk).where(*filters))
-    chunks = list(result.scalars().all())
+    # Bulk update for efficiency (avoids loading all chunks into memory)
+    from sqlalchemy import update
 
-    for chunk in chunks:
-        chunk.valid_to = now
-        chunk.updated_at = now
-        chunk.update_source = "manual_delete"
-        chunk.change_summary = "Deleted by user via Knowledge Base UI"
+    result = await db.execute(
+        update(KnowledgeChunk)
+        .where(*filters)
+        .values(
+            valid_to=now,
+            updated_at=now,
+            update_source="manual_delete",
+            change_summary="Deleted by user via Knowledge Base UI",
+        )
+    )
+    count = result.rowcount
 
-    await db.commit()
+    if count > 0:
+        await db.commit()
 
     logger.info(
         "Knowledge document deleted",
         user_id=str(user_id),
         source_name=source_name,
-        chunks_invalidated=len(chunks),
+        chunks_invalidated=count,
     )
 
-    return len(chunks)
+    return count
 
 
 async def get_knowledge_stats(

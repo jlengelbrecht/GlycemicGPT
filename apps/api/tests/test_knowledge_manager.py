@@ -97,34 +97,28 @@ class TestDeleteDocument:
     async def test_soft_deletes_user_owned_chunks(self):
         db = AsyncMock()
 
-        chunk1 = MagicMock()
-        chunk1.valid_to = None
-        chunk2 = MagicMock()
-        chunk2.valid_to = None
-
+        # Bulk UPDATE returns rowcount
         result = MagicMock()
-        result.scalars.return_value.all.return_value = [chunk1, chunk2]
+        result.rowcount = 2
         db.execute.return_value = result
 
         count = await delete_document(
             db, uuid.uuid4(), "My Document", "https://example.com"
         )
         assert count == 2
-        assert chunk1.valid_to is not None
-        assert chunk2.valid_to is not None
-        assert chunk1.update_source == "manual_delete"
-        assert chunk2.change_summary == "Deleted by user via Knowledge Base UI"
+        db.execute.assert_called_once()
         db.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_returns_zero_when_no_chunks_found(self):
         db = AsyncMock()
         result = MagicMock()
-        result.scalars.return_value.all.return_value = []
+        result.rowcount = 0
         db.execute.return_value = result
 
         count = await delete_document(db, uuid.uuid4(), "No Such Document")
         assert count == 0
+        db.commit.assert_not_called()  # No commit on empty result
 
 
 class TestGetKnowledgeStats:

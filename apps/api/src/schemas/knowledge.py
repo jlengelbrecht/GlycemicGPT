@@ -41,6 +41,8 @@ class KnowledgeDocumentListResponse(BaseModel):
     documents: list[KnowledgeDocumentSummary]
     total_documents: int
     total_chunks: int
+    page: int = 1
+    page_size: int = 20
 
 
 class KnowledgeDocumentDetailResponse(BaseModel):

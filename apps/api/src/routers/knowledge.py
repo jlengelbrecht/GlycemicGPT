@@ -29,7 +29,11 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 async def list_knowledge_documents(
     current_user: DiabeticOrAdminUser,
     db: AsyncSession = Depends(get_db),
-    trust_tier: str | None = Query(default=None, description="Filter by trust tier"),
+    trust_tier: str | None = Query(
+        default=None,
+        description="Filter by trust tier",
+        pattern="^(AUTHORITATIVE|CURATED|RESEARCHED|USER_PROVIDED|EXTRACTED)$",
+    ),
     search: str | None = Query(default=None, max_length=200, description="Search text"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -50,6 +54,8 @@ async def list_knowledge_documents(
         documents=documents,
         total_documents=total_docs,
         total_chunks=total_chunks,
+        page=page,
+        page_size=page_size,
     )
 
 
@@ -83,11 +89,30 @@ async def get_document_chunks(
     if not chunks and total == 0:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # Get source_type and trust_tier from the database for this document
+    from sqlalchemy import or_, select
+
+    from src.models.knowledge_chunk import KnowledgeChunk
+
+    meta_result = await db.execute(
+        select(KnowledgeChunk.source_type, KnowledgeChunk.trust_tier)
+        .where(
+            or_(
+                KnowledgeChunk.user_id == current_user.id,
+                KnowledgeChunk.user_id.is_(None),
+            ),
+            KnowledgeChunk.valid_to.is_(None),
+            KnowledgeChunk.source_name == source_name,
+        )
+        .limit(1)
+    )
+    meta = meta_result.first()
+
     return KnowledgeDocumentDetailResponse(
         source_name=source_name,
         source_url=source_url,
-        source_type=chunks[0].source_url if chunks else "unknown",
-        trust_tier="UNKNOWN",  # Will be populated from first chunk
+        source_type=meta[0] if meta else "unknown",
+        trust_tier=meta[1] if meta else "UNKNOWN",
         chunk_count=len(chunks),
         chunks=chunks,
         total=total,

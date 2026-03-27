@@ -175,7 +175,11 @@ export default function KnowledgeBasePage() {
 
   // Filters
   const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Expanded documents
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set());
@@ -184,24 +188,35 @@ export default function KnowledgeBasePage() {
 
   const docKey = (doc: KnowledgeDocument) => `${doc.source_name}||${doc.source_url || ""}`;
 
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  const PAGE_SIZE = 20;
+
   const loadData = useCallback(async () => {
     setError(null);
     try {
       const [docsData, statsData] = await Promise.all([
         getKnowledgeDocuments({
           trust_tier: tierFilter || undefined,
-          search: searchText || undefined,
+          search: debouncedSearch || undefined,
+          page,
+          page_size: PAGE_SIZE,
         }),
         getKnowledgeStats(),
       ]);
       setDocuments(docsData.documents);
       setStats(statsData);
+      setTotalPages(Math.max(1, Math.ceil(docsData.total_documents / PAGE_SIZE)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load knowledge base");
     } finally {
       setLoading(false);
     }
-  }, [tierFilter, searchText]);
+  }, [tierFilter, debouncedSearch, page]);
 
   useEffect(() => {
     loadData();
@@ -239,9 +254,12 @@ export default function KnowledgeBasePage() {
   }, [docChunks]);
 
   const handleDelete = useCallback(async (doc: KnowledgeDocument) => {
+    const key = docKey(doc);
+    if (deleting) return; // Prevent double-click
     if (!confirm(`Delete "${doc.source_name}"? This will remove all ${doc.chunk_count} chunks from the knowledge base.`)) {
       return;
     }
+    setDeleting(key);
     setError(null);
     try {
       const result = await deleteKnowledgeDocument(doc.source_name, doc.source_url);
@@ -249,8 +267,10 @@ export default function KnowledgeBasePage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete document");
+    } finally {
+      setDeleting(null);
     }
-  }, [loadData]);
+  }, [loadData, deleting]);
 
   if (loading) {
     return (
@@ -387,6 +407,29 @@ export default function KnowledgeBasePage() {
               />
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-slate-400">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
