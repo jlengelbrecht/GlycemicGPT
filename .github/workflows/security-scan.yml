@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: security-scan-${{ github.ref }}
@@ -107,6 +107,7 @@ jobs:
           fi
 
       - name: Run auth flow tests
+        id: auth-tests
         env:
           API_URL: http://localhost:8001
           WEB_URL: http://localhost:3001
@@ -130,6 +131,7 @@ jobs:
           sleep 2
 
       - name: Run data isolation tests (IDOR)
+        id: idor-tests
         env:
           API_URL: http://localhost:8001
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
@@ -141,22 +143,92 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
 
       - name: Run research security tests (SSRF, rate limiting)
+        id: research-tests
         env:
           API_URL: http://localhost:8001
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
         run: python scripts/security/test-research-security.py
 
       - name: Run API fuzzer
+        id: fuzzer
         env:
           API_URL: http://localhost:8001
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: python scripts/security/fuzz-api.py
 
       - name: Run DAST scanner
+        id: dast
         env:
           API_URL: http://localhost:8001
           WEB_URL: http://localhost:3001
         run: ./scripts/security/run-dast.sh
+
+      - name: Generate bot token for PR comment
+        if: always() && github.event_name == 'pull_request'
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Post security scan results to PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Collect results from each test suite
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            ICON="white_check_mark"
+            VERDICT="All security checks passed"
+          else
+            ICON="x"
+            VERDICT="Security issues detected -- review required"
+          fi
+
+          # Build the comment body
+          COMMENT="## :shield: Security Scan Results
+
+          **Verdict:** :${ICON}: ${VERDICT}
+
+          | Test Suite | Status |
+          |-----------|--------|
+          | Auth Flow Tests | ${{ steps.auth-tests.outcome || 'run' }} |
+          | Data Isolation (IDOR) | ${{ steps.idor-tests.outcome || 'run' }} |
+          | Research Security (SSRF) | ${{ steps.research-tests.outcome || 'run' }} |
+          | API Fuzzer | ${{ steps.fuzzer.outcome || 'run' }} |
+          | DAST Scanner | ${{ steps.dast.outcome || 'run' }} |
+
+          <details>
+          <summary>What was tested</summary>
+
+          - **Auth flows**: Login, CSRF, CORS, session management, rate limiting
+          - **Data isolation**: Cross-user access prevention on chat history, knowledge base, research sources
+          - **SSRF prevention**: Private IP blocking, metadata endpoint blocking, HTTPS enforcement
+          - **Rate limiting**: Research trigger (2/hour), global limits (120/min)
+          - **CSRF enforcement**: All POST/DELETE endpoints require valid CSRF token
+          - **API fuzzing**: SQL injection, XSS, path traversal payloads
+          - **DAST scanning**: Known vulnerability templates (nuclei)
+
+          </details>
+
+          ---
+          *Posted by [homebot.0](https://github.com/apps/homebot-0) -- GlycemicGPT Security Scanner*"
+
+          # Post or update the comment
+          EXISTING=$(gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+            --jq '.[] | select(.body | contains("Security Scan Results")) | .id' | head -1)
+
+          if [ -n "$EXISTING" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/${EXISTING} \
+              -X PATCH -f body="$COMMENT"
+            echo "Updated existing security scan comment"
+          else
+            gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+              -f body="$COMMENT"
+            echo "Posted new security scan comment"
+          fi
 
       - name: Upload scan results
         if: always()
