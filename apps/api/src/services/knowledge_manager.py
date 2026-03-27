@@ -205,10 +205,8 @@ async def delete_document(
         filters.append(KnowledgeChunk.source_url.is_(None))
 
     # Bulk update for efficiency (avoids loading all chunks into memory)
-    from sqlalchemy import update
-
     result = await db.execute(
-        update(KnowledgeChunk)
+        sa.update(KnowledgeChunk)
         .where(*filters)
         .values(
             valid_to=now,
