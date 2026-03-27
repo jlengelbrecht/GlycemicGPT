@@ -19,7 +19,11 @@ import uuid
 import httpx
 
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
-TEST_PASSWORD = os.environ.get("TEST_PASSWORD", f"RsrchSec-{uuid.uuid4().hex[:8]}!")
+TEST_PASSWORD = os.environ.get("TEST_PASSWORD")
+if not TEST_PASSWORD:
+    print("FATAL: TEST_PASSWORD environment variable is required")
+    print("Set it via GitHub Actions secret or export it locally")
+    sys.exit(1)
 
 passed = 0
 failed = 0

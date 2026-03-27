@@ -18,7 +18,11 @@ import uuid
 import httpx
 
 API_URL = os.environ.get("API_URL", "http://localhost:8001")
-TEST_PASSWORD = os.environ.get("TEST_PASSWORD", f"IsolTest-{uuid.uuid4().hex[:8]}!")
+TEST_PASSWORD = os.environ.get("TEST_PASSWORD")
+if not TEST_PASSWORD:
+    print("FATAL: TEST_PASSWORD environment variable is required")
+    print("Set it via GitHub Actions secret or export it locally")
+    sys.exit(1)
 
 passed = 0
 failed = 0
@@ -28,8 +32,13 @@ def unique_email() -> str:
     return f"isoltest_{uuid.uuid4().hex[:12]}@example.com"
 
 
-def register_and_login(client: httpx.Client, email: str) -> str:
-    """Register a user, login, acknowledge disclaimer, return CSRF token."""
+def register_and_login(client: httpx.Client, email: str, max_retries: int = 3) -> str:
+    """Register a user, login, acknowledge disclaimer, return CSRF token.
+
+    Retries on rate limit (429) with exponential backoff.
+    """
+    import time
+
     # Register
     resp = client.post(
         f"{API_URL}/api/auth/register",
@@ -37,11 +46,18 @@ def register_and_login(client: httpx.Client, email: str) -> str:
     )
     assert resp.status_code in (201, 200), f"Register failed: {resp.status_code} {resp.text}"
 
-    # Login
-    resp = client.post(
-        f"{API_URL}/api/auth/login",
-        json={"email": email, "password": TEST_PASSWORD},
-    )
+    # Login (with rate limit retry)
+    for attempt in range(max_retries):
+        resp = client.post(
+            f"{API_URL}/api/auth/login",
+            json={"email": email, "password": TEST_PASSWORD},
+        )
+        if resp.status_code == 429:
+            wait = 2 ** attempt
+            print(f"    (rate limited on login, waiting {wait}s...)")
+            time.sleep(wait)
+            continue
+        break
     assert resp.status_code == 200, f"Login failed: {resp.status_code} {resp.text}"
 
     # Acknowledge disclaimer if required
