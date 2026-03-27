@@ -121,15 +121,23 @@ jobs:
           export TEST_SECRET_KEY
           python scripts/security/test-auth-flows.py
 
-      - name: Rate limit cooldown
+      - name: Reset rate limits between test suites
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: |
-          echo "Waiting 15s for rate limiter to reset between test suites..."
-          sleep 15
+          echo "Flushing Redis rate limit counters between test suites..."
+          docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
+          sleep 2
 
       - name: Run data isolation tests (IDOR)
         env:
           API_URL: http://localhost:8001
         run: python scripts/security/test-data-isolation.py
+
+      - name: Reset rate limits before research tests
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
 
       - name: Run research security tests (SSRF, rate limiting)
         env:
