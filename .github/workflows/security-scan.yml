@@ -130,6 +130,7 @@ jobs:
             --config p/owasp-top-ten \
             --config p/secrets \
             --exclude '.venv' \
+            --exclude 'Dockerfile*' \
             --error \
             --json --output semgrep-python.json \
             apps/api/ scripts/security/

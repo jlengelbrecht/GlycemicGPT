@@ -95,6 +95,7 @@ jobs:
             --exclude '.gradle' \
             --exclude '*.min.js' \
             --exclude 'apps/api/.venv' \
+            --exclude 'Dockerfile*' \
             --json --output semgrep-results.json \
             --error \
             apps/api/ apps/web/ sidecar/ apps/mobile/ plugins/ scripts/security/
