@@ -125,6 +125,7 @@ jobs:
           needs.detect-changes.outputs.run_all == 'true' ||
           github.event_name == 'workflow_dispatch'
         run: |
+          EXIT=0
           semgrep scan \
             --config p/python \
             --config p/owasp-top-ten \
@@ -132,7 +133,8 @@ jobs:
             --exclude '.venv' \
             --exclude 'Dockerfile*' \
             --json --output semgrep-python.json \
-            apps/api/ scripts/security/ || true
+            apps/api/ scripts/security/ || EXIT=$?
+          echo "semgrep_python_exit=$EXIT" >> "$GITHUB_ENV"
 
       - name: Semgrep TypeScript (Web + Sidecar)
         id: semgrep-typescript
@@ -153,13 +155,15 @@ jobs:
              [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PATHS="$PATHS sidecar/"
           fi
+          EXIT=0
           semgrep scan \
             --config p/typescript \
             --config p/owasp-top-ten \
             --config p/secrets \
             --exclude 'node_modules' \
             --json --output semgrep-typescript.json \
-            $PATHS || true
+            $PATHS || EXIT=$?
+          echo "semgrep_typescript_exit=$EXIT" >> "$GITHUB_ENV"
 
       - name: Semgrep Kotlin (Mobile)
         id: semgrep-kotlin
@@ -168,13 +172,15 @@ jobs:
           needs.detect-changes.outputs.run_all == 'true' ||
           github.event_name == 'workflow_dispatch'
         run: |
+          EXIT=0
           semgrep scan \
             --config p/kotlin \
             --config p/java \
             --config p/secrets \
             --exclude '.gradle' \
             --json --output semgrep-kotlin.json \
-            apps/mobile/ plugins/ || true
+            apps/mobile/ plugins/ || EXIT=$?
+          echo "semgrep_kotlin_exit=$EXIT" >> "$GITHUB_ENV"
 
       - name: Upload SAST results
         if: always()
@@ -189,29 +195,88 @@ jobs:
         id: outcomes
         if: always()
         run: |
-          # Check JSON results for actual ERROR-severity findings rather than
-          # relying on exit codes (which also fail on parse errors).
+          # Bulletproof SAST evaluation:
+          #   1. If scan was supposed to run but produced no JSON -> FAILURE (crash)
+          #   2. If JSON exists but is invalid/corrupt -> FAILURE
+          #   3. If JSON is valid, count ERROR-severity findings -> pass/fail
+          #   4. Parse warnings (PartialParsing) are noted but don't block
+          #
+          # Semgrep exit codes: 0=no findings, 1=findings found, >1=error
+          # We don't trust exit codes alone because exit 1 conflates real
+          # findings with parser limitations.
+
           FAILED=false
-          for f in semgrep-python.json semgrep-typescript.json semgrep-kotlin.json; do
-            LANG=$(echo "$f" | sed 's/semgrep-//;s/.json//')
-            if [ ! -f "$f" ]; then
-              echo "semgrep_${LANG}=skipped" >> "$GITHUB_OUTPUT"
-              continue
+
+          evaluate_scan() {
+            local lang="$1"
+            local json_file="semgrep-${lang}.json"
+            local exit_var="semgrep_${lang}_exit"
+            local exit_code="${!exit_var:-}"
+
+            # Scan was skipped by if: condition (step never ran)
+            if [ -z "$exit_code" ]; then
+              echo "  $lang: skipped (no relevant changes)"
+              echo "semgrep_${lang}=skipped" >> "$GITHUB_OUTPUT"
+              return
             fi
-            COUNT=$(python3 -c "import json; d=json.load(open('$f')); print(len([r for r in d.get('results',[]) if r.get('extra',{}).get('severity')=='ERROR']))" 2>/dev/null || echo "0")
-            if [ "$COUNT" -gt 0 ]; then
-              echo "$LANG SAST: $COUNT ERROR-severity findings"
-              echo "semgrep_${LANG}=failure" >> "$GITHUB_OUTPUT"
+
+            # Scan ran but produced no JSON -> crash
+            if [ ! -f "$json_file" ]; then
+              echo "  $lang: FAILURE -- scanner crashed (exit $exit_code, no JSON output)"
+              echo "semgrep_${lang}=failure" >> "$GITHUB_OUTPUT"
               FAILED=true
-            else
-              echo "$LANG SAST: clean"
-              echo "semgrep_${LANG}=success" >> "$GITHUB_OUTPUT"
+              return
             fi
-          done
+
+            # Validate JSON and extract findings
+            RESULT=$(python3 -c "
+          import json, sys
+          try:
+              d = json.load(open('$json_file'))
+          except (json.JSONDecodeError, IOError) as e:
+              print(f'CORRUPT:{e}')
+              sys.exit(0)
+          results = d.get('results', [])
+          errors = d.get('errors', [])
+          error_findings = [r for r in results if r.get('extra',{}).get('severity') == 'ERROR']
+          warn_findings = [r for r in results if r.get('extra',{}).get('severity') == 'WARNING']
+          parse_errors = [e for e in errors if 'PartialParsing' in str(e.get('type',''))]
+          print(f'OK:{len(error_findings)}:{len(warn_findings)}:{len(parse_errors)}:{len(results)}')
+          " 2>&1)
+
+            if echo "$RESULT" | grep -q "^CORRUPT:"; then
+              echo "  $lang: FAILURE -- corrupt JSON output: ${RESULT#CORRUPT:}"
+              echo "semgrep_${lang}=failure" >> "$GITHUB_OUTPUT"
+              FAILED=true
+              return
+            fi
+
+            IFS=':' read -r STATUS ERR_COUNT WARN_COUNT PARSE_COUNT TOTAL <<< "${RESULT#OK:}"
+
+            if [ "$ERR_COUNT" -gt 0 ]; then
+              echo "  $lang: FAILURE -- $ERR_COUNT ERROR-severity findings ($TOTAL total, $PARSE_COUNT parse warnings)"
+              echo "semgrep_${lang}=failure" >> "$GITHUB_OUTPUT"
+              FAILED=true
+            elif [ "$PARSE_COUNT" -gt 0 ]; then
+              echo "  $lang: success ($TOTAL findings, $WARN_COUNT warnings, $PARSE_COUNT files with parse warnings)"
+              echo "semgrep_${lang}=success" >> "$GITHUB_OUTPUT"
+            else
+              echo "  $lang: success (clean)"
+              echo "semgrep_${lang}=success" >> "$GITHUB_OUTPUT"
+            fi
+          }
+
+          echo "=== SAST Evaluation ==="
+          evaluate_scan "python"
+          evaluate_scan "typescript"
+          evaluate_scan "kotlin"
+          echo "======================="
+
           if [ "$FAILED" = "true" ]; then
+            echo "SAST FAILED -- see findings above"
             exit 1
           fi
-          echo "SAST clean"
+          echo "SAST PASSED"
 
   # ==========================================================================
   # Job 3: DAST -- Docker stack + targeted tests

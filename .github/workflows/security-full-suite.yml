@@ -97,7 +97,8 @@ jobs:
             --exclude 'apps/api/.venv' \
             --exclude 'Dockerfile*' \
             --json --output semgrep-results.json \
-            apps/api/ apps/web/ sidecar/ apps/mobile/ plugins/ scripts/security/ || true
+            apps/api/ apps/web/ sidecar/ apps/mobile/ plugins/ scripts/security/ || SEMGREP_EXIT=$?
+          echo "Semgrep exit code: ${SEMGREP_EXIT:-0}"
 
       - name: Upload SAST results as artifact
         if: always()
@@ -111,16 +112,41 @@ jobs:
       - name: Evaluate SAST result
         if: always()
         run: |
+          # Fail-safe: if scanner crashed and produced no JSON, fail
           if [ ! -f semgrep-results.json ]; then
-            echo "No Semgrep results file -- scan may have failed"
+            echo "SAST FAILURE: scanner crashed -- no JSON output"
             exit 1
           fi
-          COUNT=$(python3 -c "import json; d=json.load(open('semgrep-results.json')); print(len([r for r in d.get('results',[]) if r.get('extra',{}).get('severity')=='ERROR']))" 2>/dev/null || echo "0")
-          if [ "$COUNT" -gt 0 ]; then
-            echo "SAST found $COUNT ERROR-severity findings"
+
+          # Validate JSON and evaluate findings
+          RESULT=$(python3 -c "
+          import json, sys
+          try:
+              d = json.load(open('semgrep-results.json'))
+          except (json.JSONDecodeError, IOError) as e:
+              print(f'CORRUPT:{e}')
+              sys.exit(0)
+          results = d.get('results', [])
+          errors = d.get('errors', [])
+          error_findings = [r for r in results if r.get('extra',{}).get('severity') == 'ERROR']
+          warn_findings = [r for r in results if r.get('extra',{}).get('severity') == 'WARNING']
+          parse_errors = [e for e in errors if 'PartialParsing' in str(e.get('type',''))]
+          print(f'OK:{len(error_findings)}:{len(warn_findings)}:{len(parse_errors)}:{len(results)}')
+          " 2>&1)
+
+          if echo "$RESULT" | grep -q "^CORRUPT:"; then
+            echo "SAST FAILURE: corrupt JSON output -- ${RESULT#CORRUPT:}"
             exit 1
           fi
-          echo "SAST clean"
+
+          IFS=':' read -r STATUS ERR_COUNT WARN_COUNT PARSE_COUNT TOTAL <<< "${RESULT#OK:}"
+          echo "SAST: $ERR_COUNT errors, $WARN_COUNT warnings, $PARSE_COUNT parse issues, $TOTAL total findings"
+
+          if [ "$ERR_COUNT" -gt 0 ]; then
+            echo "SAST FAILED: $ERR_COUNT ERROR-severity findings"
+            exit 1
+          fi
+          echo "SAST PASSED"
 
   # ==========================================================================
   # Job 3: DAST -- Full Docker stack + all security tests
