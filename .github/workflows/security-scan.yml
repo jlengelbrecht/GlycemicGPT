@@ -534,7 +534,9 @@ jobs:
           github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p scripts/security/results
-          chmod 777 scripts/security/results
+          # zap-baseline.py writes temp files to /zap/wrk/ -- must be writable by zap user (UID 1000)
+          chmod -R 777 scripts/security/
+          ZAP_EXIT=0
           docker run --rm --network="host" \
             -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
             -e "ZAP_SESSION=$ZAP_SESSION" \
@@ -542,7 +544,13 @@ jobs:
             ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:3001 \
               -J results/zap-web-baseline.json \
-              -I
+              -I || ZAP_EXIT=$?
+          echo "ZAP Web baseline exit: $ZAP_EXIT"
+          # zap-baseline.py: exit 0=pass, 1=warn (with -I), 2=fail
+          if [ "$ZAP_EXIT" -gt 1 ]; then
+            echo "ZAP Web baseline found failures"
+            exit 1
+          fi
 
       # ---- Export outcomes + cleanup ----
 
