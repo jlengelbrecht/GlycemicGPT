@@ -1,4 +1,4 @@
-name: Security Scan (DAST)
+name: Security Scan
 
 on:
   push:
@@ -16,35 +16,229 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ==========================================================================
+  # Job 1: Granular change detection
+  # ==========================================================================
   detect-changes:
     name: Detect Security-Relevant Changes
     runs-on: ubuntu-latest
     outputs:
-      should_scan: ${{ steps.filter.outputs.security }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+      sidecar: ${{ steps.filter.outputs.sidecar }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      infra: ${{ steps.filter.outputs.infra }}
+      security: ${{ steps.filter.outputs.security }}
+      needs_sast: ${{ steps.derived.outputs.needs_sast }}
+      needs_docker: ${{ steps.derived.outputs.needs_docker }}
+      run_all: ${{ steps.derived.outputs.run_all }}
+      any_security_relevant: ${{ steps.derived.outputs.any_security_relevant }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
-            security:
+            api:
               - 'apps/api/**'
+            web:
               - 'apps/web/**'
+            sidecar:
               - 'sidecar/**'
-              - 'docker-compose.yml'
-              - 'docker-compose.test.yml'
+            mobile:
+              - 'apps/mobile/**'
+              - 'plugins/**'
+            infra:
+              - 'docker-compose*.yml'
               - '**/Dockerfile*'
+            security:
               - 'scripts/security/**'
-              - '.github/workflows/security-scan.yml'
+              - '.github/workflows/security-scan*'
 
-  security-scan:
+      - name: Compute derived flags
+        id: derived
+        env:
+          API: ${{ steps.filter.outputs.api }}
+          WEB: ${{ steps.filter.outputs.web }}
+          SIDECAR: ${{ steps.filter.outputs.sidecar }}
+          MOBILE: ${{ steps.filter.outputs.mobile }}
+          INFRA: ${{ steps.filter.outputs.infra }}
+          SECURITY: ${{ steps.filter.outputs.security }}
+        run: |
+          # infra or security changes => run everything
+          if [ "$INFRA" = "true" ] || [ "$SECURITY" = "true" ]; then
+            echo "run_all=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_all=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # SAST needed if any code changed
+          if [ "$API" = "true" ] || [ "$WEB" = "true" ] || [ "$SIDECAR" = "true" ] || \
+             [ "$MOBILE" = "true" ] || [ "$SECURITY" = "true" ]; then
+            echo "needs_sast=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_sast=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Docker needed if backend/web/sidecar/infra/security changed
+          if [ "$API" = "true" ] || [ "$WEB" = "true" ] || [ "$SIDECAR" = "true" ] || \
+             [ "$INFRA" = "true" ] || [ "$SECURITY" = "true" ]; then
+            echo "needs_docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needs_docker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Any security-relevant change at all
+          if [ "$API" = "true" ] || [ "$WEB" = "true" ] || [ "$SIDECAR" = "true" ] || \
+             [ "$MOBILE" = "true" ] || [ "$INFRA" = "true" ] || [ "$SECURITY" = "true" ]; then
+            echo "any_security_relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any_security_relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ==========================================================================
+  # Job 2: SAST -- Semgrep on changed components (no Docker needed)
+  # ==========================================================================
+  sast:
+    name: SAST (Semgrep)
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.needs_sast == 'true' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      semgrep_python: ${{ steps.outcomes.outputs.semgrep_python }}
+      semgrep_typescript: ${{ steps.outcomes.outputs.semgrep_typescript }}
+      semgrep_kotlin: ${{ steps.outcomes.outputs.semgrep_kotlin }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Semgrep Python (API)
+        id: semgrep-python
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.security == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          semgrep scan \
+            --config p/python \
+            --config p/owasp-top-ten \
+            --config p/secrets \
+            --exclude '.venv' \
+            --error \
+            --json --output semgrep-python.json \
+            apps/api/ scripts/security/
+        continue-on-error: true
+
+      - name: Semgrep TypeScript (Web + Sidecar)
+        id: semgrep-typescript
+        if: |
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.sidecar == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          PATHS=""
+          if [ "${{ needs.detect-changes.outputs.web }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.run_all }}" = "true" ] || \
+             [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PATHS="$PATHS apps/web/"
+          fi
+          if [ "${{ needs.detect-changes.outputs.sidecar }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.run_all }}" = "true" ] || \
+             [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PATHS="$PATHS sidecar/"
+          fi
+          semgrep scan \
+            --config p/typescript \
+            --config p/owasp-top-ten \
+            --config p/secrets \
+            --exclude 'node_modules' \
+            --error \
+            --json --output semgrep-typescript.json \
+            $PATHS
+        continue-on-error: true
+
+      - name: Semgrep Kotlin (Mobile)
+        id: semgrep-kotlin
+        if: |
+          needs.detect-changes.outputs.mobile == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          semgrep scan \
+            --config p/kotlin \
+            --config p/android \
+            --config p/secrets \
+            --exclude '.gradle' \
+            --error \
+            --json --output semgrep-kotlin.json \
+            apps/mobile/ plugins/
+        continue-on-error: true
+
+      - name: Export outcomes
+        id: outcomes
+        if: always()
+        run: |
+          echo "semgrep_python=${{ steps.semgrep-python.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "semgrep_typescript=${{ steps.semgrep-typescript.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "semgrep_kotlin=${{ steps.semgrep-kotlin.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SAST results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-results
+          path: semgrep-*.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Evaluate SAST results
+        if: always()
+        run: |
+          FAILED=false
+          if [ "${{ steps.semgrep-python.outcome }}" = "failure" ]; then
+            echo "Python SAST found issues"
+            FAILED=true
+          fi
+          if [ "${{ steps.semgrep-typescript.outcome }}" = "failure" ]; then
+            echo "TypeScript SAST found issues"
+            FAILED=true
+          fi
+          if [ "${{ steps.semgrep-kotlin.outcome }}" = "failure" ]; then
+            echo "Kotlin SAST found issues"
+            FAILED=true
+          fi
+          if [ "$FAILED" = "true" ]; then
+            exit 1
+          fi
+          echo "SAST clean"
+
+  # ==========================================================================
+  # Job 3: DAST -- Docker stack + targeted tests
+  # ==========================================================================
+  dast:
     name: DAST & Auth Penetration Tests
     needs: detect-changes
     if: |
-      needs.detect-changes.outputs.should_scan == 'true' ||
+      needs.detect-changes.outputs.needs_docker == 'true' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
+    outputs:
+      auth_tests: ${{ steps.outcomes.outputs.auth_tests }}
+      idor_tests: ${{ steps.outcomes.outputs.idor_tests }}
+      research_tests: ${{ steps.outcomes.outputs.research_tests }}
+      fuzzer: ${{ steps.outcomes.outputs.fuzzer }}
+      nuclei_api: ${{ steps.outcomes.outputs.nuclei_api }}
+      nuclei_web: ${{ steps.outcomes.outputs.nuclei_web }}
+      zap_api: ${{ steps.outcomes.outputs.zap_api }}
+      zap_web: ${{ steps.outcomes.outputs.zap_web }}
 
     steps:
       - name: Checkout
@@ -106,141 +300,248 @@ jobs:
             exit 1
           fi
 
+      # ---- API-targeted tests (api || run_all) ----
+
       - name: Run auth flow tests
         id: auth-tests
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           API_URL: http://localhost:8001
           WEB_URL: http://localhost:3001
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: |
-          # Read the test SECRET_KEY from the running API container
           TEST_SECRET_KEY=$(docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T api printenv SECRET_KEY) || {
             echo "FATAL: Could not read SECRET_KEY from API container"
-            docker compose -f docker-compose.yml -f docker-compose.test.yml ps
             exit 1
           }
           export TEST_SECRET_KEY
           python scripts/security/test-auth-flows.py
 
-      - name: Reset rate limits between test suites
+      - name: Reset rate limits
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: |
-          echo "Flushing Redis rate limit counters between test suites..."
           docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
           sleep 2
 
       - name: Run data isolation tests (IDOR)
         id: idor-tests
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           API_URL: http://localhost:8001
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
         run: python scripts/security/test-data-isolation.py
 
-      - name: Reset rate limits before research tests
+      - name: Reset rate limits
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
 
       - name: Run research security tests (SSRF, rate limiting)
         id: research-tests
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           API_URL: http://localhost:8001
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
         run: python scripts/security/test-research-security.py
 
-      - name: Reset rate limits before fuzzer
+      - name: Reset rate limits
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
 
       - name: Run API fuzzer
         id: fuzzer
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           API_URL: http://localhost:8001
           TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
           COMPOSE_PROJECT_NAME: glycemicgpt-test
         run: python scripts/security/fuzz-api.py
 
-      - name: Run DAST scanner
-        id: dast
+      # ---- Nuclei DAST (split: API and Web independently) ----
+
+      - name: Reset rate limits
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
+
+      - name: Run nuclei DAST (API)
+        id: nuclei-api
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
         env:
           API_URL: http://localhost:8001
-          WEB_URL: http://localhost:3001
-        run: ./scripts/security/run-dast.sh
-
-      - name: Generate bot token for PR comment
-        if: always() && github.event_name == 'pull_request'
-        id: bot-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-
-      - name: Post security scan results to PR
-        if: always() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Collect results from each test suite
-          STATUS="${{ job.status }}"
-          if [ "$STATUS" = "success" ]; then
-            ICON="white_check_mark"
-            VERDICT="All security checks passed"
-          else
-            ICON="x"
-            VERDICT="Security issues detected -- review required"
+          mkdir -p scripts/security/results
+          echo "$API_URL" > /tmp/nuclei-targets.txt
+          nuclei -l /tmp/nuclei-targets.txt \
+            -t http/misconfiguration/ -t http/exposures/ -t http/vulnerabilities/ \
+            -exclude-templates http/fuzzing/ -exclude-templates http/takeovers/ \
+            -severity medium,high,critical \
+            -json-export scripts/security/results/nuclei-api.json \
+            -silent -no-color -timeout 10 -retries 1 -rate-limit 50 || true
+          if [ -f scripts/security/results/nuclei-api.json ] && [ -s scripts/security/results/nuclei-api.json ]; then
+            HIGH_CRIT=$(grep -cE '"severity":"(high|critical)"' scripts/security/results/nuclei-api.json || true)
+            if [ "${HIGH_CRIT:-0}" -gt 0 ]; then
+              echo "FAIL: $HIGH_CRIT high/critical API findings"
+              exit 1
+            fi
           fi
+          echo "Nuclei API: no high/critical findings"
 
-          # Build the comment body
-          COMMENT="## :shield: Security Scan Results
-
-          **Verdict:** :${ICON}: ${VERDICT}
-
-          | Test Suite | Status |
-          |-----------|--------|
-          | Auth Flow Tests | ${{ steps.auth-tests.outcome || 'run' }} |
-          | Data Isolation (IDOR) | ${{ steps.idor-tests.outcome || 'run' }} |
-          | Research Security (SSRF) | ${{ steps.research-tests.outcome || 'run' }} |
-          | API Fuzzer | ${{ steps.fuzzer.outcome || 'run' }} |
-          | DAST Scanner | ${{ steps.dast.outcome || 'run' }} |
-
-          <details>
-          <summary>What was tested</summary>
-
-          - **Auth flows**: Login, CSRF, CORS, session management, rate limiting
-          - **Data isolation**: Cross-user access prevention on chat history, knowledge base, research sources
-          - **SSRF prevention**: Private IP blocking, metadata endpoint blocking, HTTPS enforcement
-          - **Rate limiting**: Research trigger (2/hour), global limits (120/min)
-          - **CSRF enforcement**: All POST/DELETE endpoints require valid CSRF token
-          - **API fuzzing**: SQL injection, XSS, path traversal payloads
-          - **DAST scanning**: Known vulnerability templates (nuclei)
-
-          </details>
-
-          ---
-          *Posted by [homebot.0](https://github.com/apps/homebot-0) -- GlycemicGPT Security Scanner*"
-
-          # Post or update the comment
-          EXISTING=$(gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
-            --jq '.[] | select(.body | contains("Security Scan Results")) | .id' | head -1)
-
-          if [ -n "$EXISTING" ]; then
-            gh api repos/${{ github.repository }}/issues/comments/${EXISTING} \
-              -X PATCH -f body="$COMMENT"
-            echo "Updated existing security scan comment"
-          else
-            gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
-              -f body="$COMMENT"
-            echo "Posted new security scan comment"
+      - name: Run nuclei DAST (Web)
+        id: nuclei-web
+        if: |
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        env:
+          WEB_URL: http://localhost:3001
+        run: |
+          mkdir -p scripts/security/results
+          echo "$WEB_URL" > /tmp/nuclei-targets.txt
+          nuclei -l /tmp/nuclei-targets.txt \
+            -t http/misconfiguration/ -t http/exposures/ -t http/vulnerabilities/ \
+            -exclude-templates http/fuzzing/ -exclude-templates http/takeovers/ \
+            -severity medium,high,critical \
+            -json-export scripts/security/results/nuclei-web.json \
+            -silent -no-color -timeout 10 -retries 1 -rate-limit 50 || true
+          if [ -f scripts/security/results/nuclei-web.json ] && [ -s scripts/security/results/nuclei-web.json ]; then
+            HIGH_CRIT=$(grep -cE '"severity":"(high|critical)"' scripts/security/results/nuclei-web.json || true)
+            if [ "${HIGH_CRIT:-0}" -gt 0 ]; then
+              echo "FAIL: $HIGH_CRIT high/critical Web findings"
+              exit 1
+            fi
           fi
+          echo "Nuclei Web: no high/critical findings"
+
+      # ---- ZAP scans (conditional: API and/or Web) ----
+
+      - name: Reset rate limits before ZAP
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        env:
+          COMPOSE_PROJECT_NAME: glycemicgpt-test
+        run: docker compose -f docker-compose.yml -f docker-compose.test.yml exec -T redis redis-cli FLUSHDB || true
+
+      - name: Setup ZAP authenticated session
+        id: zap-setup
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        env:
+          API_URL: http://localhost:8001
+          TEST_PASSWORD: ${{ secrets.SECURITY_TEST_PASSWORD }}
+        run: |
+          ZAP_EMAIL="zap_$(date +%s)_${RANDOM}@example.com"
+
+          curl -sf -X POST "$API_URL/api/auth/register" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$ZAP_EMAIL\",\"password\":\"$TEST_PASSWORD\"}" > /dev/null
+
+          COOKIE_JAR=$(mktemp)
+          curl -sf -c "$COOKIE_JAR" -X POST "$API_URL/api/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$ZAP_EMAIL\",\"password\":\"$TEST_PASSWORD\"}" > /dev/null
+
+          SESSION=$(awk '/glycemicgpt_session/ {print $NF}' "$COOKIE_JAR")
+          CSRF=$(awk '/csrf_token/ {print $NF}' "$COOKIE_JAR")
+
+          curl -sf -X POST "$API_URL/api/disclaimer/acknowledge" \
+            -H "X-CSRF-Token: $CSRF" \
+            -b "glycemicgpt_session=$SESSION; csrf_token=$CSRF" > /dev/null || true
+
+          echo "ZAP_SESSION=$SESSION" >> "$GITHUB_ENV"
+          echo "ZAP_CSRF=$CSRF" >> "$GITHUB_ENV"
+          rm -f "$COOKIE_JAR"
+          echo "ZAP auth session established"
+
+      - name: Run ZAP API active scan
+        id: zap-api
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p scripts/security/results
+          chmod 777 scripts/security/results
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            -e "ZAP_SESSION=$ZAP_SESSION" \
+            -e "ZAP_CSRF=$ZAP_CSRF" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/zap-api-plan.yaml
+
+      - name: Run ZAP Web baseline scan
+        id: zap-web
+        if: |
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p scripts/security/results
+          chmod 777 scripts/security/results
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            -e "ZAP_SESSION=$ZAP_SESSION" \
+            -e "ZAP_CSRF=$ZAP_CSRF" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:3001 \
+              -J results/zap-web-baseline.json \
+              -I
+
+      # ---- Export outcomes + cleanup ----
+
+      - name: Export DAST step outcomes
+        id: outcomes
+        if: always()
+        run: |
+          echo "auth_tests=${{ steps.auth-tests.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "idor_tests=${{ steps.idor-tests.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "research_tests=${{ steps.research-tests.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "fuzzer=${{ steps.fuzzer.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "nuclei_api=${{ steps.nuclei-api.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "nuclei_web=${{ steps.nuclei-web.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "zap_api=${{ steps.zap-api.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "zap_web=${{ steps.zap-web.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload scan results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-scan-results
+          name: dast-results
           path: scripts/security/results/
           if-no-files-found: ignore
           retention-days: 30
@@ -263,41 +564,176 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
 
+  # ==========================================================================
+  # Job 4: Gate -- unified status + PR comment
+  # ==========================================================================
   security-scan-gate:
     name: Security Scan Gate
     runs-on: ubuntu-latest
-    needs: [detect-changes, security-scan]
+    needs: [detect-changes, sast, dast]
     if: always()
     steps:
       - name: Evaluate result
+        id: verdict
         env:
           DETECT_RESULT: ${{ needs.detect-changes.result }}
-          SHOULD_SCAN: ${{ needs.detect-changes.outputs.should_scan }}
-          SCAN_RESULT: ${{ needs.security-scan.result }}
+          ANY_RELEVANT: ${{ needs.detect-changes.outputs.any_security_relevant }}
+          NEEDS_SAST: ${{ needs.detect-changes.outputs.needs_sast }}
+          NEEDS_DOCKER: ${{ needs.detect-changes.outputs.needs_docker }}
+          SAST_RESULT: ${{ needs.sast.result }}
+          DAST_RESULT: ${{ needs.dast.result }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "$DETECT_RESULT" != "success" ]; then
             echo "detect-changes failed (result: $DETECT_RESULT)"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
-          # workflow_dispatch always requires scan success
+          # workflow_dispatch: both must succeed
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ "$SCAN_RESULT" = "success" ]; then
-              echo "Security scan passed (manual dispatch)"
+            if [ "$SAST_RESULT" = "success" ] && [ "$DAST_RESULT" = "success" ]; then
+              echo "All security scans passed (manual dispatch)"
+              echo "passed=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "Security scan failed (result: $SCAN_RESULT)"
+            echo "Security scan failed (SAST: $SAST_RESULT, DAST: $DAST_RESULT)"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
-          if [ "$SHOULD_SCAN" != "true" ]; then
+          # No security-relevant changes: skip
+          if [ "$ANY_RELEVANT" != "true" ]; then
             echo "No security-relevant changes -- skipped"
+            echo "passed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$SCAN_RESULT" = "success" ]; then
-            echo "Security scan passed"
-            exit 0
+
+          # Check SAST if it was supposed to run
+          if [ "$NEEDS_SAST" = "true" ] && [ "$SAST_RESULT" != "success" ] && [ "$SAST_RESULT" != "skipped" ]; then
+            echo "SAST failed (result: $SAST_RESULT)"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
-          echo "Security scan failed or was cancelled (result: $SCAN_RESULT)"
-          exit 1
+
+          # Check DAST if it was supposed to run
+          if [ "$NEEDS_DOCKER" = "true" ] && [ "$DAST_RESULT" != "success" ] && [ "$DAST_RESULT" != "skipped" ]; then
+            echo "DAST failed (result: $DAST_RESULT)"
+            echo "passed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+          echo "Security scan passed"
+          echo "passed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate bot token for PR comment
+        if: always() && github.event_name == 'pull_request'
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+
+      - name: Post security scan results to PR
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PASSED: ${{ steps.verdict.outputs.passed }}
+          # Change detection
+          CHG_API: ${{ needs.detect-changes.outputs.api }}
+          CHG_WEB: ${{ needs.detect-changes.outputs.web }}
+          CHG_SIDECAR: ${{ needs.detect-changes.outputs.sidecar }}
+          CHG_MOBILE: ${{ needs.detect-changes.outputs.mobile }}
+          CHG_INFRA: ${{ needs.detect-changes.outputs.infra }}
+          CHG_SECURITY: ${{ needs.detect-changes.outputs.security }}
+          ANY_RELEVANT: ${{ needs.detect-changes.outputs.any_security_relevant }}
+          # SAST outcomes
+          SAST_PYTHON: ${{ needs.sast.outputs.semgrep_python || 'skipped' }}
+          SAST_TS: ${{ needs.sast.outputs.semgrep_typescript || 'skipped' }}
+          SAST_KOTLIN: ${{ needs.sast.outputs.semgrep_kotlin || 'skipped' }}
+          # DAST outcomes
+          DAST_AUTH: ${{ needs.dast.outputs.auth_tests || 'skipped' }}
+          DAST_IDOR: ${{ needs.dast.outputs.idor_tests || 'skipped' }}
+          DAST_RESEARCH: ${{ needs.dast.outputs.research_tests || 'skipped' }}
+          DAST_FUZZER: ${{ needs.dast.outputs.fuzzer || 'skipped' }}
+          DAST_NUCLEI_API: ${{ needs.dast.outputs.nuclei_api || 'skipped' }}
+          DAST_NUCLEI_WEB: ${{ needs.dast.outputs.nuclei_web || 'skipped' }}
+          DAST_ZAP_API: ${{ needs.dast.outputs.zap_api || 'skipped' }}
+          DAST_ZAP_WEB: ${{ needs.dast.outputs.zap_web || 'skipped' }}
+        run: |
+          # Helper: convert outcome to icon
+          icon() {
+            case "$1" in
+              success) echo "white_check_mark" ;;
+              skipped) echo "next_track_button" ;;
+              *) echo "x" ;;
+            esac
+          }
+
+          if [ "$PASSED" = "true" ]; then
+            VERDICT_ICON="white_check_mark"
+            VERDICT_TEXT="All security checks passed"
+          else
+            VERDICT_ICON="x"
+            VERDICT_TEXT="Security issues detected -- review required"
+          fi
+
+          if [ "$ANY_RELEVANT" != "true" ]; then
+            VERDICT_ICON="next_track_button"
+            VERDICT_TEXT="No security-relevant changes detected -- skipped"
+          fi
+
+          COMMENT="## :shield: Security Scan Results
+
+          **Verdict:** :${VERDICT_ICON}: ${VERDICT_TEXT}
+
+          ### SAST (Static Analysis)
+          | Scan | Status |
+          |------|--------|
+          | Semgrep Python (API) | :$(icon "$SAST_PYTHON"): ${SAST_PYTHON} |
+          | Semgrep TypeScript (Web/Sidecar) | :$(icon "$SAST_TS"): ${SAST_TS} |
+          | Semgrep Kotlin (Mobile) | :$(icon "$SAST_KOTLIN"): ${SAST_KOTLIN} |
+
+          ### DAST (Dynamic Analysis)
+          | Test Suite | Status |
+          |-----------|--------|
+          | Auth Flow Tests | :$(icon "$DAST_AUTH"): ${DAST_AUTH} |
+          | Data Isolation (IDOR) | :$(icon "$DAST_IDOR"): ${DAST_IDOR} |
+          | Research Security (SSRF) | :$(icon "$DAST_RESEARCH"): ${DAST_RESEARCH} |
+          | API Fuzzer | :$(icon "$DAST_FUZZER"): ${DAST_FUZZER} |
+          | Nuclei (API) | :$(icon "$DAST_NUCLEI_API"): ${DAST_NUCLEI_API} |
+          | Nuclei (Web) | :$(icon "$DAST_NUCLEI_WEB"): ${DAST_NUCLEI_WEB} |
+          | ZAP API Active Scan | :$(icon "$DAST_ZAP_API"): ${DAST_ZAP_API} |
+          | ZAP Web Baseline | :$(icon "$DAST_ZAP_WEB"): ${DAST_ZAP_WEB} |
+
+          <details>
+          <summary>Change detection</summary>
+
+          | Component | Changed |
+          |-----------|---------|
+          | API (\`apps/api/\`) | ${CHG_API} |
+          | Web (\`apps/web/\`) | ${CHG_WEB} |
+          | Sidecar (\`sidecar/\`) | ${CHG_SIDECAR} |
+          | Mobile (\`apps/mobile/\`, \`plugins/\`) | ${CHG_MOBILE} |
+          | Infra (\`docker-compose\`, \`Dockerfile\`) | ${CHG_INFRA} |
+          | Security (\`scripts/security/\`) | ${CHG_SECURITY} |
+
+          </details>
+
+          ---
+          *Posted by [homebot.0](https://github.com/apps/homebot-0) -- GlycemicGPT Security Scanner*"
+
+          # Post or update the comment
+          EXISTING=$(gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+            --jq '.[] | select(.body | contains("Security Scan Results")) | .id' | head -1)
+
+          if [ -n "$EXISTING" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/${EXISTING} \
+              -X PATCH -f body="$COMMENT"
+            echo "Updated existing security scan comment"
+          else
+            gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
+              -f body="$COMMENT"
+            echo "Posted new security scan comment"
+          fi
