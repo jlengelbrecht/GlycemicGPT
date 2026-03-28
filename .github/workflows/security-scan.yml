@@ -754,8 +754,9 @@ jobs:
           *Posted by [homebot.0](https://github.com/apps/homebot-0) -- GlycemicGPT Security Scanner*"
 
           # Post or update the comment
+          # Find existing comment posted by homebot-0 (not CodeRabbit or other bots)
           EXISTING=$(gh api repos/${{ github.repository }}/issues/${PR_NUMBER}/comments \
-            --jq '.[] | select(.body | contains("Security Scan Results")) | .id' | head -1)
+            --jq '.[] | select(.user.login == "homebot-0[bot]" and (.body | contains("Security Scan Results"))) | .id' | head -1)
 
           if [ -n "$EXISTING" ]; then
             gh api repos/${{ github.repository }}/issues/comments/${EXISTING} \
