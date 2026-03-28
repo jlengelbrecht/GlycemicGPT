@@ -2185,7 +2185,8 @@ async def get_insulin_summary(
                COUNT(*) AS delivery_count
         FROM deliveries
         GROUP BY is_correction
-    """)
+    """
+    )
     if bolus_source is not None:
         bolus_result = await db.execute(
             bolus_query,
@@ -2266,7 +2267,8 @@ async def get_insulin_summary(
         FROM basal_ordered
         WHERE LEAST(COALESCE(next_ts, :now), :now)
             > GREATEST(event_timestamp, :cutoff)
-    """)
+    """
+    )
     if basal_source is not None:
         basal_result = await db.execute(
             basal_query,
