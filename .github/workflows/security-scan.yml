@@ -182,14 +182,6 @@ jobs:
             apps/mobile/ plugins/
         continue-on-error: true
 
-      - name: Export outcomes
-        id: outcomes
-        if: always()
-        run: |
-          echo "semgrep_python=${{ steps.semgrep-python.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
-          echo "semgrep_typescript=${{ steps.semgrep-typescript.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
-          echo "semgrep_kotlin=${{ steps.semgrep-kotlin.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
-
       - name: Upload SAST results
         if: always()
         uses: actions/upload-artifact@v4
@@ -199,21 +191,27 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Evaluate SAST results
+      - name: Evaluate SAST results and export outcomes
+        id: outcomes
         if: always()
         run: |
           # Check JSON results for actual ERROR-severity findings rather than
           # relying on exit codes (which also fail on parse errors).
           FAILED=false
           for f in semgrep-python.json semgrep-typescript.json semgrep-kotlin.json; do
-            if [ ! -f "$f" ]; then continue; fi
             LANG=$(echo "$f" | sed 's/semgrep-//;s/.json//')
+            if [ ! -f "$f" ]; then
+              echo "semgrep_${LANG}=skipped" >> "$GITHUB_OUTPUT"
+              continue
+            fi
             COUNT=$(python3 -c "import json; d=json.load(open('$f')); print(len([r for r in d.get('results',[]) if r.get('extra',{}).get('severity')=='ERROR']))" 2>/dev/null || echo "0")
             if [ "$COUNT" -gt 0 ]; then
               echo "$LANG SAST: $COUNT ERROR-severity findings"
+              echo "semgrep_${LANG}=failure" >> "$GITHUB_OUTPUT"
               FAILED=true
             else
               echo "$LANG SAST: clean"
+              echo "semgrep_${LANG}=success" >> "$GITHUB_OUTPUT"
             fi
           done
           if [ "$FAILED" = "true" ]; then
