@@ -4,19 +4,46 @@ How security testing works in the GlycemicGPT CI pipeline, and how to extend it 
 
 ## Overview
 
-Security testing has three pillars:
+Security testing has five pillars:
 
-1. **DAST & Auth Pentests** (`security-scan.yml`) -- behavior-based tests that spin up the Docker stack and attack it: auth flow penetration tests, OpenAPI-driven API fuzzing, and nuclei vulnerability scanning.
-2. **Dependency Vulnerability Scanning** (`dependency-scan.yml`) -- OSV-Scanner checks all lockfiles against the OSV database for known CVEs. Runs on every dependency change and weekly on a schedule.
-3. **Static Analysis** (CodeRabbit) -- automated PR reviews that check for hardcoded secrets, medical safety violations, BLE protocol issues, and code quality. Configured in `.coderabbit.yaml`.
+1. **SAST** (`security-scan.yml`, `security-full-suite.yml`) -- Semgrep static analysis on Python, TypeScript, and Kotlin source code. Catches hardcoded secrets, injection patterns, and OWASP Top 10 at the code level.
+2. **DAST & Auth Pentests** (`security-scan.yml`, `security-full-suite.yml`) -- behavior-based tests that spin up the Docker stack and attack it: auth flow penetration tests, IDOR prevention, SSRF blocking, OpenAPI-driven API fuzzing, nuclei vulnerability scanning, and OWASP ZAP active injection scanning.
+3. **Dependency Vulnerability Scanning** (`dependency-scan.yml`) -- OSV-Scanner checks all lockfiles against the OSV database for known CVEs. Runs on every dependency change and weekly on a schedule.
+4. **Static Analysis** (CodeRabbit) -- automated PR reviews that check for hardcoded secrets, medical safety violations, BLE protocol issues, and code quality. Configured in `.coderabbit.yaml`.
+5. **Full Suite Pentests** (`security-full-suite.yml`) -- comprehensive security scan of the entire platform. Runs on merges to main/develop and manual dispatch. Status badge in README.
 
 ### Medical Device Context
 
 GlycemicGPT handles glucose data, insulin pump telemetry, and AI-driven diabetes insights. Security failures in this context can have health consequences. The CI gates enforce a baseline: every PR must pass security checks before merging.
 
+## Two-Workflow Architecture
+
+### PR-Scoped Smart Testing (`security-scan.yml`)
+
+Runs on every PR and push to main/develop. Uses **granular change detection** to only test what actually changed:
+
+| Component | Paths Monitored | What Runs |
+|-----------|----------------|-----------|
+| API | `apps/api/**` | Semgrep Python, auth tests, IDOR, SSRF, fuzzer, nuclei API, ZAP API |
+| Web | `apps/web/**` | Semgrep TypeScript, nuclei Web, ZAP Web baseline |
+| Sidecar | `sidecar/**` | Semgrep TypeScript |
+| Mobile | `apps/mobile/**`, `plugins/**` | Semgrep Kotlin |
+| Infra | `docker-compose*.yml`, `**/Dockerfile*` | Everything (config changes affect all services) |
+| Security | `scripts/security/**`, `.github/workflows/security-scan*` | Everything |
+
+Key optimization: **mobile-only PRs skip the Docker stack entirely** (~2 min vs ~25 min).
+
+### Full Suite Pentests (`security-full-suite.yml`)
+
+Runs everything regardless of what changed. Triggered by:
+- Push to main or develop
+- Manual dispatch
+
+The **concurrency group** (`cancel-in-progress: false`) prevents runner clobbering during rapid merges. At most 1 running + 1 queued run exist at any time. When multiple PRs merge quickly, the queued run tests the latest HEAD (which includes all merged changes). Every merge is eventually covered.
+
 ## CI Security Gates
 
-Checks 1-7 run unconditionally on every push/PR from `ci.yml`. Checks 8-10 use a gate job pattern (described below) that conditionally skips the heavy work when the PR doesn't touch relevant paths, while still reporting a green check so branch protection is satisfied.
+Checks 1-7 run unconditionally on every push/PR from `ci.yml`. Checks 8-10 use a gate job pattern that conditionally skips the heavy work when the PR doesn't touch relevant paths, while still reporting a green check so branch protection is satisfied.
 
 | # | Required Check | Workflow | Triggers On |
 |---|----------------|----------|-------------|
@@ -27,47 +54,59 @@ Checks 1-7 run unconditionally on every push/PR from `ci.yml`. Checks 8-10 use a
 | 5 | Attribution Check | `ci.yml` | Every push/PR |
 | 6 | Sidecar Tests | `ci.yml` | Every push/PR |
 | 7 | GitGuardian | External | Every push/PR |
-| 8 | Security Scan Gate | `security-scan.yml` | Backend/web/sidecar/security script changes |
+| 8 | Security Scan Gate | `security-scan.yml` | Component-specific (see table above) |
 | 9 | Android Gate | `android.yml` | Mobile app/plugin changes |
 | 10 | Dependency Scan Gate | `dependency-scan.yml` | Dependency file changes + weekly schedule |
 
-Checks 1-7 are the original required checks. Checks 8-10 were added as part of Epic 28 security hardening.
+Additionally, the **Security Full Suite** badge on the README reflects the pass/fail status of comprehensive pentests on main.
 
 ### Gate Job Pattern (Checks 8-10)
 
-Each gate workflow (`security-scan.yml`, `android.yml`, `dependency-scan.yml`) has three jobs:
-
 ```text
-detect-changes  -->  actual-work (if relevant)  -->  gate (always)
+detect-changes  -->  sast (if code changed)     -->  gate (always)
+                -->  dast (if Docker needed)     -->
 ```
 
-- **detect-changes**: Uses `dorny/paths-filter@v3` to check if the PR touches relevant files. Outputs a boolean.
-- **actual-work**: Only runs if detect-changes says yes (or `workflow_dispatch`/`schedule`). Does the real work (build, test, scan).
-- **gate**: Runs `if: always()`. If detect-changes said no, exits 0 (skip). If detect-changes said yes, checks whether actual-work succeeded.
+- **detect-changes**: Uses `dorny/paths-filter@v3` with 6 granular component filters. Computes derived flags (`needs_sast`, `needs_docker`, `run_all`).
+- **sast**: Runs Semgrep on changed components. No Docker stack needed. Runs in parallel with DAST.
+- **dast**: Builds Docker stack and runs targeted DAST tests based on which components changed.
+- **gate**: Runs `if: always()`. Evaluates both SAST and DAST results. Posts unified PR comment via homebot.0.
 
-This means: the gate job always reports a status, even when the scan is skipped. GitHub branch protection sees a green check either way.
+## SAST (Static Analysis Security Testing)
+
+**Tool:** [Semgrep](https://semgrep.dev/) with language-specific rulesets.
+
+| Language | Rulesets | Scanned Paths |
+|----------|----------|---------------|
+| Python | `p/python`, `p/owasp-top-ten`, `p/secrets` | `apps/api/`, `scripts/security/` |
+| TypeScript | `p/typescript`, `p/owasp-top-ten`, `p/secrets` | `apps/web/`, `sidecar/` |
+| Kotlin | `p/kotlin`, `p/android`, `p/secrets` | `apps/mobile/`, `plugins/` |
+
+In the full suite workflow, SARIF results are uploaded to the GitHub Security tab for centralized vulnerability tracking.
 
 ## DAST & Auth Penetration Tests
 
-**Workflow:** `.github/workflows/security-scan.yml`
-**Triggers:** Backend, web, sidecar, Dockerfiles, compose files, or security script changes.
+### Test Suites
 
-### What it does
+1. **Auth flow tests** (`test-auth-flows.py`) -- 15 behavior-based tests covering registration, login, token handling, RBAC, and logout.
+2. **Data isolation tests** (`test-data-isolation.py`) -- OpenAPI-driven. Auto-discovers ALL endpoints. Tests unauthenticated access (401), CSRF enforcement (403), and cross-user data isolation (IDOR).
+3. **Research security tests** (`test-research-security.py`) -- SSRF prevention, rate limiting, source limits, input validation, CSRF enforcement on research endpoints.
+4. **API fuzzer** (`fuzz-api.py`) -- OpenAPI-driven. Auto-discovers all endpoints. Sends SQL injection, XSS, path traversal, type confusion, and oversized payloads. Asserts no 500 errors.
+5. **Nuclei DAST** -- Known vulnerability templates against API and Web surfaces.
+6. **ZAP API active scan** (`zap-api-plan.yaml`) -- Authenticated, OpenAPI-driven injection testing (SQLi, XSS, SSTI, CRLF, path traversal). Auto-discovers all endpoints.
+7. **ZAP Web scan** (`zap-web-plan.yaml`) -- Pre-seeds all known page URLs + standard spider + passive/active scanning on the web frontend. Tests security headers, cookie flags, CSP, and injection through the proxy path.
 
-1. **Builds the full Docker stack** (`docker-compose.yml` + `docker-compose.test.yml`) in CI.
-2. **Waits for health** -- API and web must respond before tests start.
-3. **Auth flow tests** (`scripts/security/test-auth-flows.py`) -- 15 behavior-based tests that verify specific security properties:
-   - Registration validation (email format, password strength, duplicate detection)
-   - Login security (invalid credentials, account enumeration prevention)
-   - Token handling (JWT validation, expired token rejection, session isolation)
-   - Authorization (RBAC enforcement, horizontal privilege escalation prevention)
-   - Logout (token invalidation, session cleanup)
-4. **API fuzzer** (`scripts/security/fuzz-api.py`) -- self-adapting fuzzer that reads `/openapi.json` at runtime. It discovers all endpoints automatically and sends malformed/adversarial inputs. No manual updates needed when endpoints are added.
-5. **DAST scanner** (`scripts/security/run-dast.sh`) -- runs nuclei with web vulnerability templates against the live stack. Skips gracefully if nuclei is not installed (local dev).
+### Auto-discovery
+
+Tests 2, 4, and 6 read `/openapi.json` from the live API to discover endpoints. **New API routes are automatically tested without any test code changes.**
+
+Test 7 pre-seeds all known page URLs from the Next.js app structure and uses the standard spider to discover additional linked pages. (AJAX Spider with headless Firefox was evaluated but risks OOM on standard GitHub runners with 7GB RAM.)
 
 ### Test results
 
-Scan results are uploaded as a GitHub Actions artifact (`security-scan-results`) with 30-day retention.
+Scan results are uploaded as GitHub Actions artifacts with 30-day retention:
+- `sast-results` -- Semgrep JSON/SARIF output
+- `dast-results` -- ZAP reports, nuclei JSON, custom test output
 
 ## Dependency Vulnerability Scanning
 
@@ -84,7 +123,7 @@ Scan results are uploaded as a GitHub Actions artifact (`security-scan-results`)
 | Python (Security) | `scripts/security/requirements.txt` | Manual |
 | Android (Gradle) | `apps/mobile/gradle/libs.versions.toml` | Renovate (via recursive scan) |
 
-The scanner uses [Google OSV-Scanner](https://google.github.io/osv-scanner/) with explicit lockfile paths for Python/Node and recursive scanning for Gradle (reads the version catalog directly).
+The scanner uses [Google OSV-Scanner](https://google.github.io/osv-scanner/) with explicit lockfile paths for Python/Node and recursive scanning for Gradle.
 
 ### Handling findings
 
@@ -106,28 +145,19 @@ reason = "Not exploitable -- only affects feature X which we don't use"
 
 Every suppression must include a reason. Review suppressions quarterly.
 
-### Weekly scheduled scan
-
-The Monday 6am UTC scan catches newly disclosed CVEs against existing dependencies, even when no code has changed. It bypasses the path filter and always runs the full scan.
-
 ## Adding Security Tests for New Integrations
 
 ### New API endpoints
 
-**Auto-covered.** The API fuzzer reads `/openapi.json` at runtime and discovers all endpoints. New FastAPI routes with proper type hints are automatically fuzzed. No manual changes needed.
+**Auto-covered.** The API fuzzer, IDOR tests, and ZAP scan all read `/openapi.json` at runtime. New FastAPI routes with proper type hints are automatically tested. No manual changes needed.
+
+### New web pages
+
+**Auto-covered (full suite).** The ZAP web scan pre-seeds known URLs and uses AJAX Spider to discover new routes. If you add a new page to `apps/web/src/app/`, add its URL to `scripts/security/zap-web-plan.yaml` in the requestor section for guaranteed coverage.
 
 ### New auth patterns (OAuth, API keys, webhooks)
 
-**Manual.** Add tests to `scripts/security/test-auth-flows.py`. Examples:
-
-- **Nightscout integration** (API key auth): test that invalid API keys are rejected, keys are not leaked in responses, and revoked keys stop working.
-- **Omnipod plugin** (if it adds cloud auth): test token lifecycle, refresh flow, and session isolation.
-- **Webhook receivers**: test signature validation, replay protection, and that unsigned payloads are rejected.
-
-Each test should:
-- Use a unique email/identity (no shared state between tests)
-- Clean up sessions after itself
-- Make specific assertions about security properties (not just "status 200")
+**Manual.** Add tests to `scripts/security/test-auth-flows.py`.
 
 ### New dependencies
 
@@ -141,8 +171,9 @@ Each test should:
 
 **Auto-covered** in most cases:
 
-- **Android Gate**: Plugin code under `plugins/pump-driver-api/**` and `plugins/shipped/**` triggers the Android build/test/lint pipeline.
-- **API fuzzer**: If a plugin adds backend API endpoints, they're auto-discovered via `/openapi.json`.
+- **Android Gate**: Plugin code under `plugins/**` triggers the Android build/test/lint pipeline.
+- **API fuzzer + ZAP**: If a plugin adds backend API endpoints, they're auto-discovered via `/openapi.json`.
+- **SAST**: Kotlin plugin code is scanned by Semgrep with `p/kotlin` and `p/android` rulesets.
 - **Dependency scan**: If the plugin adds dependencies to the Gradle version catalog, the recursive scan picks them up.
 
 Only manual action needed: if a plugin introduces a new auth pattern (see above).
@@ -155,12 +186,13 @@ The Android app has these security measures, verified through different mechanis
 |---------|-------------|
 | SQLCipher database encryption | Unit tests + CodeRabbit review |
 | EncryptedSharedPreferences for tokens | Unit tests + CodeRabbit review |
-| Certificate pinning (OkHttp) | Unit tests |
+| HTTPS enforcement (network_security_config) | Android Lint + CodeRabbit review |
 | No sensitive data in logs | CodeRabbit BLE Protocol Safety check |
 | Dependency vulnerabilities | OSV-Scanner (recursive Gradle scan) |
 | Code quality / safety | CodeRabbit Medical Safety Review check |
+| Hardcoded secrets, insecure patterns | Semgrep SAST (`p/kotlin`, `p/android`, `p/secrets`) |
 
-No DAST scanning for mobile -- there's no web UI to attack. BLE protocol fuzzing would require hardware and is out of scope for CI.
+No DAST scanning for mobile -- BLE protocol fuzzing would require hardware and is out of scope for CI.
 
 ## Running Locally
 
@@ -179,6 +211,10 @@ TEST_SECRET_KEY=$(COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker
   API_URL=http://localhost:8001 WEB_URL=http://localhost:3001 \
   python scripts/security/test-auth-flows.py
 
+# Run IDOR tests
+API_URL=http://localhost:8001 TEST_PASSWORD=your-test-password \
+  python scripts/security/test-data-isolation.py
+
 # Run fuzzer
 API_URL=http://localhost:8001 python scripts/security/fuzz-api.py
 
@@ -189,13 +225,19 @@ API_URL=http://localhost:8001 WEB_URL=http://localhost:3001 ./scripts/security/r
 COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
 ```
 
+### SAST only (no Docker needed)
+
+```bash
+pip install semgrep
+semgrep scan --config p/python --config p/owasp-top-ten --config p/secrets apps/api/ scripts/security/
+semgrep scan --config p/typescript --config p/owasp-top-ten --config p/secrets apps/web/ sidecar/
+semgrep scan --config p/kotlin --config p/android --config p/secrets apps/mobile/ plugins/
+```
+
 ### Dependency scan only
 
 ```bash
-# Install OSV-Scanner (same version as CI)
 go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.3.3
-
-# Scan all lockfiles
 osv-scanner scan \
   --lockfile=apps/api/uv.lock \
   --lockfile=apps/web/package-lock.json \

@@ -12,6 +12,7 @@
   <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/ci.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=CI&logo=githubactions&logoColor=white" alt="CI"></a>
   <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/container-build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/container-build.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=Containers&logo=docker&logoColor=white" alt="Container Build"></a>
   <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/android.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/android.yml?branch=develop&style=for-the-badge&labelColor=1e293b&label=Android&logo=android&logoColor=white" alt="Android Build"></a>
+  <a href="https://github.com/jlengelbrecht/GlycemicGPT/actions/workflows/security-full-suite.yml"><img src="https://img.shields.io/github/actions/workflow/status/jlengelbrecht/GlycemicGPT/security-full-suite.yml?branch=main&style=for-the-badge&labelColor=1e293b&label=Security&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPjxwYXRoIGQ9Ik0xMiAyMnM4LTQgOC0xMFY1bC04LTMtOCAzdjdjMCA2IDggMTAgOCAxMCIvPjwvc3ZnPg==&logoColor=white" alt="Security Suite"></a>
 </p>
 
 <p align="center">
