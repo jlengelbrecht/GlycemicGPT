@@ -481,6 +481,11 @@ jobs:
           SESSION=$(awk '/glycemicgpt_session/ {print $NF}' "$COOKIE_JAR")
           CSRF=$(awk '/csrf_token/ {print $NF}' "$COOKIE_JAR")
 
+          if [ -z "$SESSION" ] || [ -z "$CSRF" ]; then
+            echo "FATAL: ZAP auth bootstrap failed -- no session cookies"
+            exit 1
+          fi
+
           curl -sf -X POST "$API_URL/api/disclaimer/acknowledge" \
             -H "X-CSRF-Token: $CSRF" \
             -b "glycemicgpt_session=$SESSION; csrf_token=$CSRF" > /dev/null || true
@@ -658,6 +663,7 @@ jobs:
       - name: Generate bot token for PR comment
         if: always() && github.event_name == 'pull_request'
         id: bot-token
+        continue-on-error: true
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
@@ -665,6 +671,7 @@ jobs:
 
       - name: Post security scan results to PR
         if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

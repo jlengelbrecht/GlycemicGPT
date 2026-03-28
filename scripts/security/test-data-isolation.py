@@ -63,6 +63,9 @@ CSRF_EXEMPT = {
 # Safe methods that don't need CSRF
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
+# Valid HTTP methods (filter out OpenAPI metadata keys like 'parameters', 'summary')
+HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options"}
+
 passed = 0
 failed = 0
 skipped = 0
@@ -170,6 +173,8 @@ def test_unauthenticated_access(spec: dict) -> None:
             resolved = resolve_path(path)
 
             for method in methods:
+                if method.lower() not in HTTP_METHODS:
+                    continue
                 method_upper = method.upper()
                 if method_upper in ("OPTIONS", "HEAD", "TRACE"):
                     continue
@@ -204,6 +209,8 @@ def test_csrf_enforcement(spec: dict) -> None:
             resolved = resolve_path(path)
 
             for method in methods:
+                if method.lower() not in HTTP_METHODS:
+                    continue
                 method_upper = method.upper()
                 if method_upper in SAFE_METHODS:
                     continue

@@ -43,7 +43,7 @@ jobs:
           # check is the primary rate limiter.
           COOLDOWN_HOURS=2
           LAST_SUCCESS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/security-full-suite.yml/runs?status=success&per_page=1" \
+            "repos/${{ github.repository }}/actions/workflows/security-full-suite.yml/runs?status=success&per_page=1&branch=${{ github.ref_name }}" \
             --jq '.workflow_runs[0].updated_at' 2>/dev/null || echo "")
 
           if [ -z "$LAST_SUCCESS" ] || [ "$LAST_SUCCESS" = "null" ]; then
@@ -286,6 +286,11 @@ jobs:
 
           SESSION=$(awk '/glycemicgpt_session/ {print $NF}' "$COOKIE_JAR")
           CSRF=$(awk '/csrf_token/ {print $NF}' "$COOKIE_JAR")
+
+          if [ -z "$SESSION" ] || [ -z "$CSRF" ]; then
+            echo "FATAL: ZAP auth bootstrap failed -- no session cookies"
+            exit 1
+          fi
 
           curl -sf -X POST "$API_URL/api/disclaimer/acknowledge" \
             -H "X-CSRF-Token: $CSRF" \

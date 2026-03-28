@@ -10,7 +10,7 @@ Security testing has five pillars:
 2. **DAST & Auth Pentests** (`security-scan.yml`, `security-full-suite.yml`) -- behavior-based tests that spin up the Docker stack and attack it: auth flow penetration tests, IDOR prevention, SSRF blocking, OpenAPI-driven API fuzzing, nuclei vulnerability scanning, and OWASP ZAP active injection scanning.
 3. **Dependency Vulnerability Scanning** (`dependency-scan.yml`) -- OSV-Scanner checks all lockfiles against the OSV database for known CVEs. Runs on every dependency change and weekly on a schedule.
 4. **Static Analysis** (CodeRabbit) -- automated PR reviews that check for hardcoded secrets, medical safety violations, BLE protocol issues, and code quality. Configured in `.coderabbit.yaml`.
-5. **Full Suite Pentests** (`security-full-suite.yml`) -- comprehensive security scan of the entire platform. Runs on merges to main/develop, weekly schedule, and manual dispatch. Status badge in README.
+5. **Full Suite Pentests** (`security-full-suite.yml`) -- comprehensive security scan of the entire platform. Runs on merges to main/develop and manual dispatch. Status badge in README.
 
 ### Medical Device Context
 
@@ -229,7 +229,7 @@ COMPOSE_PROJECT_NAME=glycemicgpt-test docker compose -f docker-compose.yml -f do
 
 ```bash
 pip install semgrep
-semgrep scan --config p/python --config p/owasp-top-ten --config p/secrets apps/api/
+semgrep scan --config p/python --config p/owasp-top-ten --config p/secrets apps/api/ scripts/security/
 semgrep scan --config p/typescript --config p/owasp-top-ten --config p/secrets apps/web/ sidecar/
 semgrep scan --config p/kotlin --config p/android --config p/secrets apps/mobile/ plugins/
 ```
