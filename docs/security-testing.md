@@ -36,10 +36,10 @@ Key optimization: **mobile-only PRs skip the Docker stack entirely** (~2 min vs 
 ### Full Suite Pentests (`security-full-suite.yml`)
 
 Runs everything regardless of what changed. Triggered by:
-- Push to main or develop (with 2-hour cooldown to prevent stacking)
-- Manual dispatch (bypasses cooldown)
+- Push to main or develop
+- Manual dispatch
 
-The **cooldown mechanism** prevents waste during rapid merges: if the full suite passed within the last 2 hours, push-triggered runs exit early (~10 seconds). Manual dispatch always bypasses the cooldown. The concurrency group queues (not cancels) pending runs, so at most 1 real run + 1 queued skip exist at any time.
+The **concurrency group** (`cancel-in-progress: false`) prevents runner clobbering during rapid merges. At most 1 running + 1 queued run exist at any time. When multiple PRs merge quickly, the queued run tests the latest HEAD (which includes all merged changes). Every merge is eventually covered.
 
 ## CI Security Gates
 

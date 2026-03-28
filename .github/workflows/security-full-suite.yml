@@ -7,70 +7,23 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  # cancel-in-progress: false (default) ensures queued runs wait instead of
-  # cancelling the in-progress run. Combined with the cooldown check, this
-  # means rapid merges produce at most 1 real run + 1 queued skip (~10s).
+  # Queue runs instead of cancelling. At most 1 running + 1 queued at any time.
+  # When multiple PRs merge rapidly:
+  #   - PR A merges -> run starts (~40 min)
+  #   - PR B merges -> queued (waits for A)
+  #   - PR C merges -> replaces B in queue (GitHub keeps only 1 pending)
+  #   - A finishes -> C starts (tests latest HEAD, which includes B+C)
+  # Every merge is eventually covered. No runner clobbering.
   group: security-full-suite-${{ github.ref }}
 
 jobs:
   # ==========================================================================
-  # Job 1: Cooldown check -- prevent stacking during rapid merges
-  # ==========================================================================
-  cooldown-check:
-    name: Cooldown Check
-    runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-    steps:
-      - name: Check cooldown and in-progress runs
-        id: check
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          # Manual dispatch always runs (bypass all checks)
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Bypass cooldown: manual dispatch"
-            exit 0
-          fi
-
-          # Check if another run is already in progress (besides this one)
-          # GitHub concurrency queues at most 1 pending, but the cooldown
-          # check is the primary rate limiter.
-          COOLDOWN_HOURS=2
-          LAST_SUCCESS=$(gh api \
-            "repos/${{ github.repository }}/actions/workflows/security-full-suite.yml/runs?status=success&per_page=1&branch=${{ github.ref_name }}" \
-            --jq '.workflow_runs[0].updated_at' 2>/dev/null || echo "")
-
-          if [ -z "$LAST_SUCCESS" ] || [ "$LAST_SUCCESS" = "null" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "No previous successful run found -- running"
-            exit 0
-          fi
-
-          LAST_EPOCH=$(date -d "$LAST_SUCCESS" +%s 2>/dev/null || echo 0)
-          NOW_EPOCH=$(date +%s)
-          DIFF_HOURS=$(( (NOW_EPOCH - LAST_EPOCH) / 3600 ))
-
-          if [ "$DIFF_HOURS" -lt "$COOLDOWN_HOURS" ]; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Last successful run was ${DIFF_HOURS}h ago (cooldown: ${COOLDOWN_HOURS}h) -- skipping"
-          else
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "Last successful run was ${DIFF_HOURS}h ago -- running"
-          fi
-
-  # ==========================================================================
-  # Job 2: SAST -- Semgrep on entire codebase (no Docker needed)
+  # Job 1: SAST -- Semgrep on entire codebase (no Docker needed)
   # ==========================================================================
   sast:
     name: SAST (Semgrep)
-    needs: cooldown-check
-    if: needs.cooldown-check.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -83,6 +36,7 @@ jobs:
       - name: Run Semgrep (all languages)
         id: semgrep
         run: |
+          EXIT=0
           semgrep scan \
             --config p/python \
             --config p/typescript \
@@ -97,8 +51,8 @@ jobs:
             --exclude 'apps/api/.venv' \
             --exclude 'Dockerfile*' \
             --json --output semgrep-results.json \
-            apps/api/ apps/web/ sidecar/ apps/mobile/ plugins/ scripts/security/ || SEMGREP_EXIT=$?
-          echo "Semgrep exit code: ${SEMGREP_EXIT:-0}"
+            apps/api/ apps/web/ sidecar/ apps/mobile/ plugins/ scripts/security/ || EXIT=$?
+          echo "Semgrep exit code: $EXIT"
 
       - name: Upload SAST results as artifact
         if: always()
@@ -117,20 +71,17 @@ jobs:
           semgrep_kotlin_exit: "0"
         run: |
           # Full suite produces a single combined JSON. Symlink it so the
-          # evaluator can check each "language" file. All three point to
-          # the same combined output.
+          # evaluator can check each "language" file.
           for lang in python typescript kotlin; do
             ln -sf semgrep-results.json "semgrep-${lang}.json"
           done
           python scripts/security/evaluate-sast.py
 
   # ==========================================================================
-  # Job 3: DAST -- Full Docker stack + all security tests
+  # Job 2: DAST -- Full Docker stack + all security tests
   # ==========================================================================
   dast:
     name: DAST & Penetration Tests
-    needs: cooldown-check
-    if: needs.cooldown-check.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
@@ -260,7 +211,7 @@ jobs:
           WEB_URL: http://localhost:3001
         run: ./scripts/security/run-dast.sh
 
-      # ---- ZAP Scans (API + Web in parallel) ----
+      # ---- ZAP Scans (sequential to stay within 7GB runner RAM) ----
 
       - name: Reset rate limits
         env:
@@ -301,15 +252,13 @@ jobs:
           rm -f "$COOKIE_JAR"
           echo "ZAP auth session established"
 
-      # ZAP scans run sequentially to stay within the 7GB RAM limit of
-      # standard GitHub runners. Each ZAP container uses ~1.5GB on top of
-      # the ~2.5GB Docker Compose stack.
+          # Pre-create results dir writable for ZAP containers (run as UID 1000)
+          mkdir -p scripts/security/results
+          chmod 777 scripts/security/ scripts/security/results/
 
       - name: Run ZAP API active scan
         id: zap-api
         run: |
-          mkdir -p scripts/security/results
-          chmod 777 scripts/security/results
           ZAP_EXIT=0
           docker run --rm --network="host" \
             -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
@@ -381,37 +330,22 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans
 
   # ==========================================================================
-  # Job 4: Summary -- gate job (badge target)
+  # Job 3: Summary -- gate job (badge target)
   # ==========================================================================
   summary:
     name: Security Full Suite
     runs-on: ubuntu-latest
-    needs: [cooldown-check, sast, dast]
+    needs: [sast, dast]
     if: always()
     steps:
       - name: Evaluate results
         env:
-          COOLDOWN_RESULT: ${{ needs.cooldown-check.result }}
-          SHOULD_RUN: ${{ needs.cooldown-check.outputs.should_run }}
           SAST_RESULT: ${{ needs.sast.result }}
           DAST_RESULT: ${{ needs.dast.result }}
         run: |
-          if [ "$COOLDOWN_RESULT" != "success" ]; then
-            echo "Cooldown check failed (result: $COOLDOWN_RESULT)"
-            exit 1
-          fi
-
-          # Cooldown skip: everything is fine, badge stays green
-          if [ "$SHOULD_RUN" != "true" ]; then
-            echo "Skipped -- within cooldown window. Badge stays green."
-            exit 0
-          fi
-
-          # Both SAST and DAST must pass
           if [ "$SAST_RESULT" = "success" ] && [ "$DAST_RESULT" = "success" ]; then
             echo "All security tests passed"
             exit 0
           fi
-
           echo "Security tests failed (SAST: $SAST_RESULT, DAST: $DAST_RESULT)"
           exit 1
