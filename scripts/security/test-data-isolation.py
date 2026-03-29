@@ -83,7 +83,7 @@ def register_and_login(client: httpx.Client, email: str, max_retries: int = 5) -
         f"{API_URL}/api/auth/register",
         json={"email": email, "password": TEST_PASSWORD},
     )
-    assert resp.status_code in (200, 201), f"Register failed: {resp.status_code}"
+    assert resp.status_code in (200, 201), f"Register failed: {resp.status_code}\n{resp.text[:500]}"
 
     for attempt in range(max_retries):
         resp = client.post(
@@ -94,13 +94,14 @@ def register_and_login(client: httpx.Client, email: str, max_retries: int = 5) -
             time.sleep(2 ** attempt)
             continue
         break
-    assert resp.status_code == 200, f"Login failed: {resp.status_code}"
+    assert resp.status_code == 200, f"Login failed: {resp.status_code}\n{resp.text[:500]}"
 
     csrf = get_csrf(client)
-    client.post(
+    resp = client.post(
         f"{API_URL}/api/disclaimer/acknowledge",
         headers={"X-CSRF-Token": csrf},
     )
+    assert resp.status_code == 200, f"Disclaimer ack failed: {resp.status_code}\n{resp.text[:500]}"
     return get_csrf(client)
 
 
@@ -108,7 +109,7 @@ def get_csrf(client: httpx.Client) -> str:
     for cookie in client.cookies.jar:
         if cookie.name == "csrf_token":
             return cookie.value
-    return ""
+    raise AssertionError("CSRF token not found in cookies -- login may have failed")
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
@@ -255,58 +256,73 @@ def test_cross_user_isolation() -> None:
         csrf_b = register_and_login(user_b, unique_email())
 
         # ── Chat History ──
-        # User A's history should be empty or contain only A's messages
+        # Try to create a chat message for User A (may fail without AI provider)
+        chat_resp = user_a.post(
+            f"{API_URL}/api/ai/chat",
+            json={"message": "Test message for isolation check"},
+            headers={"X-CSRF-Token": csrf_a},
+        )
+        chat_created = chat_resp.status_code == 200
+
         resp_a = user_a.get(
             f"{API_URL}/api/ai/chat/history",
             headers={"X-CSRF-Token": csrf_a},
-        )
-        resp_b = user_b.get(
-            f"{API_URL}/api/ai/chat/history",
-            headers={"X-CSRF-Token": csrf_b},
         )
         check(
             "Chat history: User A can access own",
             resp_a.status_code == 200,
             f"Got {resp_a.status_code}",
         )
-        check(
-            "Chat history: User B sees only own (empty)",
-            resp_b.status_code == 200
-            and len(resp_b.json().get("messages", [])) == 0,
-            f"Got {resp_b.status_code}",
-        )
+
+        if chat_created:
+            # Full isolation test: User A has data, verify User B can't see it
+            resp_b = user_b.get(
+                f"{API_URL}/api/ai/chat/history",
+                headers={"X-CSRF-Token": csrf_b},
+            )
+            a_messages = resp_a.json().get("messages", [])
+            b_messages = resp_b.json().get("messages", [])
+            check(
+                "Chat history: User A has messages",
+                len(a_messages) > 0,
+                f"Got {len(a_messages)} messages",
+            )
+            check(
+                "Chat history: User B cannot see User A's messages",
+                resp_b.status_code == 200 and len(b_messages) == 0,
+                f"Got {resp_b.status_code}, B has {len(b_messages)} messages",
+            )
+        else:
+            # No AI provider in CI -- verify auth enforcement only
+            print("    [SKIP] Chat isolation: no AI provider (chat POST returned "
+                  f"{chat_resp.status_code}) -- auth enforcement tested, "
+                  "data isolation requires AI provider")
 
         # ── Knowledge Base ──
+        # Knowledge documents are created by the research pipeline, not direct upload.
+        # In CI without AI, we can only verify auth enforcement on the endpoint.
         resp_a = user_a.get(
             f"{API_URL}/api/knowledge/documents",
             headers={"X-CSRF-Token": csrf_a},
+        )
+        check(
+            "Knowledge: User A can access documents endpoint",
+            resp_a.status_code == 200,
+            f"Got {resp_a.status_code}",
         )
         resp_b = user_b.get(
             f"{API_URL}/api/knowledge/documents",
             headers={"X-CSRF-Token": csrf_b},
         )
         check(
-            "Knowledge: User A can access documents",
-            resp_a.status_code == 200,
-            f"Got {resp_a.status_code}",
-        )
-        check(
-            "Knowledge: User B sees independent documents",
+            "Knowledge: User B gets independent response",
             resp_b.status_code == 200,
             f"Got {resp_b.status_code}",
         )
-
-        # User B tries to delete a knowledge document belonging to A
-        resp_del = user_b.delete(
-            f"{API_URL}/api/knowledge/documents",
-            params={"source_name": "User A Secret Document"},
-            headers={"X-CSRF-Token": csrf_b},
-        )
-        check(
-            "Knowledge: User B cannot delete User A's docs",
-            resp_del.status_code == 404,
-            f"Got {resp_del.status_code}",
-        )
+        # Note: Full IDOR test for knowledge requires research pipeline to
+        # create documents. Auth enforcement is verified by the dynamic
+        # unauthenticated access test (test_unauthenticated_access).
+        # Data isolation for knowledge tracked in story-35.11b test improvements.
 
         # ── Research Sources ──
         # User A adds a source

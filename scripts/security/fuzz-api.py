@@ -76,7 +76,7 @@ def setup_session(client: httpx.Client) -> bool:
     password = os.environ.get("TEST_PASSWORD")
     if not password:
         print("WARNING: TEST_PASSWORD not set, generating random password")
-        password = f"Fuzz-{uuid.uuid4().hex[:16]}!"
+        password = f"Fuzz-{uuid.uuid4().hex[:12]}9Xa!"
 
     client.post(
         f"{API_URL}/api/auth/register",

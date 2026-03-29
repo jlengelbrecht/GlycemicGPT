@@ -42,7 +42,7 @@ def register_and_login(client: httpx.Client, email: str, max_retries: int = 3) -
         f"{API_URL}/api/auth/register",
         json={"email": email, "password": TEST_PASSWORD},
     )
-    assert resp.status_code in (200, 201), f"Register failed: {resp.status_code}"
+    assert resp.status_code in (200, 201), f"Register failed: {resp.status_code}\n{resp.text[:500]}"
 
     for attempt in range(max_retries):
         resp = client.post(
@@ -55,13 +55,14 @@ def register_and_login(client: httpx.Client, email: str, max_retries: int = 3) -
             time.sleep(wait)
             continue
         break
-    assert resp.status_code == 200, f"Login failed: {resp.status_code}"
+    assert resp.status_code == 200, f"Login failed: {resp.status_code}\n{resp.text[:500]}"
 
     csrf = get_csrf(client)
-    client.post(
+    resp = client.post(
         f"{API_URL}/api/disclaimer/acknowledge",
         headers={"X-CSRF-Token": csrf},
     )
+    assert resp.status_code == 200, f"Disclaimer ack failed: {resp.status_code}\n{resp.text[:500]}"
     return get_csrf(client)
 
 
@@ -69,7 +70,7 @@ def get_csrf(client: httpx.Client) -> str:
     for cookie in client.cookies.jar:
         if cookie.name == "csrf_token":
             return cookie.value
-    return ""
+    raise AssertionError("CSRF token not found in cookies -- login may have failed")
 
 
 def check(name: str, condition: bool, detail: str = "") -> None:
