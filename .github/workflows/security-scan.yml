@@ -689,7 +689,7 @@ jobs:
 
       - name: Create/update security finding issues
         id: create-issues
-        if: always() && steps.bot-token.outputs.token
+        if: always() && github.event_name == 'pull_request' && steps.bot-token.outputs.token
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}

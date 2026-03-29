@@ -657,16 +657,19 @@ def reconcile_findings(
     pr_author: str | None,
     pr_number: str | None,
     dry_run: bool,
+    reports_present: bool = True,
 ) -> dict:
     """Core orchestration: create, reopen, comment, close issues."""
     stats = {"created": 0, "reopened": 0, "commented": 0, "closed": 0, "skipped": 0, "issues": []}
 
     if not findings:
         print("  No findings to process")
-        if scan_type == "full-suite" and not dry_run:
-            # Still need to check for auto-close
+        if scan_type == "full-suite" and reports_present and not dry_run:
+            # Reports were present but had 0 findings -- safe to auto-close
             pass
         else:
+            if not reports_present:
+                print("  WARNING: No scan reports found -- skipping auto-close to prevent false closures")
             return stats
 
     # Bulk fetch existing automated issues
@@ -866,6 +869,12 @@ def main() -> None:
         print(f"  PR: #{pr_number}")
     print()
 
+    # Check if scan reports actually exist (guards against auto-close on empty artifacts)
+    sast_files = glob.glob(os.path.join(args.sast_results, "semgrep-*.json")) if os.path.isdir(args.sast_results) else []
+    dast_files = glob.glob(os.path.join(args.dast_results, "zap-*.json")) if os.path.isdir(args.dast_results) else []
+    reports_present = bool(sast_files or dast_files)
+    print(f"  Reports present: {reports_present} ({len(sast_files)} SAST, {len(dast_files)} DAST files)")
+
     # Parse all findings
     findings = []
 
@@ -904,6 +913,7 @@ def main() -> None:
         pr_author=args.pr_author,
         pr_number=pr_number,
         dry_run=args.dry_run,
+        reports_present=reports_present,
     )
 
     # Export issue metadata as step output for PR comment
