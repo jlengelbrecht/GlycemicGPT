@@ -835,9 +835,13 @@ def reconcile_findings(
                             f"run [#{run_id}]({run_url}) on branch `{branch}` "
                             f"(commit `{sha[:7]}`)."
                         )
-                        client.add_comment(existing["number"], comment)
-                        print(f"  Commented #{existing['number']}: still detected")
-                        stats["commented"] += 1
+                        result = client.add_comment(existing["number"], comment)
+                        if result:
+                            print(f"  Commented #{existing['number']}: still detected")
+                            stats["commented"] += 1
+                        else:
+                            print(f"  Failed to comment #{existing['number']}: API error")
+                            stats["skipped"] += 1
                     else:
                         stats["skipped"] += 1
                 else:
