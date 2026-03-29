@@ -43,6 +43,14 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 SUPPRESSIONS_FILE = SCRIPT_DIR / "zap-suppressions.json"
+GITHUB_OUTPUT = os.environ.get("GITHUB_OUTPUT", "")
+
+
+def write_output(key: str, value: str) -> None:
+    """Write a GitHub Actions step output."""
+    if GITHUB_OUTPUT:
+        with open(GITHUB_OUTPUT, "a") as f:
+            f.write(f"{key}={value}\n")
 
 # Severity threshold: create issues for Low and above, skip Informational
 ISSUE_SEVERITIES = {"critical", "high", "medium", "low"}
@@ -500,14 +508,17 @@ def build_issue_body(
     run_url: str,
     branch: str,
     sha: str,
+    pr_number: str | None = None,
 ) -> str:
     """Build the full issue body markdown."""
     lines = [
         f"## Security Finding: {finding.title}",
         "",
         f"<!-- security-finding:{finding.fingerprint} -->",
-        "",
     ]
+    if pr_number:
+        lines.append(f"<!-- source-pr:{pr_number} -->")
+    lines.append("")
 
     # Suppression callout
     if finding.suppressed:
@@ -644,10 +655,11 @@ def reconcile_findings(
     branch: str,
     sha: str,
     pr_author: str | None,
+    pr_number: str | None,
     dry_run: bool,
 ) -> dict:
     """Core orchestration: create, reopen, comment, close issues."""
-    stats = {"created": 0, "reopened": 0, "commented": 0, "closed": 0, "skipped": 0}
+    stats = {"created": 0, "reopened": 0, "commented": 0, "closed": 0, "skipped": 0, "issues": []}
 
     if not findings:
         print("  No findings to process")
@@ -691,11 +703,19 @@ def reconcile_findings(
                 print(f"  [DRY RUN] Would create: {title}")
                 print(f"    Labels: {labels}")
                 print(f"    Fingerprint: {finding.fingerprint}")
+                stats["issues"].append({"number": 0, "title": finding.title, "action": "created", "severity": finding.severity, "url": ""})
             else:
-                body = build_issue_body(finding, run_id, run_url, branch, sha)
+                body = build_issue_body(finding, run_id, run_url, branch, sha, pr_number=pr_number)
                 result = client.create_issue(title, body, labels, assignee)
                 if result:
                     print(f"  Created #{result['number']}: {title}")
+                    stats["issues"].append({
+                        "number": result["number"],
+                        "title": finding.title,
+                        "action": "created",
+                        "severity": finding.severity,
+                        "url": result.get("html_url", ""),
+                    })
                 else:
                     print(f"  Failed to create: {title}")
             stats["created"] += 1
@@ -713,6 +733,13 @@ def reconcile_findings(
                 client.add_comment(existing["number"], comment)
                 client.update_issue(existing["number"], state="open")
                 print(f"  Reopened #{existing['number']}: {existing['title']}")
+                stats["issues"].append({
+                    "number": existing["number"],
+                    "title": existing.get("title", finding.title),
+                    "action": "reopened",
+                    "severity": finding.severity,
+                    "url": existing.get("html_url", ""),
+                })
             stats["reopened"] += 1
 
         else:
@@ -748,20 +775,59 @@ def reconcile_findings(
 
 
 # ---------------------------------------------------------------------------
+# PR Orphan Cleanup
+# ---------------------------------------------------------------------------
+
+SOURCE_PR_RE = re.compile(r"<!-- source-pr:(\d+) -->")
+
+
+def cleanup_pr_issues(client: GitHubIssueClient, pr_number: str) -> None:
+    """Close all open automated issues that originated from a specific PR.
+
+    Called when a PR is closed without merging -- the findings only existed
+    on the feature branch and were never merged to main/develop.
+    """
+    print(f"  Cleaning up issues from closed PR #{pr_number}...")
+
+    existing_issues = client.list_automated_issues()
+    closed_count = 0
+
+    for issue in existing_issues:
+        if issue["state"] != "open":
+            continue
+        body = issue.get("body", "")
+        match = SOURCE_PR_RE.search(body)
+        if match and match.group(1) == str(pr_number):
+            comment = (
+                f"Source PR #{pr_number} was closed without merging. "
+                f"This finding only existed on the feature branch and was never merged. "
+                f"Auto-closing."
+            )
+            client.add_comment(issue["number"], comment)
+            client.update_issue(issue["number"], state="closed")
+            print(f"    Closed #{issue['number']}: {issue['title']}")
+            closed_count += 1
+
+    print(f"  Cleaned up {closed_count} orphaned issue(s)")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create GitHub Issues from security findings")
-    parser.add_argument("--sast-results", required=True, help="Directory with Semgrep JSON files")
-    parser.add_argument("--dast-results", required=True, help="Directory with ZAP/Nuclei JSON files")
-    parser.add_argument("--scan-type", required=True, choices=["pr", "full-suite"])
-    parser.add_argument("--run-id", required=True)
-    parser.add_argument("--run-url", required=True)
+    parser.add_argument("--sast-results", default=None, help="Directory with Semgrep JSON files")
+    parser.add_argument("--dast-results", default=None, help="Directory with ZAP/Nuclei JSON files")
+    parser.add_argument("--scan-type", default=None, choices=["pr", "full-suite"])
+    parser.add_argument("--run-id", default=None)
+    parser.add_argument("--run-url", default=None)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pr-author", default=None)
+    parser.add_argument("--pr-number", default=None, help="Source PR number (for tagging issues)")
     parser.add_argument("--branch", default="unknown")
     parser.add_argument("--sha", default="unknown")
+    parser.add_argument("--cleanup-pr", default=None, help="Close issues tagged with this PR number (orphan cleanup)")
     parser.add_argument("--dry-run", action="store_true", help="Print actions without calling API")
     args = parser.parse_args()
 
@@ -770,11 +836,34 @@ def main() -> None:
         print("No GH_TOKEN set, skipping issue creation")
         return
 
+    # Cleanup mode: close orphaned issues from a closed PR
+    if args.cleanup_pr:
+        print(f"=== Security Issue Cleanup (PR #{args.cleanup_pr}) ===")
+        if args.dry_run:
+            print("  DRY RUN -- no API calls")
+            return
+        client = GitHubIssueClient(token, args.repo)
+        cleanup_pr_issues(client, args.cleanup_pr)
+        print("==========================================")
+        return
+
+    # Normal mode: validate required args
+    missing = []
+    for field in ["sast_results", "dast_results", "scan_type", "run_id", "run_url"]:
+        if not getattr(args, field):
+            missing.append(f"--{field.replace('_', '-')}")
+    if missing:
+        parser.error(f"The following arguments are required: {', '.join(missing)}")
+
+    pr_number = args.pr_number if args.pr_number else None
+
     print(f"=== Security Finding Issue Automation ===")
     print(f"  Scan type: {args.scan_type}")
     print(f"  Repo: {args.repo}")
     print(f"  Branch: {args.branch}")
     print(f"  Run: #{args.run_id}")
+    if pr_number:
+        print(f"  PR: #{pr_number}")
     print()
 
     # Parse all findings
@@ -813,8 +902,19 @@ def main() -> None:
         branch=args.branch,
         sha=args.sha,
         pr_author=args.pr_author,
+        pr_number=pr_number,
         dry_run=args.dry_run,
     )
+
+    # Export issue metadata as step output for PR comment
+    issues = stats.get("issues", [])
+    if issues:
+        issue_numbers = ",".join(f"#{i['number']}" for i in issues)
+        write_output("created_issues", issue_numbers)
+        write_output("issues_json", json.dumps(issues))
+    else:
+        write_output("created_issues", "")
+        write_output("issues_json", "[]")
 
     print()
     print(f"  Summary: {stats['created']} created, {stats['reopened']} reopened, "
