@@ -158,7 +158,7 @@ jobs:
   # (a separate frontend story). These are documented as accepted risk.
   # ZAP alert IDs: 10055 = CSP violations
   - type: alertFilter
-    rules:
+    alertFilters:
       - ruleId: 10055
         newRisk: "Low"
         context: "glycemicgpt-web"
