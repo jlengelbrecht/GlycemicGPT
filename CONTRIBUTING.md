@@ -404,13 +404,73 @@ Every PR must pass these checks before it can be merged:
 |-------|-------------------|
 | Backend Tests | Python unit tests with PostgreSQL |
 | Backend Lint | Ruff linter + formatter |
-| Frontend Tests | Jest tests + Next.js build (`npm test` and `npm run build`) |
+| Frontend Tests | Jest tests + Next.js build |
 | Frontend Lint | ESLint |
 | Sidecar Tests | Vitest for AI proxy |
 | Attribution Check | No prohibited attribution lines |
-| GitGuardian Security Checks | Secret/credential scanning |
+| GitGuardian | Secret/credential scanning |
+| Security Scan Gate | SAST + DAST security testing (see below) |
 
-Additionally, PRs that modify `apps/mobile/**` will run Android Build & Test (unit tests, lint, debug APK build).
+Additionally, PRs that modify `apps/mobile/**` will trigger the **Android Gate** (unit tests, lint, debug APK build).
+
+### Security Scan (Smart Targeting)
+
+The Security Scan Gate runs **targeted security tests based on what your PR changes**. It won't waste time scanning components you didn't touch:
+
+| If you changed... | What runs |
+|-------------------|-----------|
+| `apps/api/` | Semgrep Python, auth pentests, IDOR, SSRF, API fuzzer, nuclei API, ZAP API active scan |
+| `apps/web/` | Semgrep TypeScript, nuclei Web, ZAP Web scan |
+| `sidecar/` | Semgrep TypeScript |
+| `apps/mobile/` or `plugins/` | Semgrep Kotlin |
+| `docker-compose*`, `Dockerfile*` | Everything (infra changes affect all services) |
+| `scripts/security/` | Everything |
+
+If your PR only changes documentation or mobile code, the Docker-based DAST tests are skipped entirely (~2 min instead of ~25 min).
+
+For details on each test suite, see [docs/security-testing.md](docs/security-testing.md).
+
+### Handling Security Findings in Your PR
+
+If the security scan finds issues in your PR, the homebot.0 bot will post a comment on the PR with results showing exactly what failed. Here's how to handle findings:
+
+**Real findings (your code introduced a vulnerability):** Fix them. The scan won't pass until they're resolved. Common findings include:
+- Semgrep flagging hardcoded secrets, injection patterns, or insecure crypto
+- ZAP finding injection vulnerabilities or missing security headers
+- IDOR tests detecting cross-user data leaks
+
+**Pre-existing findings (the finding exists in code you didn't write):** If the scan catches a pre-existing issue that your PR didn't introduce, you have two options:
+1. **Fix it** (preferred) -- even if you didn't cause it, fixing it is welcome
+2. **Suppress it with a documented reason** -- see [Security Exceptions](#security-exceptions) below
+
+### Security Exceptions
+
+Sometimes a finding is a known limitation, an accepted risk, or a false positive. We have a formal process for handling these:
+
+**Semgrep (SAST):** Add `# nosemgrep: rule-id` on the line. The comment must be on a Python/JS comment line, not inside a string.
+
+**ZAP (DAST):** Add an entry to `scripts/security/zap-suppressions.json`:
+```json
+{
+  "pluginId": "10055",
+  "scan": "web",
+  "reason": "Next.js requires unsafe-inline for hydration. Fix tracked in #123."
+}
+```
+
+**OSV-Scanner (Dependencies):** Add an entry to `osv-scanner.toml`:
+```toml
+[[IgnoredVulns]]
+id = "GHSA-xxxx-yyyy-zzzz"
+reason = "Not exploitable -- only affects feature X which we don't use"
+```
+
+**Rules for all exceptions:**
+- Every exception **must** include a reason explaining why it's acceptable
+- Exceptions should reference the issue or story that will fix the underlying problem
+- Suppressed findings are still visible in CI logs -- they're not hidden, just non-blocking
+- Exceptions are reviewed quarterly by maintainers
+- Adding an exception without a reason will not be merged
 
 > **Note:** There is a separate [Promotion PR Template](.github/PROMOTION_PR_TEMPLATE.md) used only for develop-to-main releases. Regular contributors don't need to worry about this.
 
