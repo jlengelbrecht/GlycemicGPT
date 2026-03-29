@@ -378,20 +378,28 @@ jobs:
         run: |
           mkdir -p scripts/security/results
           echo "$API_URL" > /tmp/nuclei-targets.txt
+          NUCLEI_EXIT=0
           nuclei -l /tmp/nuclei-targets.txt \
             -t http/misconfiguration/ -t http/exposures/ -t http/vulnerabilities/ \
             -exclude-templates http/fuzzing/ -exclude-templates http/takeovers/ \
             -severity medium,high,critical \
             -json-export scripts/security/results/nuclei-api.json \
-            -silent -no-color -timeout 10 -retries 1 -rate-limit 50 || true
+            -stats -no-color -timeout 10 -retries 1 -rate-limit 50 || NUCLEI_EXIT=$?
+          echo "Nuclei API exit: $NUCLEI_EXIT"
+          if [ "$NUCLEI_EXIT" -gt 1 ]; then
+            echo "FAIL: Nuclei crashed (exit $NUCLEI_EXIT)"
+            exit 1
+          fi
           if [ -f scripts/security/results/nuclei-api.json ] && [ -s scripts/security/results/nuclei-api.json ]; then
             HIGH_CRIT=$(grep -cE '"severity":"(high|critical)"' scripts/security/results/nuclei-api.json || true)
             if [ "${HIGH_CRIT:-0}" -gt 0 ]; then
               echo "FAIL: $HIGH_CRIT high/critical API findings"
               exit 1
             fi
+            echo "Nuclei API: findings present but no high/critical"
+          else
+            echo "Nuclei API: no findings (clean)"
           fi
-          echo "Nuclei API: no high/critical findings"
 
       - name: Run nuclei DAST (Web)
         id: nuclei-web
@@ -404,20 +412,28 @@ jobs:
         run: |
           mkdir -p scripts/security/results
           echo "$WEB_URL" > /tmp/nuclei-targets.txt
+          NUCLEI_EXIT=0
           nuclei -l /tmp/nuclei-targets.txt \
             -t http/misconfiguration/ -t http/exposures/ -t http/vulnerabilities/ \
             -exclude-templates http/fuzzing/ -exclude-templates http/takeovers/ \
             -severity medium,high,critical \
             -json-export scripts/security/results/nuclei-web.json \
-            -silent -no-color -timeout 10 -retries 1 -rate-limit 50 || true
+            -stats -no-color -timeout 10 -retries 1 -rate-limit 50 || NUCLEI_EXIT=$?
+          echo "Nuclei Web exit: $NUCLEI_EXIT"
+          if [ "$NUCLEI_EXIT" -gt 1 ]; then
+            echo "FAIL: Nuclei crashed (exit $NUCLEI_EXIT)"
+            exit 1
+          fi
           if [ -f scripts/security/results/nuclei-web.json ] && [ -s scripts/security/results/nuclei-web.json ]; then
             HIGH_CRIT=$(grep -cE '"severity":"(high|critical)"' scripts/security/results/nuclei-web.json || true)
             if [ "${HIGH_CRIT:-0}" -gt 0 ]; then
               echo "FAIL: $HIGH_CRIT high/critical Web findings"
               exit 1
             fi
+            echo "Nuclei Web: findings present but no high/critical"
+          else
+            echo "Nuclei Web: no findings (clean)"
           fi
-          echo "Nuclei Web: no high/critical findings"
 
       # ---- ZAP scans (conditional: API and/or Web) ----
 
