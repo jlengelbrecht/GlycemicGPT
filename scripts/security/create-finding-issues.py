@@ -475,19 +475,40 @@ class GitHubIssueClient:
         """Update issue fields (state, labels, etc)."""
         return self._request("PATCH", f"/issues/{issue_number}", json_data=kwargs)
 
-    def last_bot_comment_age_days(self, issue_number: int) -> float | None:
-        """Return days since last homebot.0 comment on an issue, or None if no comments."""
-        comments = self._request("GET", f"/issues/{issue_number}/comments?per_page=10&direction=desc")
-        if not comments:
-            return None
-        for comment in comments:
-            if comment.get("user", {}).get("login") == "homebot-0[bot]":
+    def last_bot_comment_age_days(self, issue_number: int) -> float:
+        """Return days since last homebot.0 comment on an issue.
+
+        Returns:
+            float >= 0: days since last bot comment
+            float('inf'): no bot comment found (safe to comment)
+            -1.0: lookup failed (caller should skip commenting)
+        """
+        page = 1
+        cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(days=7)
+        while True:
+            comments = self._request(
+                "GET",
+                f"/issues/{issue_number}/comments?per_page=50&page={page}&direction=desc",
+            )
+            if comments is None:
+                # API error -- return sentinel so caller skips commenting
+                return -1.0
+            if not comments:
+                break
+            for comment in comments:
+                if comment.get("user", {}).get("login") == "homebot-0[bot]":
+                    created = comment.get("created_at", "")
+                    if created:
+                        comment_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                        return (datetime.now(timezone.utc) - comment_time).total_seconds() / 86400
+                # If we've gone past the 7-day window, no need to keep paging
                 created = comment.get("created_at", "")
                 if created:
                     comment_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    age = datetime.now(timezone.utc) - comment_time
-                    return age.total_seconds() / 86400
-        return None
+                    if comment_time < cutoff:
+                        return float("inf")
+            page += 1
+        return float("inf")
 
     def ensure_labels(self, labels: list[str]) -> None:
         """Create any labels that don't exist yet."""
@@ -804,7 +825,11 @@ def reconcile_findings(
                 # Full-suite: add throttled "still detected" comment (max once per 7 days)
                 elif scan_type == "full-suite":
                     age = client.last_bot_comment_age_days(existing["number"])
-                    if age is None or age >= 7:
+                    if age < 0:
+                        # Lookup failed -- skip commenting to avoid duplicates
+                        print(f"  Skipped #{existing['number']}: comment lookup failed")
+                        stats["skipped"] += 1
+                    elif age >= 7:
                         comment = (
                             f"Still detected in full security suite "
                             f"run [#{run_id}]({run_url}) on branch `{branch}` "
