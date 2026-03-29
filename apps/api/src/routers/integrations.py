@@ -2167,7 +2167,8 @@ async def get_insulin_summary(
     _bolus_table = PumpEvent.__tablename__
     _bolus_val = PumpEventType.BOLUS.value
     _correction_val = PumpEventType.CORRECTION.value
-    bolus_query = text(f"""
+    bolus_query = text(  # nosemgrep: avoid-sqlalchemy-text
+        f"""
         WITH deliveries AS (
             SELECT event_timestamp, units,
                    bool_or(event_type = :correction_type) AS is_correction
@@ -2184,7 +2185,8 @@ async def get_insulin_summary(
                COUNT(*) AS delivery_count
         FROM deliveries
         GROUP BY is_correction
-    """)
+    """
+    )
     if bolus_source is not None:
         bolus_result = await db.execute(
             bolus_query,
@@ -2214,7 +2216,8 @@ async def get_insulin_summary(
     # Uses PostgreSQL EXTRACT(EPOCH) and LEAST() -- not portable to SQLite.
     _table = PumpEvent.__tablename__
     _basal_val = PumpEventType.BASAL.value
-    basal_query = text(f"""
+    basal_query = text(  # nosemgrep: avoid-sqlalchemy-text
+        f"""
         WITH prior AS (
             SELECT event_timestamp, units
             FROM {_table}
@@ -2264,7 +2267,8 @@ async def get_insulin_summary(
         FROM basal_ordered
         WHERE LEAST(COALESCE(next_ts, :now), :now)
             > GREATEST(event_timestamp, :cutoff)
-    """)
+    """
+    )
     if basal_source is not None:
         basal_result = await db.execute(
             basal_query,
