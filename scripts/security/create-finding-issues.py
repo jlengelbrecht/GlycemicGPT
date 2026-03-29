@@ -425,9 +425,11 @@ class GitHubIssueClient:
                     print(f"    API 422: {body[:200]}")
                     return None
                 if e.code == 403:
-                    print(f"    API 403: Permission denied. Ensure homebot.0 has 'issues: write' permission.")
+                    err_body = e.read().decode("utf-8", errors="replace")[:200]
+                    print(f"    API 403: Permission denied. Ensure homebot.0 has 'issues: write' permission.\n    Response: {err_body}")
                     return None
-                print(f"    API error {e.code}: {e.reason}")
+                err_body = e.read().decode("utf-8", errors="replace")[:200]
+                print(f"    API error {e.code}: {e.reason}\n    Response: {err_body}")
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)
                     continue
@@ -724,21 +726,28 @@ def reconcile_findings(
             stats["created"] += 1
 
         elif existing["state"] == "closed":
-            # Previously closed -- reopen
+            # Previously closed -- reopen and refresh content
             if dry_run:
                 print(f"  [DRY RUN] Would reopen #{existing['number']}: {title}")
             else:
+                body = build_issue_body(finding, run_id, run_url, branch, sha, pr_number=pr_number)
                 comment = (
                     f"This finding was **re-detected** in security scan "
                     f"run [#{run_id}]({run_url}) on branch `{branch}` "
-                    f"(commit `{sha[:7]}`). Reopening."
+                    f"(commit `{sha[:7]}`). Reopening with updated details."
                 )
                 client.add_comment(existing["number"], comment)
-                client.update_issue(existing["number"], state="open")
-                print(f"  Reopened #{existing['number']}: {existing['title']}")
+                client.update_issue(
+                    existing["number"],
+                    state="open",
+                    title=title,
+                    body=body,
+                    labels=[l for l in labels],
+                )
+                print(f"  Reopened #{existing['number']}: {title}")
                 stats["issues"].append({
                     "number": existing["number"],
-                    "title": existing.get("title", finding.title),
+                    "title": finding.title,
                     "action": "reopened",
                     "severity": finding.severity,
                     "url": existing.get("html_url", ""),
@@ -746,11 +755,29 @@ def reconcile_findings(
             stats["reopened"] += 1
 
         else:
-            # Already open -- skip for PR scans, comment for full suite
-            if scan_type == "full-suite":
-                # Throttle: check if last comment was within 24h
-                # (simplified: just skip commenting for now, the issue being open is enough)
-                stats["skipped"] += 1
+            # Already open -- refresh content if changed
+            if not dry_run:
+                body = build_issue_body(finding, run_id, run_url, branch, sha, pr_number=pr_number)
+                existing_body = existing.get("body", "")
+                existing_labels = {l["name"] for l in existing.get("labels", [])}
+                new_labels = set(labels)
+
+                # Only update if something meaningful changed
+                needs_update = (
+                    set(labels) != existing_labels
+                    or existing.get("title", "") != title
+                )
+                if needs_update:
+                    client.update_issue(
+                        existing["number"],
+                        title=title,
+                        body=body,
+                        labels=[l for l in labels],
+                    )
+                    print(f"  Updated #{existing['number']}: {title} (labels/title changed)")
+                    stats["commented"] += 1
+                else:
+                    stats["skipped"] += 1
             else:
                 stats["skipped"] += 1
 
