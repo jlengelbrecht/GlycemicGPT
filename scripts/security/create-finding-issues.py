@@ -37,7 +37,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 
@@ -483,15 +483,15 @@ class GitHubIssueClient:
             float('inf'): no bot comment found (safe to comment)
             -1.0: lookup failed (caller should skip commenting)
         """
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=7)
         page = 1
-        cutoff = datetime.now(timezone.utc) - __import__("datetime").timedelta(days=7)
         while True:
             comments = self._request(
                 "GET",
-                f"/issues/{issue_number}/comments?per_page=50&page={page}&direction=desc",
+                f"/issues/{issue_number}/comments?per_page=50&page={page}&sort=created&direction=desc",
             )
             if comments is None:
-                # API error -- return sentinel so caller skips commenting
                 return -1.0
             if not comments:
                 break
@@ -500,8 +500,8 @@ class GitHubIssueClient:
                     created = comment.get("created_at", "")
                     if created:
                         comment_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                        return (datetime.now(timezone.utc) - comment_time).total_seconds() / 86400
-                # If we've gone past the 7-day window, no need to keep paging
+                        return (now - comment_time).total_seconds() / 86400
+                # Newest-first: once we pass the 7-day cutoff, stop paging
                 created = comment.get("created_at", "")
                 if created:
                     comment_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
