@@ -102,10 +102,31 @@ Tests 2, 4, and 6 read `/openapi.json` from the live API to discover endpoints. 
 
 Test 7 pre-seeds all known page URLs from the Next.js app structure and uses the standard spider to discover additional linked pages. (AJAX Spider with headless Firefox was evaluated but risks OOM on standard GitHub runners with 7GB RAM.)
 
+### Evaluation scripts
+
+Results are evaluated by standalone Python scripts (not inline shell):
+- `scripts/security/evaluate-sast.py` -- reads Semgrep JSON per language, counts ERROR-severity findings, handles scanner crashes and corrupt JSON
+- `scripts/security/evaluate-zap.py` -- reads ZAP traditional-json reports, counts Medium+ alerts, supports suppressions
+
+### ZAP authentication
+
+ZAP plan YAML files use `${ZAP_SESSION}` and `${ZAP_CSRF}` placeholders. ZAP's Automation Framework does **not** expand environment variables, so CI uses `envsubst` to bake actual cookie values into resolved copies before passing them to ZAP. The resolved files (`*.resolved.yaml`) are gitignored and exist only during the CI run.
+
+### Suppressions
+
+Two suppression mechanisms exist:
+
+| File | Tool | Format |
+|------|------|--------|
+| `osv-scanner.toml` | OSV-Scanner | TOML `[[IgnoredVulns]]` with `id` and `reason` |
+| `scripts/security/zap-suppressions.json` | ZAP evaluator | JSON with `pluginId`, `scan`, and `reason` |
+
+Every suppression **must** include a reason and should reference the story that will fix the underlying issue. Suppressed findings are still logged in CI output (visible, not hidden) but don't fail the build. Review suppressions quarterly.
+
 ### Test results
 
 Scan results are uploaded as GitHub Actions artifacts with 30-day retention:
-- `sast-results` -- Semgrep JSON/SARIF output
+- `sast-results` -- Semgrep JSON output
 - `dast-results` -- ZAP reports, nuclei JSON, custom test output
 
 ## Dependency Vulnerability Scanning
