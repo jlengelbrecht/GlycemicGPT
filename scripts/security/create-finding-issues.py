@@ -714,14 +714,30 @@ def detect_tools_with_results(sast_dir: str, dast_dir: str) -> set[str]:
                 except (json.JSONDecodeError, IOError):
                     continue
 
-        # Nuclei: file presence = tool ran (even empty [] is valid)
+        # Nuclei: validate JSON is parseable (empty [] is valid, truncated is not)
         for name, tool in [("nuclei-api.json", "nuclei-api"), ("nuclei-web.json", "nuclei-web")]:
-            if os.path.isfile(os.path.join(dast_dir, name)):
-                tools.add(tool)
-        # Also check timestamped nuclei files from run-dast.sh
+            path = os.path.join(dast_dir, name)
+            if os.path.isfile(path):
+                try:
+                    content = Path(path).read_text().strip()
+                    json.loads(content) if content else None
+                    tools.add(tool)  # Valid JSON (even empty [] or {})
+                except (json.JSONDecodeError, IOError):
+                    continue
+        # Timestamped nuclei files from run-dast.sh: check content for target
         for f in glob.glob(os.path.join(dast_dir, "nuclei-2*.json")):
-            tools.add("nuclei-api")  # Timestamped files cover both targets
-            break
+            try:
+                content = Path(f).read_text()
+                if ":8001" in content:
+                    tools.add("nuclei-api")
+                if ":3001" in content:
+                    tools.add("nuclei-web")
+                if not content.strip() or content.strip() == "[]":
+                    # Empty but valid: tool ran, found nothing for both targets
+                    tools.add("nuclei-api")
+                    tools.add("nuclei-web")
+            except IOError:
+                continue
 
     return tools
 
