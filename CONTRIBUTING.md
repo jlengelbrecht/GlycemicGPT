@@ -450,7 +450,7 @@ The whole cycle happens within your PR. You don't need to manually close issues 
 1. **Fix it anyway** (preferred -- we appreciate it even if you didn't cause it)
 2. **Add a documented exception** -- see below
 
-**If you close your PR without fixing:** No worries -- the issues are automatically cleaned up. They only existed on your branch.
+**If you close your PR without fixing:** Issues linked solely to your PR are automatically cleaned up. If another PR independently detected the same finding, the issue stays open and is tracked against that PR instead.
 
 ### 🛡️ Security Exceptions
 
