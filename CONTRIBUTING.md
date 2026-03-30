@@ -67,6 +67,7 @@ PRs that violate these safety principles will not be merged regardless of code q
 
 ## 📑 Table of Contents
 
+- [Project Roles](#project-roles)
 - [Ways to Contribute](#ways-to-contribute)
 - [Finding Something to Work On](#finding-something-to-work-on)
 - [Development Setup](#development-setup)
@@ -81,6 +82,18 @@ PRs that violate these safety principles will not be merged regardless of code q
 - [Release Channels](#release-channels)
 - [License](#license)
 - [Questions?](#questions)
+
+---
+
+## 👥 Project Roles
+
+GlycemicGPT has three roles: **Contributor**, **Committer**, and **Maintainer**. Most people start as contributors -- just open a PR, file an issue, or join a discussion.
+
+If you contribute consistently and demonstrate good judgment (especially around medical safety), you may be invited to become a committer with Write access. Committers can approve PRs, triage issues, and own specific components.
+
+Maintainers are project stewards responsible for releases, security, and architectural decisions. It's an invitation-only role that comes after sustained involvement as a committer.
+
+For the full details -- including how decisions are made, what each role can and can't do, and how branch protection works -- see [GOVERNANCE.md](GOVERNANCE.md).
 
 ---
 
