@@ -5,10 +5,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: no default GITHUB_TOKEN permissions.
+# All privileged operations use explicit GitHub App tokens.
+permissions: {}
+
 jobs:
   changelog:
     name: Update CHANGELOG.md
     runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      pr_number: ${{ steps.create-pr.outputs.pr_number }}
+      has_changes: ${{ steps.changelog.outputs.has_changes }}
     # Skip if this push was from the changelog or release-please bot
     if: >-
       !contains(github.event.head_commit.message, '[Changelog]') &&
@@ -28,31 +36,37 @@ jobs:
           token: ${{ steps.release-token.outputs.token }}
           fetch-depth: 0
 
-      - name: Get last changelog date
+      - name: Get last changelog timestamp
         id: last-date
         run: |
-          # Extract the most recent date from CHANGELOG.md (format: ## YYYY-MM-DD)
-          LAST_DATE=$(grep -oP '^## \K\d{4}-\d{2}-\d{2}' CHANGELOG.md | head -1 || echo "")
-          if [ -z "$LAST_DATE" ]; then
-            # No existing changelog entries -- use repo creation or a safe default
-            LAST_DATE="2025-01-01"
+          # Extract the most recent timestamp marker from CHANGELOG.md
+          # Format: <!-- changelog-cutoff:2026-03-31T12:34:56Z -->
+          CUTOFF=$(grep -oP '<!-- changelog-cutoff:\K[^>]+(?= -->)' CHANGELOG.md | head -1 || echo "")
+          if [ -z "$CUTOFF" ]; then
+            # Fallback: extract date from ## YYYY-MM-DD header and use end of that day
+            DATE=$(grep -oP '^## \K\d{4}-\d{2}-\d{2}' CHANGELOG.md | head -1 || echo "")
+            if [ -n "$DATE" ]; then
+              # Use day after the last entry to avoid duplicates
+              CUTOFF=$(date -u -d "$DATE + 1 day" +%Y-%m-%dT00:00:00Z 2>/dev/null || echo "${DATE}T23:59:59Z")
+            else
+              CUTOFF="2025-01-01T00:00:00Z"
+            fi
           fi
-          echo "date=$LAST_DATE" >> "$GITHUB_OUTPUT"
-          echo "Last changelog date: $LAST_DATE"
+          echo "cutoff=$CUTOFF" >> "$GITHUB_OUTPUT"
+          echo "Last changelog cutoff: $CUTOFF"
 
       - name: Collect merged PRs and generate changelog
         id: changelog
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
         run: |
-          SINCE="${{ steps.last-date.outputs.date }}T00:00:00Z"
+          SINCE="${{ steps.last-date.outputs.cutoff }}"
           TODAY=$(date -u +%Y-%m-%d)
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
           echo "Collecting PRs merged to develop since $SINCE..."
 
-          # Fetch merged PRs to develop since last changelog date
-          # Use search API to get PRs merged after the date
-          # Paginate through all merged PRs (handles >100 PRs between changelog updates)
+          # Paginate through all merged PRs
           ALL_PRS="[]"
           CURSOR=""
           while true; do
@@ -97,11 +111,10 @@ jobs:
             exit 0
           fi
 
-          echo "has_changes=true" >> "$GITHUB_OUTPUT"
-
           # Generate changelog sections using jq
-          CHANGELOG=$(echo "$PRS" | jq -r --arg today "$TODAY" '
-            # Define label-to-section mapping (priority order)
+          # Automated PRs with "dependencies" label go to Dependencies section
+          # Other automated PRs (autorelease, invalid) are excluded
+          CHANGELOG=$(echo "$PRS" | jq -r --arg today "$TODAY" --arg now "$NOW" '
             def section_for_labels:
               [.[] | .name] as $labels |
               if ($labels | any(. == "breaking-change")) then "Breaking Changes"
@@ -116,56 +129,83 @@ jobs:
               else "Other"
               end;
 
-            # Filter out automated/bot PRs from main sections (keep in Dependencies)
-            def is_excluded:
-              .labels.nodes as $labels |
-              ($labels | [.[] | .name] | any(. == "automated" or . == "autorelease: tagged" or . == "autorelease: pending" or . == "invalid"));
+            # Determine if PR should be excluded (but keep Dependencies)
+            def should_include:
+              (.labels.nodes | [.[] | .name]) as $labels |
+              ($labels | any(. == "dependencies")) or
+              ($labels | any(. == "automated" or . == "autorelease: tagged" or . == "autorelease: pending" or . == "invalid") | not);
 
-            # Group PRs by section
-            [.[] | select(is_excluded | not)] |
-            group_by(.labels.nodes | section_for_labels) |
-            map({
-              section: (.[0].labels.nodes | section_for_labels),
-              entries: [.[] | "- \(.title) (#\(.number)) @\(.author.login)"]
-            }) |
-            sort_by(
-              if .section == "Breaking Changes" then 0
-              elif .section == "Features" then 1
-              elif .section == "Bug Fixes" then 2
-              elif .section == "Security" then 3
-              elif .section == "Performance" then 4
-              elif .section == "Documentation" then 5
-              elif .section == "Infrastructure" then 6
-              elif .section == "Refactoring" then 7
-              elif .section == "Dependencies" then 8
-              else 9
-              end
-            ) |
-            "## \($today)\n\n" +
-            (map("### \(.section)\n\n\(.entries | join("\n"))\n") | join("\n"))
+            # Filter, group, and format
+            [.[] | select(should_include)] |
+            if length == 0 then empty
+            else
+              group_by(.labels.nodes | section_for_labels) |
+              map({
+                section: (.[0].labels.nodes | section_for_labels),
+                entries: [.[] | "- \(.title) (#\(.number)) @\(.author.login)"]
+              }) |
+              sort_by(
+                if .section == "Breaking Changes" then 0
+                elif .section == "Features" then 1
+                elif .section == "Bug Fixes" then 2
+                elif .section == "Security" then 3
+                elif .section == "Performance" then 4
+                elif .section == "Documentation" then 5
+                elif .section == "Infrastructure" then 6
+                elif .section == "Refactoring" then 7
+                elif .section == "Dependencies" then 8
+                else 9
+                end
+              ) |
+              "## \($today)\n\n" +
+              (map("### \(.section)\n\n\(.entries | join("\n"))\n") | join("\n")) +
+              "\n<!-- changelog-cutoff:\($now) -->"
+            end
           ')
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "All PRs were filtered out"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
           # Save to temp file for the next step
           echo "$CHANGELOG" > /tmp/new-changelog-section.md
           echo "Generated changelog section:"
           cat /tmp/new-changelog-section.md
 
+      - name: Prepare changelog branch
+        if: steps.changelog.outputs.has_changes == 'true'
+        run: |
+          BRANCH="changelog/$(date -u +%Y-%m-%d)"
+
+          # Configure git as glycemicgpt-release bot
+          git config user.name "glycemicgpt-release[bot]"
+          git config user.email "glycemicgpt-release[bot]@users.noreply.github.com"
+
+          # Create or reset the branch BEFORE modifying files
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            git fetch origin "$BRANCH"
+            # Reset to main to avoid checkout conflicts
+            git checkout -B "$BRANCH" origin/main
+          else
+            git checkout -b "$BRANCH"
+          fi
+
       - name: Update CHANGELOG.md
         if: steps.changelog.outputs.has_changes == 'true'
         run: |
           if [ -f CHANGELOG.md ]; then
-            # Read header (first line if it's a title)
             HEADER=$(head -1 CHANGELOG.md)
             if echo "$HEADER" | grep -q "^# "; then
-              # Preserve the title, insert new section after it
               echo "$HEADER" > /tmp/updated-changelog.md
               echo "" >> /tmp/updated-changelog.md
               cat /tmp/new-changelog-section.md >> /tmp/updated-changelog.md
               echo "" >> /tmp/updated-changelog.md
-              # Append the rest (skip first line)
               tail -n +2 CHANGELOG.md >> /tmp/updated-changelog.md
             else
-              # No title header, just prepend
               cat /tmp/new-changelog-section.md > /tmp/updated-changelog.md
               echo "" >> /tmp/updated-changelog.md
               cat CHANGELOG.md >> /tmp/updated-changelog.md
@@ -178,6 +218,7 @@ jobs:
           mv /tmp/updated-changelog.md CHANGELOG.md
 
       - name: Create changelog PR
+        id: create-pr
         if: steps.changelog.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ steps.release-token.outputs.token }}
@@ -185,26 +226,10 @@ jobs:
           BRANCH="changelog/$(date -u +%Y-%m-%d)"
           TODAY=$(date -u +%Y-%m-%d)
 
-          # Configure git as glycemicgpt-release bot
-          git config user.name "glycemicgpt-release[bot]"
-          git config user.email "glycemicgpt-release[bot]@users.noreply.github.com"
-
-          # Check if branch already exists
-          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            git fetch origin "$BRANCH"
-            git checkout "$BRANCH"
-            if ! git merge origin/main --no-edit; then
-              echo "::warning::Merge conflict with main -- recreating branch from main"
-              git merge --abort
-              git checkout -B "$BRANCH" origin/main
-            fi
-          else
-            git checkout -b "$BRANCH"
-          fi
-
           git add CHANGELOG.md
           git commit -m "[Changelog] Update CHANGELOG.md for $TODAY" || {
             echo "No changes to commit"
+            echo "pr_number=" >> "$GITHUB_OUTPUT"
             exit 0
           }
           git push origin "$BRANCH" --force-with-lease
@@ -213,22 +238,23 @@ jobs:
           EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number' || echo "")
           if [ -n "$EXISTING_PR" ] && [ "$EXISTING_PR" != "null" ]; then
             echo "Updating existing PR #$EXISTING_PR"
+            echo "pr_number=$EXISTING_PR" >> "$GITHUB_OUTPUT"
           else
             gh pr create \
               --base main \
               --head "$BRANCH" \
               --title "[Changelog] Update CHANGELOG.md" \
               --body "Automated changelog update for $TODAY. Generated from merged PRs since the last changelog entry."
-            EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+            PR_NUM=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number')
+            echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
           fi
-
-          echo "pr_number=$EXISTING_PR" >> "$GITHUB_OUTPUT"
 
   merge-changelog:
     name: Approve and Merge Changelog
     runs-on: ubuntu-latest
+    permissions: {}
     needs: changelog
-    if: needs.changelog.result == 'success'
+    if: needs.changelog.outputs.has_changes == 'true' && needs.changelog.outputs.pr_number != ''
 
     steps:
       - name: Generate token for glycemicgpt-merge
@@ -238,19 +264,36 @@ jobs:
           app-id: ${{ secrets.MERGE_APP_ID }}
           private-key: ${{ secrets.MERGE_APP_PRIVATE_KEY }}
 
-      - name: Find and merge changelog PR
+      - name: Validate and merge changelog PR
         env:
           GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          PR_NUMBER: ${{ needs.changelog.outputs.pr_number }}
         run: |
-          BRANCH="changelog/$(date -u +%Y-%m-%d)"
-          PR_NUMBER=$(gh pr list --repo ${{ github.repository }} --base main --head "$BRANCH" --json number --jq '.[0].number' || echo "")
+          # Validate PR before merging with admin bypass
+          PR_DATA=$(gh pr view "$PR_NUMBER" --repo ${{ github.repository }} --json author,title,files)
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_FILES=$(echo "$PR_DATA" | jq -r '.files[].path')
 
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            echo "No changelog PR found, skipping"
-            exit 0
+          # Safety checks: only merge if PR matches expected changelog pattern
+          if [ "$PR_AUTHOR" != "glycemicgpt-release" ]; then
+            echo "::error::PR author is '$PR_AUTHOR', expected 'glycemicgpt-release'. Refusing to merge."
+            exit 1
           fi
 
-          echo "Approving and merging changelog PR #$PR_NUMBER"
+          if [ "$PR_TITLE" != "[Changelog] Update CHANGELOG.md" ]; then
+            echo "::error::PR title is '$PR_TITLE', expected '[Changelog] Update CHANGELOG.md'. Refusing to merge."
+            exit 1
+          fi
+
+          # Verify only CHANGELOG.md was modified
+          NON_CHANGELOG=$(echo "$PR_FILES" | grep -v "^CHANGELOG.md$" || true)
+          if [ -n "$NON_CHANGELOG" ]; then
+            echo "::error::PR modifies files other than CHANGELOG.md: $NON_CHANGELOG. Refusing to merge."
+            exit 1
+          fi
+
+          echo "Validation passed. Approving and merging changelog PR #$PR_NUMBER"
           gh pr review "$PR_NUMBER" --approve --repo ${{ github.repository }}
           gh pr merge "$PR_NUMBER" --squash --admin --repo ${{ github.repository }}
           echo "Changelog PR #$PR_NUMBER merged"
