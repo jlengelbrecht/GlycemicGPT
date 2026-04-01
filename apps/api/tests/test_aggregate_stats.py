@@ -1160,8 +1160,9 @@ class TestSourceFilteringAndDedup:
             async for db in get_db():
                 now = datetime.now(UTC)
                 uid = uuid.UUID(user_id)
-                cutoff = _boundary_cutoff(days=1)
-                ts = cutoff + timedelta(hours=1)
+                # Use now - 2h to guarantee data is in the past and within the 1-day window
+                # regardless of what time CI runs (fixes midnight UTC flakiness)
+                ts = now - timedelta(hours=2)
                 # Same timestamp and units, different event_type (mobile dual-creation)
                 db.add(
                     PumpEvent(
@@ -1211,8 +1212,7 @@ class TestSourceFilteringAndDedup:
             async for db in get_db():
                 now = datetime.now(UTC)
                 uid = uuid.UUID(user_id)
-                cutoff = _boundary_cutoff(days=1)
-                ts = cutoff + timedelta(hours=1)
+                ts = now - timedelta(hours=2)
                 # Mobile bolus
                 db.add(
                     PumpEvent(
@@ -1260,8 +1260,7 @@ class TestSourceFilteringAndDedup:
             async for db in get_db():
                 now = datetime.now(UTC)
                 uid = uuid.UUID(user_id)
-                cutoff = _boundary_cutoff(days=1)
-                ts = cutoff + timedelta(hours=1)
+                ts = now - timedelta(hours=2)
                 db.add(
                     PumpEvent(
                         user_id=uid,
@@ -1318,8 +1317,7 @@ class TestSourceFilteringAndDedup:
             async for db in get_db():
                 now = datetime.now(UTC)
                 uid = uuid.UUID(user_id)
-                cutoff = _boundary_cutoff(days=1)
-                ts = cutoff + timedelta(hours=1)
+                ts = now - timedelta(hours=2)
                 # One mobile bolus (should appear) and one test bolus (excluded)
                 db.add(
                     PumpEvent(
