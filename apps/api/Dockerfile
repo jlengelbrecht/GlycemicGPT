@@ -39,6 +39,16 @@ COPY src/ ./src/
 RUN uv pip install --system --no-cache . && \
     python -c "import pkg_resources"
 
+# Download vendored API docs assets (self-hosted, no CDN dependency)
+# Pinned versions for reproducibility and security (eliminates CDN supply chain risk)
+RUN mkdir -p src/static/swagger-ui src/static/redoc && \
+    curl -sfL -o src/static/swagger-ui/swagger-ui-bundle.js \
+      "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui-bundle.js" && \
+    curl -sfL -o src/static/swagger-ui/swagger-ui.css \
+      "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.18.2/swagger-ui.css" && \
+    curl -sfL -o src/static/redoc/redoc.standalone.js \
+      "https://cdn.jsdelivr.net/npm/redoc@2.2.0/bundles/redoc.standalone.js"
+
 # Copy remaining files
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
