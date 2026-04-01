@@ -95,8 +95,8 @@ In the full suite workflow, SARIF results are uploaded to the GitHub Security ta
 5. **Nuclei DAST** -- Known vulnerability templates against API and Web surfaces.
 6. **ZAP API active scan** (`zap-api-plan.yaml`) -- Authenticated, OpenAPI-driven injection testing (SQLi, XSS, SSTI, CRLF, path traversal). Auto-discovers all endpoints.
 7. **ZAP Web scan** (`zap-web-plan.yaml`) -- Pre-seeds all known page URLs + standard spider + passive/active scanning on the web frontend. Tests security headers, cookie flags, CSP, and injection through the proxy path.
-8. **ZAP Unauthenticated API scan** (`zap-unauth-api-plan.yaml`) -- Scans public API endpoints (health, auth, disclaimer) **without authentication**. Simulates an external attacker's first interaction. Tests for injection on login/register, info disclosure, and security header issues on public responses.
-9. **ZAP Unauthenticated Web scan** (`zap-unauth-web-plan.yaml`) -- Scans public web pages (landing, login, register) **without authentication**. Tests for injection on public forms, security headers, error page behavior, and information disclosure visible to unauthenticated visitors.
+8. **ZAP Unauthenticated API pentest** (`zap-unauth-api-plan.yaml`) -- Full attacker-perspective scan of the **entire API surface** without credentials. Discovers all endpoints from `/openapi.json` and probes every one -- public and authenticated alike. Tests injection, info disclosure in error responses, security headers, Host header injection, and what leaks when authenticated endpoints return 401/403. Runs on every PR regardless of which component changed.
+9. **ZAP Unauthenticated Web pentest** (`zap-unauth-web-plan.yaml`) -- Full attacker-perspective scan of the **entire web application** without credentials. Probes all pages including protected `/dashboard/*` routes to test redirect behavior, auth enforcement, and info leakage. Includes error handling probes (invalid invitation tokens, nonexistent pages). Runs on every PR regardless of which component changed.
 
 ### Auto-discovery
 
@@ -104,7 +104,7 @@ Tests 2, 4, 6, and 8 read `/openapi.json` from the live API to discover endpoint
 
 Test 7 pre-seeds all known page URLs from the Next.js app structure and uses the standard spider to discover additional linked pages. (AJAX Spider with headless Firefox was evaluated but risks OOM on standard GitHub runners with 7GB RAM.)
 
-Tests 8 and 9 run without session cookies or CSRF tokens -- they see the application exactly as an unauthenticated external attacker would. Their findings are tracked as separate issues from the authenticated scans (distinct fingerprints: `zap-unauth-api:*` and `zap-unauth-web:*`).
+Tests 8 and 9 simulate a real external attacker. They run without session cookies or CSRF tokens, probe the **entire** application surface (not just public endpoints), and run on **every PR** regardless of which component changed. An attacker doesn't care which files you modified -- they probe everything. Protected endpoints are intentionally tested to verify auth enforcement and catch info leakage in error responses. Findings are tracked as separate issues from the authenticated scans (distinct fingerprints: `zap-unauth-api:*` and `zap-unauth-web:*`).
 
 ### Evaluation scripts
 

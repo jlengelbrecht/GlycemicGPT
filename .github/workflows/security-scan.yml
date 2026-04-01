@@ -556,12 +556,7 @@ jobs:
 
       - name: Run ZAP Unauthenticated API scan
         id: zap-unauth-api
-        if: |
-          always() && (
-            needs.detect-changes.outputs.api == 'true' ||
-            needs.detect-changes.outputs.run_all == 'true' ||
-            github.event_name == 'workflow_dispatch'
-          )
+        if: always()
         run: |
           docker run --rm --network="host" \
             -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
@@ -575,12 +570,7 @@ jobs:
 
       - name: Run ZAP Unauthenticated Web scan
         id: zap-unauth-web
-        if: |
-          always() && (
-            needs.detect-changes.outputs.web == 'true' ||
-            needs.detect-changes.outputs.run_all == 'true' ||
-            github.event_name == 'workflow_dispatch'
-          )
+        if: always()
         run: |
           docker run --rm --network="host" \
             -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
