@@ -138,6 +138,17 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 - [Mobile App Issues](https://github.com/GlycemicGPT/GlycemicGPT/issues/new?template=mobile_report.yml)
 - [Discussions](https://github.com/GlycemicGPT/GlycemicGPT/discussions) (questions, ideas, show & tell)
 
+## Support the Project
+
+GlycemicGPT is free, open source, and built by volunteers. If you find it useful, consider supporting the project:
+
+<p align="center">
+  <a href="https://github.com/sponsors/GlycemicGPT"><strong>GitHub Sponsors</strong></a> &middot;
+  <a href="https://opencollective.com/glycemicgpt"><strong>Open Collective</strong></a>
+</p>
+
+Your support helps cover infrastructure costs (hosting, domain, CI, signing certificates), org seats for committers and maintainers, and future maintainer stipends. All Open Collective transactions are public. See [GOVERNANCE.md](GOVERNANCE.md#compensation) for how funding is managed.
+
 ## License
 
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.
