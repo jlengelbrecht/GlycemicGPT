@@ -294,6 +294,36 @@ jobs:
         id: eval-zap-web
         run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-web-report.json --name web
 
+      # ---- Unauthenticated ZAP scans (no cookies, external attacker perspective) ----
+
+      - name: Run ZAP Unauthenticated API scan
+        id: zap-unauth-api
+        if: always()
+        run: |
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/zap-unauth-api-plan.yaml || true
+
+      - name: Evaluate ZAP Unauthenticated API results
+        id: eval-zap-unauth-api
+        if: always() && steps.zap-unauth-api.outcome != 'skipped'
+        run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-unauth-api-report.json --name unauth-api
+
+      - name: Run ZAP Unauthenticated Web scan
+        id: zap-unauth-web
+        if: always()
+        run: |
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/zap-unauth-web-plan.yaml || true
+
+      - name: Evaluate ZAP Unauthenticated Web results
+        id: eval-zap-unauth-web
+        if: always() && steps.zap-unauth-web.outcome != 'skipped'
+        run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-unauth-web-report.json --name unauth-web
+
       # ---- Cleanup ----
 
       - name: Upload scan results

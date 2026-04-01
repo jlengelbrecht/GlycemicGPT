@@ -24,8 +24,8 @@ Runs on every PR and push to main/develop. Uses **granular change detection** to
 
 | Component | Paths Monitored | What Runs |
 |-----------|----------------|-----------|
-| API | `apps/api/**` | Semgrep Python, auth tests, IDOR, SSRF, fuzzer, nuclei API, ZAP API |
-| Web | `apps/web/**` | Semgrep TypeScript, nuclei Web, ZAP Web baseline |
+| API | `apps/api/**` | Semgrep Python, auth tests, IDOR, SSRF, fuzzer, nuclei API, ZAP API, ZAP Unauth API |
+| Web | `apps/web/**` | Semgrep TypeScript, nuclei Web, ZAP Web baseline, ZAP Unauth Web |
 | Sidecar | `sidecar/**` | Semgrep TypeScript |
 | Mobile | `apps/mobile/**`, `plugins/**` | Semgrep Kotlin |
 | Infra | `docker-compose*.yml`, `**/Dockerfile*` | Everything (config changes affect all services) |
@@ -95,12 +95,16 @@ In the full suite workflow, SARIF results are uploaded to the GitHub Security ta
 5. **Nuclei DAST** -- Known vulnerability templates against API and Web surfaces.
 6. **ZAP API active scan** (`zap-api-plan.yaml`) -- Authenticated, OpenAPI-driven injection testing (SQLi, XSS, SSTI, CRLF, path traversal). Auto-discovers all endpoints.
 7. **ZAP Web scan** (`zap-web-plan.yaml`) -- Pre-seeds all known page URLs + standard spider + passive/active scanning on the web frontend. Tests security headers, cookie flags, CSP, and injection through the proxy path.
+8. **ZAP Unauthenticated API scan** (`zap-unauth-api-plan.yaml`) -- Scans public API endpoints (health, auth, disclaimer) **without authentication**. Simulates an external attacker's first interaction. Tests for injection on login/register, info disclosure, and security header issues on public responses.
+9. **ZAP Unauthenticated Web scan** (`zap-unauth-web-plan.yaml`) -- Scans public web pages (landing, login, register) **without authentication**. Tests for injection on public forms, security headers, error page behavior, and information disclosure visible to unauthenticated visitors.
 
 ### Auto-discovery
 
-Tests 2, 4, and 6 read `/openapi.json` from the live API to discover endpoints. **New API routes are automatically tested without any test code changes.**
+Tests 2, 4, 6, and 8 read `/openapi.json` from the live API to discover endpoints. **New API routes are automatically tested without any test code changes.**
 
 Test 7 pre-seeds all known page URLs from the Next.js app structure and uses the standard spider to discover additional linked pages. (AJAX Spider with headless Firefox was evaluated but risks OOM on standard GitHub runners with 7GB RAM.)
+
+Tests 8 and 9 run without session cookies or CSRF tokens -- they see the application exactly as an unauthenticated external attacker would. Their findings are tracked as separate issues from the authenticated scans (distinct fingerprints: `zap-unauth-api:*` and `zap-unauth-web:*`).
 
 ### Evaluation scripts
 
@@ -110,7 +114,9 @@ Results are evaluated by standalone Python scripts (not inline shell):
 
 ### ZAP authentication
 
-ZAP plan YAML files use `${ZAP_SESSION}` and `${ZAP_CSRF}` placeholders. ZAP's Automation Framework does **not** expand environment variables, so CI uses `envsubst` to bake actual cookie values into resolved copies before passing them to ZAP. The resolved files (`*.resolved.yaml`) are gitignored and exist only during the CI run.
+The authenticated ZAP plans (`zap-api-plan.yaml`, `zap-web-plan.yaml`) use `${ZAP_SESSION}` and `${ZAP_CSRF}` placeholders. ZAP's Automation Framework does **not** expand environment variables, so CI uses `envsubst` to bake actual cookie values into resolved copies before passing them to ZAP. The resolved files (`*.resolved.yaml`) are gitignored and exist only during the CI run.
+
+The unauthenticated ZAP plans (`zap-unauth-api-plan.yaml`, `zap-unauth-web-plan.yaml`) have no placeholders and are used directly (no `envsubst` needed). They omit the `replacer` and `script` jobs, so ZAP sends no session cookies.
 
 ### Suppressions
 
@@ -139,7 +145,8 @@ Security findings are automatically tracked as GitHub Issues via glycemicgpt-sec
 | Contributor pushes a fix | Next scan auto-closes the issue ("resolved in PR #X") |
 | PR merged, finding still present | Full suite keeps the issue open |
 | PR merged, finding resolved | Full suite auto-closes the issue |
-| PR closed without merging | Cleanup job closes issues tagged with that PR |
+| Feature PR closed without merging | Cleanup job closes issues tagged with that PR |
+| Promotion PR closed without merging | Cleanup skipped (findings originate from develop, not the promotion branch) |
 | Finding reappears after fix reverted | Full suite reopens the closed issue |
 | Full suite runs, finding still present | "Still detected" comment added (throttled to once per 7 days) |
 

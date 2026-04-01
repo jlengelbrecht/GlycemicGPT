@@ -218,6 +218,8 @@ jobs:
       nuclei_web: ${{ steps.outcomes.outputs.nuclei_web }}
       zap_api: ${{ steps.outcomes.outputs.zap_api }}
       zap_web: ${{ steps.outcomes.outputs.zap_web }}
+      zap_unauth_api: ${{ steps.outcomes.outputs.zap_unauth_api }}
+      zap_unauth_web: ${{ steps.outcomes.outputs.zap_unauth_web }}
 
     steps:
       - name: Checkout
@@ -542,6 +544,42 @@ jobs:
         if: always() && steps.zap-web.outcome != 'skipped'
         run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-web-report.json --name web
 
+      # ---- Unauthenticated ZAP scans (no cookies, external attacker perspective) ----
+
+      - name: Run ZAP Unauthenticated API scan
+        id: zap-unauth-api
+        if: |
+          needs.detect-changes.outputs.api == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/zap-unauth-api-plan.yaml || true
+
+      - name: Evaluate ZAP Unauthenticated API results
+        id: eval-zap-unauth-api
+        if: always() && steps.zap-unauth-api.outcome != 'skipped'
+        run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-unauth-api-report.json --name unauth-api
+
+      - name: Run ZAP Unauthenticated Web scan
+        id: zap-unauth-web
+        if: |
+          needs.detect-changes.outputs.web == 'true' ||
+          needs.detect-changes.outputs.run_all == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        run: |
+          docker run --rm --network="host" \
+            -v "$(pwd)/scripts/security:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap.sh -cmd -autorun /zap/wrk/zap-unauth-web-plan.yaml || true
+
+      - name: Evaluate ZAP Unauthenticated Web results
+        id: eval-zap-unauth-web
+        if: always() && steps.zap-unauth-web.outcome != 'skipped'
+        run: python scripts/security/evaluate-zap.py --report scripts/security/results/zap-unauth-web-report.json --name unauth-web
+
       # ---- Export outcomes + cleanup ----
 
       - name: Export DAST step outcomes
@@ -556,6 +594,8 @@ jobs:
           echo "nuclei_web=${{ steps.nuclei-web.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
           echo "zap_api=${{ steps.eval-zap-api.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
           echo "zap_web=${{ steps.eval-zap-web.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "zap_unauth_api=${{ steps.eval-zap-unauth-api.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
+          echo "zap_unauth_web=${{ steps.eval-zap-unauth-web.outcome || 'skipped' }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload scan results
         if: always()
@@ -700,7 +740,16 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           COMMIT_SHA: ${{ github.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
+          # Detect promotion PRs (develop->main) to prevent false issue re-tagging
+          PR_TYPE="feature"
+          if [ "$PR_HEAD_REF" = "develop" ] && [ "$PR_BASE_REF" = "main" ]; then
+            PR_TYPE="promotion"
+            echo "Detected promotion PR -- skipping source-pr re-tagging"
+          fi
+
           python scripts/security/create-finding-issues.py \
             --sast-results sast-results/ \
             --dast-results dast-results/ \
@@ -711,7 +760,8 @@ jobs:
             --pr-author "$PR_AUTHOR" \
             --pr-number "$PR_NUMBER" \
             --branch "$BRANCH_NAME" \
-            --sha "$COMMIT_SHA"
+            --sha "$COMMIT_SHA" \
+            --pr-type "$PR_TYPE"
 
       - name: Post security scan results to PR
         if: always() && github.event_name == 'pull_request'
@@ -741,6 +791,8 @@ jobs:
           DAST_NUCLEI_WEB: ${{ needs.dast.outputs.nuclei_web || 'skipped' }}
           DAST_ZAP_API: ${{ needs.dast.outputs.zap_api || 'skipped' }}
           DAST_ZAP_WEB: ${{ needs.dast.outputs.zap_web || 'skipped' }}
+          DAST_ZAP_UNAUTH_API: ${{ needs.dast.outputs.zap_unauth_api || 'skipped' }}
+          DAST_ZAP_UNAUTH_WEB: ${{ needs.dast.outputs.zap_unauth_web || 'skipped' }}
           # Issue creation outputs
           CREATED_ISSUES: ${{ steps.create-issues.outputs.created_issues || '' }}
           ISSUES_JSON: ${{ steps.create-issues.outputs.issues_json || '[]' }}
@@ -789,6 +841,8 @@ jobs:
           | Nuclei (Web) | :$(icon "$DAST_NUCLEI_WEB"): ${DAST_NUCLEI_WEB} |
           | ZAP API Active Scan | :$(icon "$DAST_ZAP_API"): ${DAST_ZAP_API} |
           | ZAP Web Baseline | :$(icon "$DAST_ZAP_WEB"): ${DAST_ZAP_WEB} |
+          | ZAP Unauth API Scan | :$(icon "$DAST_ZAP_UNAUTH_API"): ${DAST_ZAP_UNAUTH_API} |
+          | ZAP Unauth Web Scan | :$(icon "$DAST_ZAP_UNAUTH_WEB"): ${DAST_ZAP_UNAUTH_WEB} |
 
           $(if [ -n "$CREATED_ISSUES" ]; then
           echo "### Security Issues"
@@ -865,7 +919,17 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
+          # Detect promotion PRs (develop->main) to prevent false issue closure
+          PR_TYPE="feature"
+          if [ "$PR_HEAD_REF" = "develop" ] && [ "$PR_BASE_REF" = "main" ]; then
+            PR_TYPE="promotion"
+            echo "Detected promotion PR -- skipping orphan cleanup"
+          fi
+
           python scripts/security/create-finding-issues.py \
             --cleanup-pr "${{ github.event.pull_request.number }}" \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" \
+            --pr-type "$PR_TYPE"

@@ -1,0 +1,100 @@
+---
+# ZAP Automation Framework Plan: GlycemicGPT Unauthenticated Web Scan
+#
+# Scans public web pages WITHOUT authentication -- simulates an external
+# attacker browsing the login, registration, and landing pages. Tests for
+# security headers, information disclosure, injection on public forms,
+# and error page behavior.
+#
+# No envsubst needed -- this plan has no template variables.
+#
+# Usage:
+#   zap.sh -cmd -autorun /zap/wrk/zap-unauth-web-plan.yaml
+
+env:
+  contexts:
+    - name: "glycemicgpt-unauth-web"
+      urls:
+        - "http://localhost:3001"
+      includePaths:
+        - "http://localhost:3001/"
+        - "http://localhost:3001/login.*"
+        - "http://localhost:3001/register.*"
+      excludePaths:
+        # Static assets (nothing to scan)
+        - "http://localhost:3001/_next/.*"
+        - "http://localhost:3001/__next.*"
+        # API calls covered by the API scan
+        - "http://localhost:3001/api/.*"
+        # Authenticated pages -- not reachable without session, covered by auth scan
+        - "http://localhost:3001/dashboard.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # No script or replacer jobs -- this scan runs without authentication
+
+  # Pre-seed ZAP with public page URLs
+  - type: requestor
+    parameters:
+      user: ""
+    requests:
+      - url: "http://localhost:3001/"
+        method: "GET"
+      - url: "http://localhost:3001/login"
+        method: "GET"
+      - url: "http://localhost:3001/register"
+        method: "GET"
+
+  # Spider: follow links from public pages to discover additional routes
+  - type: spider
+    parameters:
+      context: "glycemicgpt-unauth-web"
+      url: "http://localhost:3001/"
+      maxDuration: 2
+      maxDepth: 3
+
+  # Passive scan: security headers, cookie flags, CSP, information disclosure
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  # Active scan: injection testing on public forms (login, register)
+  - type: activeScan
+    parameters:
+      context: "glycemicgpt-unauth-web"
+      maxScanDurationInMins: 5
+      maxRuleDurationInMins: 2
+      addQueryParam: false
+      handleAntiCSRFTokens: false
+      scanHeadersAllRequests: false
+
+  # Generate JSON report (distinct filename from authenticated web report)
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "/zap/wrk/results"
+      reportFile: "zap-unauth-web-report"
+      reportTitle: "GlycemicGPT Unauthenticated Web Security Scan"
+    risks:
+      - high
+      - medium
+      - low
+    confidences:
+      - high
+      - medium
+      - confirmed
+
+  # Fail CI on Medium+ severity findings, warn on Low
+  - type: exitStatus
+    parameters:
+      errorLevel: "Medium"
+      warnLevel: "Low"
+    alwaysRun: true

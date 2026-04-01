@@ -1,0 +1,84 @@
+---
+# ZAP Automation Framework Plan: GlycemicGPT Unauthenticated API Scan
+#
+# Scans public API endpoints WITHOUT authentication -- simulates an external
+# attacker's first interaction with the API. Tests for injection, information
+# disclosure, security misconfigurations, and error handling on endpoints
+# that are accessible without a session.
+#
+# No envsubst needed -- this plan has no template variables.
+#
+# Usage:
+#   zap.sh -cmd -autorun /zap/wrk/zap-unauth-api-plan.yaml
+
+env:
+  contexts:
+    - name: "glycemicgpt-unauth-api"
+      urls:
+        - "http://localhost:8001"
+      includePaths:
+        - "http://localhost:8001/health.*"
+        - "http://localhost:8001/openapi\\.json"
+        - "http://localhost:8001/api/auth/.*"
+        - "http://localhost:8001/api/disclaimer.*"
+      excludePaths:
+        - "http://localhost:8001/docs.*"
+        - "http://localhost:8001/redoc.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # No script or replacer jobs -- this scan runs without authentication
+
+  # Auto-discover all API endpoints from the live OpenAPI spec.
+  # Context includePaths limits active scanning to public endpoints only.
+  - type: openapi
+    parameters:
+      apiUrl: "http://localhost:8001/openapi.json"
+      targetUrl: "http://localhost:8001"
+      context: "glycemicgpt-unauth-api"
+
+  # Passive scan: analyze responses for security headers, info disclosure, etc.
+  - type: passiveScan-config
+    parameters:
+      maxAlertsPerRule: 10
+      scanOnlyInScope: true
+
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 2
+
+  # Active scan: injection payloads on public endpoints (login, register, etc.)
+  - type: activeScan
+    parameters:
+      context: "glycemicgpt-unauth-api"
+      maxScanDurationInMins: 5
+      maxRuleDurationInMins: 2
+      addQueryParam: false
+      handleAntiCSRFTokens: false
+      scanHeadersAllRequests: false
+
+  # Generate JSON report (distinct filename from authenticated API report)
+  - type: report
+    parameters:
+      template: "traditional-json"
+      reportDir: "/zap/wrk/results"
+      reportFile: "zap-unauth-api-report"
+      reportTitle: "GlycemicGPT Unauthenticated API Security Scan"
+    risks:
+      - high
+      - medium
+      - low
+    confidences:
+      - high
+      - medium
+      - confirmed
+
+  # Fail CI on Medium+ severity findings, warn on Low
+  - type: exitStatus
+    parameters:
+      errorLevel: "Medium"
+      warnLevel: "Low"
+    alwaysRun: true
