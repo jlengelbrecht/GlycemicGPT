@@ -57,8 +57,11 @@
         tools:targetApi="35">
 
         <!-- nosemgrep: java.android.security.exported_activity.exported_activity
-             False positive: MAIN/LAUNCHER activity must be exported (required since API 31).
-             No incoming intent data is processed; auth is required before sensitive data is shown. -->
+             Intentional: MAIN/LAUNCHER activity must be exported (required since API 31).
+             Safe because: no incoming intent data/extras are processed, auth is enforced
+             in GlycemicGptNavHost before any sensitive data is shown.
+             RE-EVALUATE THIS SUPPRESSION if deep-link handling, intent extras, or
+             custom URI schemes are added to this activity in the future. -->
         <activity
             android:name=".presentation.MainActivity"
             android:exported="true"
