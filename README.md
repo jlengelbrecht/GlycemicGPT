@@ -35,6 +35,7 @@
   <a href="#architecture">Architecture</a> •
   <a href="#development">Development</a> •
   <a href="#contributing">Contributing</a> •
+  <a href="#support-the-project">Support</a> •
   <a href="#disclaimer">Disclaimer</a>
 </p>
 
@@ -137,6 +138,17 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 - [Feature Requests](https://github.com/GlycemicGPT/GlycemicGPT/issues/new?template=feature_request.yml)
 - [Mobile App Issues](https://github.com/GlycemicGPT/GlycemicGPT/issues/new?template=mobile_report.yml)
 - [Discussions](https://github.com/GlycemicGPT/GlycemicGPT/discussions) (questions, ideas, show & tell)
+
+## Support the Project
+
+GlycemicGPT is free, open source, and built by volunteers. If you find it useful, consider supporting the project:
+
+<p align="center">
+  <a href="https://github.com/sponsors/GlycemicGPT"><strong>GitHub Sponsors</strong></a> &middot;
+  <a href="https://opencollective.com/glycemicgpt"><strong>Open Collective</strong></a>
+</p>
+
+Your support helps cover infrastructure costs (hosting, domain, CI, signing certificates), org seats for committers and maintainers, and future maintainer stipends. All Open Collective transactions are public. See [GOVERNANCE.md](GOVERNANCE.md#compensation) for how funding is managed.
 
 ## License
 
