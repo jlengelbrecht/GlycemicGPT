@@ -35,6 +35,7 @@
   <a href="#architecture">Architecture</a> •
   <a href="#development">Development</a> •
   <a href="#contributing">Contributing</a> •
+  <a href="#support-the-project">Support</a> •
   <a href="#disclaimer">Disclaimer</a>
 </p>
 
