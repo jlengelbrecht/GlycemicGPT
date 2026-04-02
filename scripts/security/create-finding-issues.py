@@ -781,9 +781,10 @@ def reconcile_findings(
     reports_present: bool = True,
     tools_with_results: set[str] | None = None,
     pr_type: str = "feature",
+    repo: str = "",
 ) -> dict:
     """Core orchestration: create, reopen, comment, close issues."""
-    stats = {"created": 0, "reopened": 0, "commented": 0, "closed": 0, "skipped": 0, "issues": []}
+    stats = {"created": 0, "reopened": 0, "commented": 0, "closed": 0, "skipped": 0, "suppressed": 0, "issues": []}
 
     if not findings:
         print("  No findings to process")
@@ -813,9 +814,22 @@ def reconcile_findings(
     if not dry_run:
         client.ensure_labels(list(all_labels))
 
-    # Process each finding
+    # Separate suppressed findings from active findings.
+    # Suppressed findings do NOT create/reopen/update issues.
+    active_findings = [f for f in findings if not f.suppressed]
+    suppressed_findings = [f for f in findings if f.suppressed]
+    stats["suppressed"] = len(suppressed_findings)
+
+    if suppressed_findings:
+        print(f"  {len(suppressed_findings)} finding(s) suppressed (no issues created):")
+        for sf in suppressed_findings:
+            print(f"    [{sf.severity}] {sf.tool}: {sf.title}")
+            print(f"      Reason: {sf.suppression_reason or 'No reason given'}")
+        print()
+
+    # Process each active (non-suppressed) finding
     current_fingerprints = set()
-    for finding in findings:
+    for finding in active_findings:
         current_fingerprints.add(finding.fingerprint)
         existing = fingerprint_to_issue.get(finding.fingerprint)
 
@@ -957,6 +971,42 @@ def reconcile_findings(
                     stats["skipped"] += 1
             else:
                 stats["skipped"] += 1
+
+    # Close open issues for findings that are now suppressed (accepted risk).
+    # This runs for both PR and full-suite scans.
+    suppression_config_url = (
+        f"https://github.com/{repo}/blob/{branch}/scripts/security/zap-suppressions.json"
+        if repo else "scripts/security/zap-suppressions.json"
+    )
+    for sf in suppressed_findings:
+        existing = fingerprint_to_issue.get(sf.fingerprint)
+        if existing is None or existing["state"] != "open":
+            continue
+
+        if dry_run:
+            print(f"  [DRY RUN] Would suppression-close #{existing['number']}: {existing['title']}")
+        else:
+            comment = (
+                f"This finding has been **accepted as a known risk** and suppressed in CI.\n\n"
+                f"**Reason:** {sf.suppression_reason or 'No reason given'}\n"
+                f"**Suppression config:** "
+                f"[zap-suppressions.json]({suppression_config_url})\n\n"
+                f"If this risk is no longer accepted, remove the suppression entry "
+                f"and this issue will be reopened on the next scan."
+            )
+            client.add_comment(existing["number"], comment)
+            existing_labels = [l["name"] for l in existing.get("labels", [])]
+            if "accepted-risk" not in existing_labels:
+                existing_labels.append("accepted-risk")
+            client.update_issue(
+                existing["number"],
+                state="closed",
+                labels=existing_labels,
+            )
+            print(f"  Suppression-closed #{existing['number']}: {existing['title']}")
+        stats["closed"] += 1
+        # Remove from map to prevent double-close by auto-close below
+        fingerprint_to_issue.pop(sf.fingerprint, None)
 
     # Auto-close: full-suite closes any resolved finding (guarded by tool check)
     if scan_type == "full-suite" and not dry_run:
@@ -1175,7 +1225,11 @@ def main() -> None:
         reports_present=reports_present,
         tools_with_results=tools_with_results,
         pr_type=args.pr_type,
+        repo=args.repo,
     )
+
+    # Export suppressed count for PR comment
+    write_output("suppressed_count", str(stats.get("suppressed", 0)))
 
     # Export issue metadata as step output for PR comment
     issues = stats.get("issues", [])
@@ -1189,7 +1243,8 @@ def main() -> None:
 
     print()
     print(f"  Summary: {stats['created']} created, {stats['reopened']} reopened, "
-          f"{stats['commented']} commented, {stats['closed']} closed, {stats['skipped']} skipped")
+          f"{stats['commented']} commented, {stats['closed']} closed, "
+          f"{stats['skipped']} skipped, {stats['suppressed']} suppressed")
     print("==========================================")
 
 
