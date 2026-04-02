@@ -14,6 +14,10 @@
       "pluginId": "10055",
       "scan": "unauth-api",
       "reason": "FastAPI get_swagger_ui_html() generates inline <script> for SwaggerUIBundle init, requiring unsafe-inline. All other CSP directives are strict (default-src 'none', frame-ancestors 'none'). Assets are self-hosted, no CDN dependency. Cannot eliminate unsafe-inline without replacing FastAPI's docs template."
+    },
+    {
+      "pluginId": "10010",
+      "reason": "csrf_token cookie is intentionally non-HttpOnly (httponly=False). Double-submit CSRF pattern requires JavaScript to read the cookie and echo it in the X-CSRF-Token header. Making it HttpOnly would break CSRF protection entirely. This is the OWASP-recommended double-submit cookie pattern."
     }
   ]
 }
