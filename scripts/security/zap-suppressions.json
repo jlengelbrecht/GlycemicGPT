@@ -33,7 +33,13 @@
     },
     {
       "pluginId": "10019",
+      "scan": "web",
       "reason": "Content-Type is not required on 302 redirect responses with empty bodies (RFC 7231 Section 3.1.1.1). HTML pages get Content-Type automatically from Next.js. ZAP flags the redirect responses from the auth middleware."
+    },
+    {
+      "pluginId": "10019",
+      "scan": "unauth-web",
+      "reason": "Content-Type is not required on 302 redirect responses with empty bodies (RFC 7231 Section 3.1.1.1). ZAP flags redirect responses from Next.js middleware when unauthenticated users hit protected pages."
     },
     {
       "pluginId": "10109",
