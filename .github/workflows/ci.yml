@@ -324,7 +324,7 @@ jobs:
                 'No AI attribution detected across commits, code, and PR description.',
                 'Thanks for keeping our repo clean and taking ownership of your work.',
                 '',
-                '[Contributor Guide](../blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code) | [Install commit-msg hook](../blob/develop/CONTRIBUTING.md#quick-start-webapi----recommended-for-most-contributors)',
+                `[Attribution Policy](https://github.com/${repo.owner}/${repo.repo}/blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code) | [Install commit-msg hook](https://github.com/${repo.owner}/${repo.repo}/blob/develop/CONTRIBUTING.md#-quick-start-webapi----recommended-for-most-contributors)`,
               ].join('\n');
             } else {
               // Findings detected -- severity + instructions
@@ -365,7 +365,7 @@ jobs:
                 marker,
                 `## ${emoji} Attribution Check: ${severity}`,
                 '',
-                'AI tool attribution detected in this PR. See our [attribution policy](../blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code).',
+                `AI tool attribution detected in this PR. See our [attribution policy](https://github.com/${repo.owner}/${repo.repo}/blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code).`,
                 '',
                 '### Findings',
                 '',
