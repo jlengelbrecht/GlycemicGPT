@@ -313,74 +313,79 @@ jobs:
               c.body?.includes(marker)
             );
 
+            let body;
+
             if (!hasFindings) {
-              // Clean run -- delete stale comment if present
-              if (existing) {
-                await github.rest.issues.deleteComment({
-                  ...repo, comment_id: existing.id,
-                });
-                console.log('Deleted stale attribution comment');
-              }
-              return;
-            }
-
-            // Build comment body
-            const fs = require('fs');
-            const findingsFile = '${{ steps.detect.outputs.findings_file }}';
-            let findingsTable = '';
-            try { findingsTable = fs.readFileSync(findingsFile, 'utf8').trim(); } catch {}
-
-            const emoji = {
-              CRITICAL: ':red_circle:',
-              HIGH: ':orange_circle:',
-              MEDIUM: ':yellow_circle:',
-            }[severity] || ':grey_question:';
-
-            let instructions = '';
-            if (severity === 'CRITICAL') {
-              instructions = [
-                '**CRITICAL findings cannot be fixed on this PR.** An AI tool has been linked as a commit co-author, making it a permanent participant in the PR history.',
+              // Clean run -- positive reinforcement
+              body = [
+                marker,
+                '## :white_check_mark: Attribution Check: Passed',
                 '',
-                'Please:',
-                '1. Close this PR',
-                '2. Create a new branch from `develop`',
-                '3. Cherry-pick your changes **without** the AI co-author trailers',
-                '4. Open a new PR',
+                'No AI attribution detected across commits, code, and PR description.',
+                'Thanks for keeping our repo clean and taking ownership of your work.',
+                '',
+                '[Contributor Guide](../blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code) | [Install commit-msg hook](../blob/develop/CONTRIBUTING.md#quick-start-webapi----recommended-for-most-contributors)',
               ].join('\n');
             } else {
-              const parts = [];
-              if (findingsTable.includes('HIGH')) {
-                parts.push('**HIGH findings** (commit trailers / PR description): Use `git rebase -i` to amend affected commits and remove the trailers, then force push. Edit the PR description to remove AI branding.');
+              // Findings detected -- severity + instructions
+              const fs = require('fs');
+              const findingsFile = '${{ steps.detect.outputs.findings_file }}';
+              let findingsTable = '';
+              try { findingsTable = fs.readFileSync(findingsFile, 'utf8').trim(); } catch {}
+
+              const emoji = {
+                CRITICAL: ':red_circle:',
+                HIGH: ':orange_circle:',
+                MEDIUM: ':yellow_circle:',
+              }[severity] || ':grey_question:';
+
+              let instructions = '';
+              if (severity === 'CRITICAL') {
+                instructions = [
+                  '**CRITICAL findings cannot be fixed on this PR.** An AI tool has been linked as a commit co-author, making it a permanent participant in the PR history.',
+                  '',
+                  'Please:',
+                  '1. Close this PR',
+                  '2. Create a new branch from `develop`',
+                  '3. Cherry-pick your changes **without** the AI co-author trailers',
+                  '4. Open a new PR',
+                ].join('\n');
+              } else {
+                const parts = [];
+                if (findingsTable.includes('HIGH')) {
+                  parts.push('**HIGH findings** (commit trailers / PR description): Use `git rebase -i` to amend affected commits and remove the trailers, then force push. Edit the PR description to remove AI branding.');
+                }
+                if (findingsTable.includes('MEDIUM')) {
+                  parts.push('**MEDIUM findings** (code comments): Remove the AI attribution comments in a follow-up commit and push.');
+                }
+                instructions = parts.join('\n\n');
               }
-              if (findingsTable.includes('MEDIUM')) {
-                parts.push('**MEDIUM findings** (code comments): Remove the AI attribution comments in a follow-up commit and push.');
-              }
-              instructions = parts.join('\n\n');
+
+              body = [
+                marker,
+                `## ${emoji} Attribution Check: ${severity}`,
+                '',
+                'AI tool attribution detected in this PR. See our [attribution policy](../blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code).',
+                '',
+                '### Findings',
+                '',
+                '| Severity | Location | Finding |',
+                '|----------|----------|---------|',
+                findingsTable,
+                '',
+                '### How to Fix',
+                '',
+                instructions,
+                '',
+                '---',
+                'Install the commit-msg hook to prevent this automatically:',
+                '```',
+                'cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg',
+                '```',
+              ].join('\n');
             }
 
-            const body = [
-              marker,
-              `## ${emoji} Attribution Check: ${severity}`,
-              '',
-              'AI tool attribution detected in this PR. See our [attribution policy](../blob/develop/CONTRIBUTING.md#no-ai-attribution-in-code).',
-              '',
-              '### Findings',
-              '',
-              '| Severity | Location | Finding |',
-              '|----------|----------|---------|',
-              findingsTable,
-              '',
-              '### How to Fix',
-              '',
-              instructions,
-              '',
-              '---',
-              'Install the commit-msg hook to prevent this automatically:',
-              '```',
-              'cp scripts/hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg',
-              '```',
-            ].join('\n');
-
+            // Upsert: update existing or create new
             if (existing) {
               await github.rest.issues.updateComment({
                 ...repo, comment_id: existing.id, body,
