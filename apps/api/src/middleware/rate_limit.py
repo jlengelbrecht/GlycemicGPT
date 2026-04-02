@@ -50,9 +50,18 @@ def _get_real_client_ip(request: Request) -> str:
     if client_ip == "unknown" or not _is_trusted_proxy(client_ip):
         return client_ip
 
+    # Walk XFF right-to-left to find the first untrusted hop (the real client).
+    # Rightmost entries are added by our infrastructure; leftmost may be
+    # attacker-supplied if the proxy appends rather than overwrites.
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+        hops = [h.strip() for h in forwarded_for.split(",") if h.strip()]
+        for hop in reversed(hops):
+            if not _is_trusted_proxy(hop):
+                return hop
+        # All hops are trusted -- use leftmost as last resort
+        if hops:
+            return hops[0]
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
         return real_ip.strip()

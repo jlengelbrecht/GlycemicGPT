@@ -693,7 +693,7 @@ def test_login_timing_consistency() -> None:
     regardless of whether the target email exists.
     """
     name = "Timing attack: login consistency"
-    sample_size = 3  # Keep low to stay under 10/min login rate limit
+    sample_size = 2  # Keep minimal to preserve login rate limit budget for other tests
 
     # Register a known-existing user
     existing_email = unique_email()

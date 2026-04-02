@@ -108,9 +108,11 @@ class Settings(BaseSettings):
 
     # Proxy Trust (Story 28.11 -- rate limit XFF bypass prevention)
     # Only trust X-Forwarded-For from these CIDR ranges.
-    # Default: RFC 1918 private ranges + loopback (Docker internal networks).
-    # Production behind a known load balancer should restrict this further.
-    trusted_proxy_cidrs: str = "172.16.0.0/12,10.0.0.0/8,192.168.0.0/16,127.0.0.0/8"
+    # Default: loopback only. Production deployments should add their load
+    # balancer / reverse proxy CIDRs (e.g. "127.0.0.0/8,10.0.1.0/24").
+    # Docker Compose: set TRUSTED_PROXY_CIDRS to include the Docker bridge
+    # network (e.g. "127.0.0.0/8,172.16.0.0/12").
+    trusted_proxy_cidrs: str = "127.0.0.0/8"
 
     # AI Research Pipeline (Story 35.12)
     research_pipeline_interval_hours: int = Field(default=168, ge=1)  # Weekly default
