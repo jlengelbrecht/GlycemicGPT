@@ -304,7 +304,7 @@ jobs:
           # Safety checks: only merge if PR matches expected changelog pattern
           # gh pr view returns "app/glycemicgpt-release", REST API returns "glycemicgpt-release[bot]"
           if [ "$PR_AUTHOR" != "glycemicgpt-release[bot]" ] && [ "$PR_AUTHOR" != "app/glycemicgpt-release" ]; then
-            echo "::error::PR author is '$PR_AUTHOR', expected 'glycemicgpt-release[bot]'. Refusing to merge."
+            echo "::error::PR author is '$PR_AUTHOR', expected 'glycemicgpt-release[bot]' or 'app/glycemicgpt-release'. Refusing to merge."
             exit 1
           fi
 

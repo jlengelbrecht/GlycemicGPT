@@ -86,7 +86,7 @@ The `/releases/latest` API endpoint automatically excludes pre-releases, so `dev
 ## What Stays the Same
 
 - **release-please** config and workflow: no changes, still watches main
-- **CHANGELOG.md** format: unchanged, generated from individual commits on main
+- **CHANGELOG.md** format: label-based, generated from PRs merged to develop (not individual commits on main)
 - **release.yml**: still triggers on main push, builds signed APKs
 - **CI**: all workflows run on both branches, PRs can target either
 
