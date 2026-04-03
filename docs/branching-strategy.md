@@ -44,16 +44,18 @@ gh pr create --base main --head develop \
   --body-file .github/PROMOTION_PR_TEMPLATE.md
 ```
 
-**IMPORTANT: Use "Rebase and merge", not "Squash and merge".** Rebase merge preserves each feature as an individual commit on main. This is critical for the CHANGELOG -- release-please needs to see each `feat:` and `fix:` commit separately to generate granular changelog entries. Squash merge would collapse everything into one unhelpful entry.
+**Use "Squash and merge"** for all promotion PRs. This produces a single clean commit on main per promotion. Our label-based changelog (`changelog-pr.yml`) generates granular entries from PR titles, labels, and contributor credits regardless -- it reads from the PRs merged to develop, not from commits on main.
 
 After the promotion PR merges:
-- **release-please** sees the individual commits and creates a version bump PR
-- glycemicgpt-merge auto-merges the version bump PR
+- **changelog-pr.yml** detects the promotion and generates a changelog from PR labels
+- glycemicgpt-merge auto-merges the changelog PR
+- If release-please detects releasable commits, it creates a version bump PR
+- The `sync-main-to-develop` workflow cherry-picks any version changes back to develop
 - A GitHub Release is created with signed APKs and versioned Docker images
 
 ### Post-merge: automated version sync
 
-After a promotion merge, release-please creates a version bump commit on main (e.g., `chore: release 0.1.101`). The `sync-main-to-develop` workflow automatically cherry-picks this commit back to develop via PR and auto-merges it. No manual intervention required.
+After a promotion merge, the changelog workflow generates entries and auto-merges to main. If release-please also creates a version bump (depends on commit types), the `sync-main-to-develop` workflow automatically cherry-picks these commits back to develop via PR. No manual intervention required.
 
 The sync workflow:
 1. Detects version bump or changelog commits on main
@@ -84,7 +86,7 @@ The `/releases/latest` API endpoint automatically excludes pre-releases, so `dev
 ## What Stays the Same
 
 - **release-please** config and workflow: no changes, still watches main
-- **CHANGELOG.md** format: unchanged, generated from individual commits on main
+- **CHANGELOG.md** format: label-based, generated from PRs merged to develop (not individual commits on main)
 - **release.yml**: still triggers on main push, builds signed APKs
 - **CI**: all workflows run on both branches, PRs can target either
 
