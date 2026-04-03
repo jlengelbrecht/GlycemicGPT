@@ -17,7 +17,7 @@
 5. Repeat 1-4 for more features, test dev builds
 6. When ready for stable release: create promotion PR (develop -> main)
 7. CI runs on the promotion PR
-8. Merge with "Rebase and merge" (individual commits land on main)
+8. Squash-merge the promotion PR (single commit lands on main)
 9. (Automated) release-please creates version bump PR on main
 10. (Automated) glycemicgpt-merge auto-merges the version bump PR
 11. (Automated) GitHub Release created, signed APK uploaded, Docker images tagged with version + "latest"
