@@ -84,7 +84,8 @@ jobs:
             UNTIL=$(git log -1 --format=%cI origin/main)
           fi
           TODAY=$(echo "$UNTIL" | cut -dT -f1)
-          NOW="$UNTIL"
+          # Normalize to UTC (validator at line 54 only accepts Z or + suffixes)
+          NOW=$(date -u -d "$UNTIL" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$UNTIL")
 
           echo "Collecting PRs merged to develop since $SINCE..."
 

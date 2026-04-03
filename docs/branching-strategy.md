@@ -21,7 +21,7 @@
 9. (Automated) release-please creates version bump PR on main
 10. (Automated) glycemicgpt-merge auto-merges the version bump PR
 11. (Automated) GitHub Release created, signed APK uploaded, Docker images tagged with version + "latest"
-12. Sync develop: rebase onto main to pick up version bump
+12. (Automated) sync-main-to-develop cherry-picks version/changelog changes back to develop
 ```
 
 ## Feature Branch Workflow
