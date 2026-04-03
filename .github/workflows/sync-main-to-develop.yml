@@ -155,7 +155,9 @@ jobs:
           git push origin "$SYNC_BRANCH"
 
       - name: Create sync PR
-        if: steps.check.outputs.needed == 'true'
+        if: >-
+          steps.check.outputs.needed == 'true' &&
+          steps.cherry-pick.outputs.unresolved != 'true'
         id: create-pr
         env:
           GH_TOKEN: ${{ steps.merge-token.outputs.token }}
