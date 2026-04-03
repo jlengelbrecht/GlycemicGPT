@@ -125,8 +125,14 @@ jobs:
                      apps/mobile/app/build.gradle.kts CHANGELOG.md \
                      .release-please-changelog.md; do
               if git diff --name-only --diff-filter=U 2>/dev/null | grep -q "^${f}$"; then
-                echo "  Resolving $f with main's version"
-                git show "$COMMIT_SHA":"$f" > "$f" 2>/dev/null && git add "$f"
+                # Only overwrite if the file exists at the source commit
+                if git show "$COMMIT_SHA":"$f" > /dev/null 2>&1; then
+                  echo "  Resolving $f with main's version"
+                  git show "$COMMIT_SHA":"$f" > "$f" && git add "$f"
+                else
+                  echo "  Skipping $f (not in source commit)"
+                  git checkout --theirs "$f" 2>/dev/null && git add "$f" || true
+                fi
               fi
             done
 
@@ -135,6 +141,10 @@ jobs:
             if [ -n "$REMAINING" ]; then
               echo "::warning::Unresolved conflicts in: $REMAINING"
               echo "unresolved=true" >> "$GITHUB_OUTPUT"
+              # Abort the cherry-pick so we can still push a clean branch
+              git cherry-pick --abort 2>/dev/null || true
+              echo "Cherry-pick aborted due to unresolved conflicts. Manual sync required."
+              exit 0
             else
               echo "All conflicts resolved"
               echo "unresolved=false" >> "$GITHUB_OUTPUT"
