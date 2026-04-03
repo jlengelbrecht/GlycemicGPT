@@ -55,7 +55,7 @@ After the promotion PR merges:
 
 ### Post-merge: automated version sync
 
-After a promotion merge, release-please creates a version bump commit on main (e.g., `chore: release 0.1.101`). The `sync-main-to-develop` workflow automatically cherry-picks this commit back to develop via PR and auto-merges it. No manual intervention required.
+After a promotion merge, the changelog workflow generates entries and auto-merges to main. If release-please also creates a version bump (depends on commit types), the `sync-main-to-develop` workflow automatically cherry-picks these commits back to develop via PR. No manual intervention required.
 
 The sync workflow:
 1. Detects version bump or changelog commits on main
