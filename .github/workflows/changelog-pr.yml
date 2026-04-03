@@ -163,7 +163,8 @@ jobs:
 
             # Format a single entry with linked author and PR
             def format_entry:
-              "- \(.title) [@\(.author.login)](https://github.com/\(.author.login)) ([#\(.number)](\(.url)))";
+              (.author.login // "ghost") as $login |
+              "- \(.title) [@\($login)](https://github.com/\($login)) ([#\(.number)](\(.url)))";
 
             # Filter included PRs
             [.[] | select(should_include)] |
