@@ -1,3 +1,132 @@
+## 2026-04-03
+
+### Breaking Changes
+
+- fix(deps): update dependency lucide-react to ^0.575.0 (#305) @homebot-0
+
+### Features
+
+- feat(ci): automated sync-main-to-develop after promotions (#445) @jlengelbrecht
+- feat(security): track info-level findings, fix OpenAPI schema bug (#425) @jlengelbrecht
+- feat(security): unauthenticated ZAP scanning + promotion PR cleanup fix (#410) @jlengelbrecht
+- feat: add funding infrastructure - GitHub Sponsors + Open Collective (Epic 41) (#406) @jlengelbrecht
+- feat: wire all bots, label-based changelog, governance alignment (Epic 41) (#405) @jlengelbrecht
+- feat: org teams, team-based CODEOWNERS, and governance overhaul (Epic 41) (#404) @jlengelbrecht
+- feat: GitHub org migration - secrets, references, and slogan (Epic 41) (#403) @jlengelbrecht
+- feat(security): PR auto-close, tool-aware guards, source-pr updates (Story 40.2) (#400) @jlengelbrecht
+- feat(security): full suite issue lifecycle management (Story 40.2 + 40.3) (#398) @jlengelbrecht
+- feat(security): auto-create GitHub Issues from security findings (Story 40.1) (#393) @jlengelbrecht
+- feat(security): API security hardening with IDOR, SSRF, and rate limiting tests (Story 35.11a) (#392) @jlengelbrecht
+- feat(ai): Knowledge Base viewer with document list, preview, and management (Story 35.10) (#391) @jlengelbrecht
+- feat(ai): AI Research Pipeline with configurable sources (Story 35.12) (#390) @jlengelbrecht
+- feat(ai): RAG infrastructure with pgvector, fastembed, and clinical knowledge (Story 35.9) (#389) @jlengelbrecht
+- feat(ai): conversation memory for multi-turn AI chat (Story 35.3) (#388) @jlengelbrecht
+- feat(ai): enrich all AI analysis prompts with pump profile context (Story 35.1) (#387) @jlengelbrecht
+- feat(chat): TTS voice picker with watch sync (#385) @jlengelbrecht
+- feat(data): initial pump history sync for fresh installs (#384) @jlengelbrecht
+- feat(chat): add text-to-speech for AI responses on phone and watch (#381) @jlengelbrecht
+- feat(wear): watch face buttons, interactive graph, voice chat, and chat relay fix (#380) @jlengelbrecht
+- feat(wear): watch face graph rendering, variant cleanup, and complication binding fix (#377) @jlengelbrecht
+- feat(wear): watch APK self-update via phone app (Story 32.12) (#374) @jlengelbrecht
+- fix(wear): WFF APK validation, watch detection, and push pipeline fixes (#371) @jlengelbrecht
+- feat(wear): watch-to-phone AI chat and alert dismiss (Story 32.8) (#365) @jlengelbrecht
+- feat(wear): feature toggle sync phone -> watch via DataClient (Story 32.5) (#363) @jlengelbrecht
+- feat(mobile): Settings > Watch full management UI (Story 32.4) (#361) @jlengelbrecht
+- feat(mobile): phone-side Watch Face Push via ChannelClient (#360) @jlengelbrecht
+- feat(wear): Watch Face Push API integration (watch side) (#359) @jlengelbrecht
+- feat(wear): create wear-device module with watch-side services (#358) @jlengelbrecht
+- feat(web): clinical report, dashboard scroll fix, print CSS rearchitecture (#357) @jlengelbrecht
+- feat: full-platform visual polish with light/dark theme support (#355) @jlengelbrecht
+- feat(mobile): 5-bucket TIR display and CGM stats with active % (#354) @jlengelbrecht
+- feat(mobile): remove AGP chart, add retention-aware period options (#353) @jlengelbrecht
+- feat: plugin-aware bolus category system with editable labels (#351) @jlengelbrecht
+- feat: add AGP chart, CGM stats, insulin summary, and bolus table to mobile home screen (#346) @jlengelbrecht
+- feat: navigation scaffold and tap-to-expand landscape chart detail (#345) @jlengelbrecht
+- feat: navigation scaffold and detail page architecture (Story 31.1) (#344) @jlengelbrecht
+- feat: chart tooltip, mode-colored basal, zoom/pan/brush, and 3-way bolus categorization (#338) @jlengelbrecht
+- feat: Story 30.7 -- Insulin Summary and Bolus Review dashboard panels (#332) @jlengelbrecht
+- feat: Story 30.5 -- AGP percentile band glucose chart (#330) @jlengelbrecht
+- refactor: consolidate TIR display -- upgrade bar to 5 buckets, remove donut (#328) @jlengelbrecht
+- feat: Story 30.3 -- CGM Summary Stats Panel (#325) @jlengelbrecht
+- feat: Stories 30.1 + 30.2 -- aggregate stats API & extended time periods (#324) @jlengelbrecht
+- feat: Epic 29 -- app icons and branding (#323) @jlengelbrecht
+- feat: Story 28.7 -- device binding & API security foundation (#322) @jlengelbrecht
+- feat: production security gates, dependency scanning, and documentation (#316) @jlengelbrecht
+- feat: automated DAST and auth flow penetration testing (story 28.11) (#314) @jlengelbrecht
+- feat: Epic 28 security hardening (stories 28.1-28.10) (#310) @jlengelbrecht
+- feat: universal Tandem plugin + auth persistence fix (#309) @jlengelbrecht
+- feat: universal Tandem plugin with BLE protocol naming and Mobi support (#308) @jlengelbrecht
+- feat: Epic 26 -- runtime plugin loading via DexClassLoader (#297) @jlengelbrecht
+- feat: Phase 6 -- Backend treatment safety scaffolding (#291) @jlengelbrecht
+- feat: Phase 4 -- General-purpose plugin platform architecture (#289) @jlengelbrecht
+- feat: Phase 2+3 -- Gradle module split and backend-synced safety limits (#282) @jlengelbrecht
+- feat: add custom alert sounds and silent mode override (#278) @jlengelbrecht
+
+### Bug Fixes
+
+- fix(ci): complete bot whitelist, update attribution messaging and docs (#440) @jlengelbrecht
+- fix(security): fix nosemgrep placement for CORS and exported_activity (#424) @jlengelbrecht
+- fix(security): suppress false positive exported_activity on launcher (Closes #399) (#409) @jlengelbrecht
+- fix: GHCR token, flaky tests, funding docs (Epic 41) (#407) @jlengelbrecht
+- fix(deps): upgrade cryptography, ecdsa, path-to-regexp for CVE fixes (#401) @jlengelbrecht
+- fix(wear): battery optimization -- throttle updates, cache graph, TimeDifference (#386) @jlengelbrecht
+- fix(chat): upgrade WearChatRelayService to foreground service (#383) @jlengelbrecht
+- fix(alerts): eliminate SSE reconnect storm in AlertStreamService (#382) @jlengelbrecht
+- fix(deps): update dependency androidx.datastore:datastore-preferences to v1.2.1 (#372) @homebot-0
+- fix(wear): Watch Face Push validation token via DwfValidatorFactory (#370) @jlengelbrecht
+- fix(deps): update dependency lucide-react to ^0.577.0 (#350) @homebot-0
+- fix(deps): update retrofit monorepo to v2.12.0 (#348) @homebot-0
+- fix(deps): update dependency androidx.wear.watchface:watchface-complications-data-source-ktx to v1.3.0 (#339) @homebot-0
+- fix: deduplicate insulin aggregation across sources and event types (#337) @jlengelbrecht
+- fix: correct basal rate aggregation in insulin summary (#336) @jlengelbrecht
+- fix(deps): update dependency androidx.sqlite:sqlite to v2.6.2 (#335) @homebot-0
+- fix: address CodeRabbit findings from Epic 29 icon generation (#326) @jlengelbrecht
+- fix: Story 28.12 -- code quality audit (secure UUID, exception handling, resource leaks) (#321) @jlengelbrecht
+- fix(deps): update kotlinx-coroutines monorepo to v1.10.2 (#312) @homebot-0
+- fix(deps): update dependency org.bouncycastle:bcprov-jdk18on to v1.83 (#306) @homebot-0
+- fix(deps): update dependency io.mockk:mockk to v1.14.9 (#304) @homebot-0
+- fix(deps): update dependency androidx.work:work-runtime-ktx to v2.11.1 (#302) @homebot-0
+- fix(deps): update dependency androidx.test.ext:junit to v1.3.0 (#301) @homebot-0
+- fix(deps): update dependency androidx.test.espresso:espresso-core to v3.7.0 (#300) @homebot-0
+- fix(deps): update dependency androidx.security:security-crypto to v1.1.0 (#299) @homebot-0
+- fix: use shared debug keystore for CI dev builds (#296) @jlengelbrecht
+- fix: ignore false positive DEV_BUILD_NUMBER in Renovate (#295) @jlengelbrecht
+- fix(deps): update dependency androidx.hilt:hilt-compiler to v1.3.0 (#293) @homebot-0
+- fix(deps): update dependency androidx.datastore:datastore-preferences to v1.2.0 (#292) @homebot-0
+- fix: eliminate alert notification spam for sustained high glucose (#277) @jlengelbrecht
+- fix: preserve mobile session on transient errors and request notification permission (#276) @jlengelbrecht
+
+### Documentation
+
+- docs(wear): update architecture docs and dev scripts for Epic 32 (#366) @jlengelbrecht
+- refactor(wear): remove legacy wear/ module, update all references to wear-device (#364) @jlengelbrecht
+- refactor: reorganize plugin directory structure (#303) @jlengelbrecht
+- docs: plugin architecture guide and medical disclaimer (Phase 5) (#290) @jlengelbrecht
+
+### Infrastructure
+
+- chore(deps): update dependency python (#334) @homebot-0
+- chore: tune CodeRabbit config to reduce review noise (#327) @jlengelbrecht
+- chore(deps): update dependency python (#285) @homebot-0
+
+### Refactoring
+
+- refactor: decouple pump activity modes from Control-IQ automation (#341) @jlengelbrecht
+- refactor: split mobile app into Gradle modules for plugin architecture (Phase 2) (#281) @jlengelbrecht
+- refactor: extract pump interfaces for plugin architecture (Phase 1) (#279) @jlengelbrecht
+
+### Dependencies
+
+- chore: sync main version bump into develop (#442) @jlengelbrecht
+- chore(deps): update dependency recharts to v3.8.0 (#369) @homebot-0
+- chore(deps): update eslint (#368) @homebot-0
+- chore(deps): update dependency postcss to v8.5.8 (#362) @homebot-0
+- chore(deps): update dependency autoprefixer to v10.4.27 (#333) @homebot-0
+- chore(deps): update dependency @eslint/eslintrc to v3.3.4 (#311) @homebot-0
+- chore(deps): update dependency eslint to v9.39.3 (#283) @homebot-0
+
+<!-- changelog-cutoff:2026-04-03T06:45:09Z -->
+
 <div align="center">
   <h1>📋 Changelog</h1>
   <p><strong>GlycemicGPT</strong> - Your AI-powered diabetes management companion</p>
