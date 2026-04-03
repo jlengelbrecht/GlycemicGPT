@@ -44,11 +44,7 @@ gh pr create --base main --head develop \
   --body-file .github/PROMOTION_PR_TEMPLATE.md
 ```
 
-**Merge method:**
-- **≤100 commits:** Use "Rebase and merge" to preserve individual commits on main
-- **>100 commits:** Use "Squash and merge" (GitHub hard-limits rebase merge to 100 commits)
-
-Both methods are allowed on main. Squash merge produces a single commit, but our label-based changelog (`changelog-pr.yml`) generates granular entries from PR titles and labels regardless of the merge method used.
+**Use "Squash and merge"** for all promotion PRs. This produces a single clean commit on main per promotion. Our label-based changelog (`changelog-pr.yml`) generates granular entries from PR titles, labels, and contributor credits regardless -- it reads from the PRs merged to develop, not from commits on main.
 
 After the promotion PR merges:
 - **changelog-pr.yml** detects the promotion and generates a changelog from PR labels
