@@ -2,6 +2,27 @@
 
 ## 2026-04-04
 
+### 📱 Mobile
+
+  - #### 📝 Other Changes
+
+    - chore: sync release 0.2.0 from main to develop [@glycemicgpt-merge](https://github.com/glycemicgpt-merge) ([#471](https://github.com/GlycemicGPT/GlycemicGPT/pull/471))
+
+### 🏗️ Infrastructure
+
+  - #### ✨ New Features
+
+    - feat(ci): contributor credits in versioned releases, soft-fail wear APK [@jlengelbrecht](https://github.com/jlengelbrecht) ([#473](https://github.com/GlycemicGPT/GlycemicGPT/pull/473))
+
+  - #### 📝 Other Changes
+
+    - chore: sync changelog update from main to develop [@glycemicgpt-merge](https://github.com/glycemicgpt-merge) ([#469](https://github.com/GlycemicGPT/GlycemicGPT/pull/469))
+
+<!-- changelog-cutoff:2026-04-04T06:49:57Z -->
+
+
+## 2026-04-04
+
 ### 🏗️ Infrastructure
 
   - #### 🐛 Bug Fixes
