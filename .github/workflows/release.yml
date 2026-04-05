@@ -250,6 +250,8 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.version-info.outputs.tag_name }}
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
